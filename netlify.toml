@@ -5,13 +5,21 @@
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--legacy-peer-deps"
-  # Host serving /registry/graphql and /candles/graphql. Point this at your
-  # own deployment to switch indexer backends; every subgraph URL in
-  # src/config/subgraphEndpoints.js is derived from it. Deploy-preview and
+  # Host serving /registry/graphql and /candles/graphql. Every subgraph URL in
+  # src/config/subgraphEndpoints.js derives from it, and usePoolData falls back
+  # to it, so this is the single knob for the backend. Deploy-preview and
   # branch-deploy contexts inherit this block unless they override it.
-  NEXT_PUBLIC_FUTARCHY_API_URL = "https://api.futarchy.fi"
+  NEXT_PUBLIC_FUTARCHY_API_URL = "https://seer-futarchy-api.netlify.app"
+
+  # NEXT_PUBLIC_POOL_API_URL is deliberately unset: usePoolData falls back to
+  # the host above, so setting it here would silently pin that one caller to a
+  # different backend — which is exactly what happened while it still read
+  # api.futarchy.fi.
+
+  # Legacy TickSpread REST (/v3/conditional, /v3/single_proposal). Those routes
+  # exist on no current backend, so this stays pointed at the old host rather
+  # than pretending the new one serves them.
   NEXT_PUBLIC_API_URL = "https://api.futarchy.fi"
-  NEXT_PUBLIC_POOL_API_URL = "https://api.futarchy.fi"
   NEXT_PUBLIC_API_VERSION = "v1"
   NEXT_PUBLIC_GNOSIS_RPC_URL = "https://rpc.gnosischain.com"
   NEXT_PUBLIC_SUPABASE_URL = "https://nvhqdqtlsdboctqjcelq.supabase.co"
