@@ -21,21 +21,26 @@ import {
 import SafeAutoConnector from '../components/futarchyFi/SafeAutoConnector';
 import { SubgraphRefreshProvider } from '../contexts/SubgraphRefreshContext';
 
-// List of reliable Gnosis Chain RPC endpoints (same as getAlgebraPoolPrice)
+// Gnosis Chain RPC endpoints, tried in order by the fallback transport.
+// A private endpoint in NEXT_PUBLIC_GNOSIS_RPC goes first and the public
+// ones stay behind it as fallbacks, so a paid endpoint hitting its limit
+// degrades instead of taking the app down.
 const GNOSIS_RPCS = [
+  process.env.NEXT_PUBLIC_GNOSIS_RPC,
   "https://gnosis.drpc.org",
   "https://rpc.gnosischain.com",
   "https://gnosis-rpc.publicnode.com",
   "https://1rpc.io/gnosis"
-];
+].filter(Boolean);
 
-// List of Ethereum mainnet RPC endpoints
+// Ethereum mainnet, same arrangement.
 const ETHEREUM_RPCS = [
+  process.env.NEXT_PUBLIC_MAINNET_RPC_URL,
   "https://eth.drpc.org",
   "https://ethereum-rpc.publicnode.com",
   "https://1rpc.io/eth",
   "https://rpc.ankr.com/eth"
-];
+].filter(Boolean);
 
 const chains = [mainnet, gnosis];
 const projectId = "76fa3deb89f7aa56f09cf1ac472eccb4";

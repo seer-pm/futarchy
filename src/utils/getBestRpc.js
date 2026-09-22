@@ -6,19 +6,23 @@
 
 import { ethers } from 'ethers';
 
-// Hardcoded RPC lists (faster than fetching from chainlist)
+// Hardcoded RPC lists (faster than fetching from chainlist). A private
+// endpoint from the environment is probed first; the public ones remain as
+// fallbacks, and the probe below still drops any that are slow or failing.
 const RPC_LISTS = {
   1: [ // Ethereum Mainnet
+    process.env.NEXT_PUBLIC_MAINNET_RPC_URL,
     'https://ethereum-rpc.publicnode.com',
     'https://1rpc.io/eth',
     'https://rpc.ankr.com/eth'
-  ],
+  ].filter(Boolean),
   100: [ // Gnosis Chain
+    process.env.NEXT_PUBLIC_GNOSIS_RPC,
     'https://rpc.gnosischain.com',
     'https://gnosis-rpc.publicnode.com',
     'https://1rpc.io/gnosis',
     'https://rpc.ankr.com/gnosis'
-  ]
+  ].filter(Boolean)
 };
 
 const RPC_TIMEOUT_MS = 5000; // 5 second timeout
