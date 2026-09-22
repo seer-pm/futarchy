@@ -22,11 +22,11 @@ import SafeAutoConnector from '../components/futarchyFi/SafeAutoConnector';
 import { SubgraphRefreshProvider } from '../contexts/SubgraphRefreshContext';
 
 // Gnosis Chain RPC endpoints, tried in order by the fallback transport.
-// A private endpoint in NEXT_PUBLIC_GNOSIS_RPC goes first and the public
+// A private endpoint in NEXT_PUBLIC_RPC_URL goes first and the public
 // ones stay behind it as fallbacks, so a paid endpoint hitting its limit
 // degrades instead of taking the app down.
 const GNOSIS_RPCS = [
-  process.env.NEXT_PUBLIC_GNOSIS_RPC,
+  process.env.NEXT_PUBLIC_RPC_URL,
   "https://gnosis.drpc.org",
   "https://rpc.gnosischain.com",
   "https://gnosis-rpc.publicnode.com",

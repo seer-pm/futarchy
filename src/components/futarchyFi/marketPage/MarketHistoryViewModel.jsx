@@ -10,12 +10,15 @@ dayjs.extend(timezone);
 
 
 // List of reliable Gnosis Chain RPC endpoints (same as other utilities)
+// A private endpoint from NEXT_PUBLIC_RPC_URL is tried first; the public
+// ones stay behind it as fallbacks.
 const GNOSIS_RPCS = [
+  process.env.NEXT_PUBLIC_RPC_URL,
   "https://rpc.ankr.com/gnosis",
   "https://gnosis.drpc.org",
   "https://gnosis-rpc.publicnode.com",
   "https://1rpc.io/gnosis"
-];
+].filter(Boolean);
 
 // RPC fallback system variables
 const providers = new Map();
@@ -204,7 +207,7 @@ console.log(`[TRADE_HISTORY_DEBUG] 🚀 INIT: Pre-warmed token cache with ${Obje
 const BASE_COMPANY_SYMBOL = 'GNO';
 // Default fallback symbol
 const DEFAULT_CURRENCY_SYMBOL = 'sDAI';
-const GNOSIS_RPC_URL = 'https://rpc.gnosischain.com';
+const GNOSIS_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.gnosischain.com';
 
 // Default pools - will be overridden by dynamic config
 const DEFAULT_POOLS_TO_QUERY = [

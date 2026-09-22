@@ -17,7 +17,7 @@ const RPC_LISTS = {
     'https://rpc.ankr.com/eth'
   ].filter(Boolean),
   100: [ // Gnosis Chain
-    process.env.NEXT_PUBLIC_GNOSIS_RPC,
+    process.env.NEXT_PUBLIC_RPC_URL,
     'https://rpc.gnosischain.com',
     'https://gnosis-rpc.publicnode.com',
     'https://1rpc.io/gnosis',

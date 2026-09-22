@@ -7,7 +7,7 @@ import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpo
 // Public RPCs for the on-chain resolution fallback check
 const RESOLUTION_RPC_BY_CHAIN = {
   1: 'https://eth.llamarpc.com',
-  100: process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'
+  100: process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.gnosischain.com'
 };
 
 /**
