@@ -64,7 +64,7 @@ import { UNISWAP_V3_POOL_ABI } from "./constants/contracts";
 // Subgraph pool fetcher instance for latest prices
 const subgraphPoolFetcher = createSubgraphPoolFetcher();
 
-const GNOSIS_DEFAULT_RPC = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.gnosischain.com';
+const GNOSIS_DEFAULT_RPC = process.env.NEXT_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 const ALGEBRA_TWAP_ABI = [
   "function getTimepoints(uint32[] secondsAgos) external view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulatives, uint112[] volatilityCumulatives, uint256[] volumePerAvgLiquiditys)",
   "function token0() external view returns (address)"
@@ -3774,7 +3774,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
         // If no MetaMask or Web3Provider initialization failed, try RPC URL
         if (!provider) {
-          const envRpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
+          const envRpcUrl = process.env.NEXT_PUBLIC_GNOSIS_RPC_URL;
           console.log(`MarketPage: Trying to use environment RPC URL: ${envRpcUrl}`);
 
           if (envRpcUrl) {
@@ -3793,7 +3793,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               provider = null;
             }
           } else {
-            console.warn("MarketPage: No NEXT_PUBLIC_RPC_URL found in environment variables");
+            console.warn("MarketPage: No NEXT_PUBLIC_GNOSIS_RPC_URL found in environment variables");
           }
 
           // Final fallback to hardcoded URL if still no provider

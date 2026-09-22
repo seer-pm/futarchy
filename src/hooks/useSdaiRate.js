@@ -8,10 +8,10 @@ import {
 } from '../components/futarchyFi/marketPage/constants/contracts';
 
 // List of reliable Gnosis Chain RPC endpoints (same as getAlgebraPoolPrice)
-// A private endpoint from NEXT_PUBLIC_RPC_URL is tried first; the public
+// A private endpoint from NEXT_PUBLIC_GNOSIS_RPC_URL is tried first; the public
 // ones stay behind it as fallbacks.
 const GNOSIS_RPCS = [
-  process.env.NEXT_PUBLIC_RPC_URL,
+  process.env.NEXT_PUBLIC_GNOSIS_RPC_URL,
   "https://rpc.ankr.com/gnosis",
   "https://gnosis.drpc.org",
   "https://gnosis-rpc.publicnode.com",

@@ -137,7 +137,10 @@ Key contracts are configured in:
 ### Environment Configuration
 
 Required environment variables:
-- `NEXT_PUBLIC_RPC_URL` - Primary Gnosis Chain RPC URL (frontend)
+- `NEXT_PUBLIC_GNOSIS_RPC_URL` - Gnosis Chain RPC URL (frontend)
+- `NEXT_PUBLIC_MAINNET_RPC_URL` - Ethereum mainnet RPC URL (frontend)
+  Both are optional: a configured endpoint is tried first and the public
+  endpoints remain as fallbacks.
 - `RPC_URL` - RPC URL for backend/CLI tools
 - Additional API keys for external services (Supabase, etc.)
 

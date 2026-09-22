@@ -370,7 +370,7 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 ```env
-NEXT_PUBLIC_RPC_URL=https://rpc.gnosischain.com
+NEXT_PUBLIC_GNOSIS_RPC_URL=https://rpc.gnosischain.com
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
 NEXT_PUBLIC_GA_MEASUREMENT_ID=your_ga_id
@@ -518,7 +518,7 @@ npm start
 
 Production environment variables:
 ```env
-NEXT_PUBLIC_RPC_URL=https://rpc.gnosischain.com
+NEXT_PUBLIC_GNOSIS_RPC_URL=https://rpc.gnosischain.com
 NEXT_PUBLIC_API_URL=https://api.futarchy.fi
 NEXT_PUBLIC_SUPABASE_URL=production_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=production_key

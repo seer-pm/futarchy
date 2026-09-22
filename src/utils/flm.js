@@ -6,7 +6,7 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const GNOSIS_CHAIN_ID = 100;
 const GNOSIS_CHAIN_ID_HEX = '0x64';
-const GNOSIS_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.gnosischain.com';
+const GNOSIS_RPC_URL = process.env.NEXT_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 const GNOSIS_EXPLORER_URL = 'https://gnosisscan.io';
 
 const ADDRESS_OVERRIDES = {

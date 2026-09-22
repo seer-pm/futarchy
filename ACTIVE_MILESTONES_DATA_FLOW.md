@@ -376,7 +376,7 @@ Cards receive pool data from multiple sources with fallback priority:
 - `NEXT_PUBLIC_DEBUG_MODE` - Use mock data instead of Supabase
 - `NEXT_PUBLIC_USE_DEFAULT_MOCK_METADATA` - Use default pool metadata when missing
 - `NEXT_PUBLIC_ALLOW_MOCK_FALLBACK` - Fall back to mock data on errors
-- `NEXT_PUBLIC_RPC_URL` - RPC endpoint for blockchain queries
+- `NEXT_PUBLIC_GNOSIS_RPC_URL` - RPC endpoint for blockchain queries
 
 ## Performance Considerations
 
