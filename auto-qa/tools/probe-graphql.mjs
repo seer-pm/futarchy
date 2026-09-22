@@ -72,7 +72,6 @@ function pickEndpoint(query) {
 const EXTERNAL_GRAPHQL_FILES = new Set([
     'src/utils/snapshotApi.js',         // hub.snapshot.org
     'src/spotPriceUtils/balancerHopClient.js', // balancer subgraph
-    'src/utils/swaprSdk.js',            // swapr/algebra subgraph
 ]);
 
 // Heuristic: a "Row not found: …" response means the query parsed and

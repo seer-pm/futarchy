@@ -32,7 +32,6 @@
     "@safe-global/protocol-kit": "^6.1.2",
     "@safe-global/safe-core-sdk-types": "^5.1.0",
     "@storybook/addon-actions": "^8.1.10",
-    "@swapr/sdk": "github:rodsouto/swapr-sdk#5e3b4f7abf8411434f0a05628a23653c8d6b87a0",
     "@tanstack/react-query": "^5.62.16",
     "@uniswap/universal-router-sdk": "^4.32.0",
     "@uniswap/v4-sdk": "^1.28.0",

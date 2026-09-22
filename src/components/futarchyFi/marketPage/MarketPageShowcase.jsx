@@ -23,7 +23,6 @@ import EditProposalModal from '../../debug/EditProposalModal';
 
 import ConfirmSwapModal from './ConfirmSwapModal';
 import MarketStatsDebugToast from './MarketStatsDebugToast';
-import SwaprDebugPanel from './SwaprDebugPanel';
 import SwapNativeToCurrencyModal from "./SwapNativeToCurrencyModal";
 import PositionsTable from "./PositionsTable";
 import { useSnapshotData } from '../../../hooks/useSnapshotData';
@@ -5762,8 +5761,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           {/* Ensure this is rendered outside conditional blocks if needed,
               or adjust placement based on desired stacking context */}
 
-          {/* Swapr SDK Debug Panel - Visual component to track SDK calls */}
-          {/* <SwaprDebugPanel />*/}
           {safeToastVisible && (
             <SafeTransactionToast onClose={() => setSafeToastVisible(false)} />
           )}
