@@ -7,6 +7,8 @@
  * Run: node scripts/test-time-aligned-hops.js
  */
 
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const fetch = require('node-fetch');
 
 // ==============================================================
@@ -16,7 +18,7 @@ const fetch = require('node-fetch');
 const GRAPH_API_KEY = '1f3de4a47d9dfb2a32e1890f63858fff';
 
 // Futarchy subgraph for YES/NO candles (Algebra/CloudFront)
-const FUTARCHY_SUBGRAPH = 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/algebra-proposal-candles-v1';
+const FUTARCHY_SUBGRAPH = CANDLES_ENDPOINTS[100];
 
 // Balancer V2 subgraph for multihop spot
 const BALANCER_SUBGRAPH = `https://gateway-arbitrum.network.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/EJezH1Cp31QkKPaBDerhVPRWsKVZLrDfzjrLqpmv6cGg`;

@@ -7,15 +7,14 @@
  * Default: AAVE proposal 0xfb45ae9d8e5874e85b8e23d735eb9718efef47fa
  */
 
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const PROPOSAL_ID = process.argv[2] || '0xfb45ae9d8e5874e85b8e23d735eb9718efef47fa';
 
 // Subgraph endpoints
-const AGGREGATOR_SUBGRAPH_URL = 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/futarchy-complete-new-v3';
+const AGGREGATOR_SUBGRAPH_URL = REGISTRY_URL;
 
-const SUBGRAPH_ENDPOINTS = {
-    1: 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest',  // Mainnet
-    100: 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/algebra-proposal-candles-v1'       // Gnosis
-};
+const SUBGRAPH_ENDPOINTS = CANDLES_ENDPOINTS;
 
 async function fetchFromSubgraph(url, query, variables = {}) {
     const response = await fetch(url, {

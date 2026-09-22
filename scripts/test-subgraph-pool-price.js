@@ -7,14 +7,10 @@
  * Usage: node scripts/test-subgraph-pool-price.js
  */
 
-// Inline SUBGRAPH_ENDPOINTS (since we're running in Node.js without transpilation)
-const SUBGRAPH_ENDPOINTS = {
-    // Ethereum Mainnet - Uniswap V3 pools
-    1: 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest',
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 
-    // Gnosis Chain - Algebra/Swapr pools (CloudFront)
-    100: 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/algebra-proposal-candles-v1'
-};
+// Inline SUBGRAPH_ENDPOINTS (since we're running in Node.js without transpilation)
+const SUBGRAPH_ENDPOINTS = CANDLES_ENDPOINTS;
 
 function getSubgraphEndpoint(chainId) {
     return SUBGRAPH_ENDPOINTS[chainId] || null;

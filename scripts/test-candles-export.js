@@ -9,6 +9,8 @@
  * - Export as JSON
  */
 
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const PROPOSAL_ID = '0x45e1064348fD8A407D6D1F59Fc64B05F633b28FC';
 const CHAIN_ID = 100;
 const CANDLE_LIMIT = 500;
@@ -21,7 +23,7 @@ const CHART_START_RANGE = 1769385600;
 const SPOT_CONFIG = '0x8189c4c96826d016a99986394103dfa9ae41e7ee::0x89c80a4540a00b5270347e02e2e144c71da2eced-hour-500-xdai';
 
 // Subgraph endpoint
-const SUBGRAPH_URL = 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/algebra-proposal-candles-v1';
+const SUBGRAPH_URL = CANDLES_ENDPOINTS[100];
 
 // GeckoTerminal API
 const GECKO_BASE = 'https://api.geckoterminal.com/api/v2';

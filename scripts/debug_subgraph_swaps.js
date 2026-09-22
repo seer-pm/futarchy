@@ -3,8 +3,10 @@
  * Run: node scripts/debug_subgraph_swaps.js
  */
 
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const PROPOSAL_ID = '0x45e1064348fD8A407D6D1F59Fc64B05F633b28FC';
-const ENDPOINT = 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/algebra-proposal-candles-v1';
+const ENDPOINT = CANDLES_ENDPOINTS[100];
 
 async function main() {
     console.log('🔍 Querying subgraph for proposal:', PROPOSAL_ID);

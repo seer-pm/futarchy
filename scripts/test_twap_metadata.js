@@ -6,8 +6,10 @@
  * Usage: node scripts/test_twap_metadata.js [proposalAddress]
  */
 
+const { REGISTRY_URL, CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const PROPOSAL_ADDRESS = process.argv[2] || '0x45e1064348fd8a407d6d1f59fc64b05f633b28fc';
-const SUBGRAPH_URL = 'https://d3ugkaojqkfud0.cloudfront.net/subgraphs/name/futarchy-complete-new-v3';
+const SUBGRAPH_URL = REGISTRY_URL;
 const DEFAULT_AGGREGATOR = '0xC5eB43D53e2FE5FddE5faf400CC4167e5b5d4Fc1'.toLowerCase();
 
 async function fetchProposalMetadata(proposalAddress) {
