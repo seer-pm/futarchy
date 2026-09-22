@@ -1,6 +1,7 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
-const ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+const ENDPOINT = CANDLES_ENDPOINTS[100];
 
 async function introspectCandle() {
     // Guessing the type name is "Candle". If not, we'll see errors or nothing.

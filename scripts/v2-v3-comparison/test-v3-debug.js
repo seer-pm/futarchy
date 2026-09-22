@@ -5,6 +5,10 @@
  */
 
 const V3_POOL = '0xd1d7fa8871d84d0e77020fc28b7cd5718c446522';
+// NOTE: this Balancer v3 subgraph deployment no longer exists (the Studio
+// endpoint answers "deployment does not exist"). It is Balancer's, not
+// ours, so it cannot be repointed at the futarchy API — a replacement
+// Balancer endpoint is needed before this script can run.
 const V3_SUBGRAPH = 'https://api.studio.thegraph.com/query/75376/balancer-v3-gnosis/version/latest';
 
 async function debugV3Swaps() {

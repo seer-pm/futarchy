@@ -1,6 +1,7 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
-const SUBGRAPH_ENDPOINT = "https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest";
+const SUBGRAPH_ENDPOINT = CANDLES_ENDPOINTS[100];
 
 const PROPOSAL_ID = "0x45e1064348fd8a407d6d1f59fc64b05f633b28fc";
 

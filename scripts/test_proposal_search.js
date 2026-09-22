@@ -3,9 +3,11 @@
  * Run: node scripts/test_proposal_search.js
  */
 
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const SUBGRAPH_ENDPOINTS = {
-    1: 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest',
-    100: 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest'
+    1: CANDLES_ENDPOINTS[1],
+    100: CANDLES_ENDPOINTS[100]
 };
 
 // Introspection query to see Proposal fields

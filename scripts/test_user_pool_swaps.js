@@ -8,7 +8,9 @@
  * Run: node scripts/test_user_pool_swaps.js
  */
 
-const ENDPOINT_CHAIN_1 = 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest';
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
+const ENDPOINT_CHAIN_1 = CANDLES_ENDPOINTS[1];
 
 // User wallet
 const USER_WALLET = '0x645A3D9208523bbFEE980f7269ac72C61Dd3b552';

@@ -3,9 +3,11 @@
  * Run: node scripts/test_connectivity.js
  */
 
+const { CANDLES_ENDPOINTS, REGISTRY_URL } = require('./subgraph-endpoints');
+
 const ENDPOINTS = {
-    'Futarchy Complete': 'https://api.studio.thegraph.com/query/1719045/futarchy-complete/version/latest',
-    'Uniswap': 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest'
+    'Futarchy Complete': REGISTRY_URL,
+    'Uniswap': CANDLES_ENDPOINTS[1]
 };
 
 const QUERY = `{ _meta { block { number } } }`;

@@ -3,7 +3,9 @@
  * Run: node scripts/test_futarchy_complete.js
  */
 
-const ENDPOINT = 'https://api.studio.thegraph.com/query/1719045/futarchy-complete/version/latest';
+const { REGISTRY_URL } = require('./subgraph-endpoints');
+
+const ENDPOINT = REGISTRY_URL;
 
 // Introspection query to see Proposal fields
 const INTROSPECTION_QUERY = `

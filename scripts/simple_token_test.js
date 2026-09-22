@@ -1,5 +1,7 @@
 // Simple test - just output JSON
-const ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+const ENDPOINT = CANDLES_ENDPOINTS[100];
 const proposalId = '0x781df62F78A8636049A644eeedbC490d67C40cFf'.toLowerCase();
 
 async function main() {

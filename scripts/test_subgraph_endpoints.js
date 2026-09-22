@@ -14,9 +14,11 @@
  * - Proposal: id, marketName, companyToken, currencyToken, pools, outcomeTokens
  */
 
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
 const ENDPOINTS = {
-    chain1: 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest',
-    chain100: 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest'
+    chain1: CANDLES_ENDPOINTS[1],
+    chain100: CANDLES_ENDPOINTS[100]
 };
 
 const TEST_PROPOSALS = {

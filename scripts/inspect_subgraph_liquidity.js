@@ -1,7 +1,8 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
 // Gnosis Chain Subgraph Endpoint
-const ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+const ENDPOINT = CANDLES_ENDPOINTS[100];
 
 const PROPOSAL_ID = '0x45e1064348fD8A407D6D1F59Fc64B05F633b28FC';
 

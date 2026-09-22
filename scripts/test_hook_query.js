@@ -1,6 +1,7 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
-const SUBGRAPH_ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+const SUBGRAPH_ENDPOINT = CANDLES_ENDPOINTS[100];
 const TEST_POOL_ID = '0xf8346e622557763a62cc981187d084695ee296c3'; // A pool known to have liquidity from user's JSON
 
 const POOL_QUERY = `

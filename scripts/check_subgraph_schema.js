@@ -1,4 +1,5 @@
-const endpoint = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+const endpoint = CANDLES_ENDPOINTS[100];
 
 // Introspection query for Candle type
 const schemaQuery = `{

@@ -1,7 +1,8 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
 // Target endpoint
-const SUBGRAPH_ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/v0.0.8';
+const SUBGRAPH_ENDPOINT = CANDLES_ENDPOINTS[100];
 
 async function run() {
   console.log(`Checking Endpoint: ${SUBGRAPH_ENDPOINT}`);

@@ -1,7 +1,8 @@
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fetch = require('node-fetch');
 
 async function runUserQuery() {
-    const endpoint = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/v0.0.8';
+    const endpoint = CANDLES_ENDPOINTS[100];
 
     const query = `
     query GetPoolsWithCandles($proposalId: String!, $limit: Int!) {

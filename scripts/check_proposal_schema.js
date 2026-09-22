@@ -3,7 +3,9 @@
  * Run: node scripts/check_proposal_schema.js
  */
 
-const ENDPOINT = 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest';
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
+const ENDPOINT = CANDLES_ENDPOINTS[100];
 
 // Introspection query to see all Proposal fields
 const INTROSPECTION = `

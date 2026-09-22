@@ -7,7 +7,9 @@
  * Run: node scripts/test_swap_activity.js
  */
 
-const ENDPOINT_CHAIN_1 = 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest';
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
+
+const ENDPOINT_CHAIN_1 = CANDLES_ENDPOINTS[1];
 
 // Test data from user's conditional_pools config
 const CONDITIONAL_POOLS = {

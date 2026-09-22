@@ -1,9 +1,11 @@
 // Run transformer and write to JSON file
+
+const { CANDLES_ENDPOINTS } = require('./subgraph-endpoints');
 const fs = require('fs');
 
 const SUBGRAPH_ENDPOINTS = {
-    1: 'https://api.studio.thegraph.com/query/1718249/uniswap-proposal-candles/version/latest',
-    100: 'https://api.studio.thegraph.com/query/1718249/algebra-proposals-candles/version/latest'
+    1: CANDLES_ENDPOINTS[1],
+    100: CANDLES_ENDPOINTS[100]
 };
 
 const CHAIN_CONFIG = {
