@@ -18,6 +18,7 @@ const Header = ({ config = 'landing' }) => {
   // Get chain info from wagmi v2
   const { chain, isConnected } = useAccount();
   const { chains, switchChain } = useSwitchChain();
+  const { disconnect } = useDisconnect();
   const isGnosis = chain?.id === 100;
 
   const navigationOptions = [
@@ -50,7 +51,18 @@ const Header = ({ config = 'landing' }) => {
           {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
             const ready = mounted;
             const connected = ready && account && chain;
-            const { disconnect } = useDisconnect();
+
+            // Until mounted, render size-matched placeholders: the server always
+            // renders the disconnected state, so rendering the real (possibly
+            // connected) markup on the first client pass breaks hydration.
+            if (!ready) {
+              return (
+                <>
+                  <div className="md:hidden h-12 w-12" aria-hidden />
+                  <div className="hidden md:block h-12 w-48" aria-hidden />
+                </>
+              );
+            }
 
             // Update navigation options based on connection state
             let currentNavigationOptions = navigationOptions.map(option => {
@@ -91,16 +103,7 @@ const Header = ({ config = 'landing' }) => {
                   />
                 </div>
                 <div className="hidden md:block">
-                  <div
-                    {...(!ready && {
-                      'aria-hidden': true,
-                      style: {
-                        opacity: 0,
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                      },
-                    })}
-                  >
+                  <div>
                     {(() => {
                       if (!connected) {
                         return (
@@ -166,18 +169,11 @@ const Header = ({ config = 'landing' }) => {
               <div className="md:hidden">
                 <ConnectButton.Custom>
                   {({ chain, openChainModal, mounted }) => {
-                    const ready = mounted;
+                    if (!mounted) {
+                      return <div aria-hidden />;
+                    }
                     return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
+                      <div>
                         {chain && openChainModal && (
                           <button
                             onClick={openChainModal}

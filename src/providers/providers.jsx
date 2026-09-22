@@ -113,7 +113,9 @@ const wagmiConfig = createConfig({
     [gnosis.id]: gnosisTransport,
 
   },
-  ssr: false, // Disable SSR for better client-side wallet detection
+  // Defer rehydration of the persisted connection to a post-mount effect so the
+  // first client render matches the server HTML (avoids hydration mismatches).
+  ssr: true,
 });
 
 const customTheme = {
