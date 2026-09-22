@@ -7,7 +7,8 @@ dotenv.config();
 
 // Contract Addresses & Setup
 const RPC_URL = 'https://rpc.gnosischain.com';
-const GRAPHQL_URL = 'https://api.futarchy.fi/registry/graphql';
+const GRAPHQL_URL = process.env.REGISTRY_GRAPHQL_URL
+    || `${process.env.FUTARCHY_API_URL || 'https://api.futarchy.fi'}/registry/graphql`;
 const TARGET_PROPOSAL = "0x2C1e08674f3F78f8a1426a41C41B8BF546fA481a".toLowerCase();
 
 // ProposalMetadata ABI snippet

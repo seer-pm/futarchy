@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 
 // Subgraph endpoint for futarchy-complete (metadata hierarchy)
-import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL, getSubgraphEndpoint } from '../config/subgraphEndpoints';
 import {
     getProposalCloseTimestamp,
     isProposalArchived,
@@ -263,7 +263,7 @@ async function fetchAggregatorProposals(aggregatorAddress) {
 
 // Candles checkpoint indexer — single endpoint serves both chains;
 // IDs use the form "<chainId>-<address>" so we can query in one shot.
-const CANDLES_GRAPHQL_URL = 'https://api.futarchy.fi/candles/graphql';
+const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
 
 /**
  * Bulk fetch CONDITIONAL pool addresses for a list of proposals.

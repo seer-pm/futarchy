@@ -6,6 +6,11 @@
  * or drift between this and contracts.js DEFAULT_AGGREGATOR breaks
  * data loading silently.
  *
+ * The API HOST is deployment-specific and env-overridable, so it is
+ * deliberately not pinned. What is pinned: that the env var is read,
+ * that a literal fallback exists, and that the paths hanging off it
+ * are correct.
+ *
  * The endpoint-liveness test pins that the URLs in this file respond
  * with 200. This test pins the config STRUCTURE (URL strings, chain
  * id keys, enum values, function behavior) so structural regressions
@@ -34,11 +39,27 @@ const CONTRACTS_SRC = readFileSync(
 // AGGREGATOR_SUBGRAPH_URL — Checkpoint registry indexer URL
 // ---------------------------------------------------------------------------
 
-test('subgraphEndpoints — AGGREGATOR_SUBGRAPH_URL is the canonical Checkpoint registry URL', () => {
-    const m = SRC.match(/AGGREGATOR_SUBGRAPH_URL\s*=\s*['"]([^'"]+)['"]/);
-    assert.ok(m, 'AGGREGATOR_SUBGRAPH_URL not found');
-    assert.equal(m[1], 'https://api.futarchy.fi/registry/graphql',
-        `AGGREGATOR_SUBGRAPH_URL drifted: got "${m[1]}". Pinning to api.futarchy.fi/registry/graphql.`);
+test('subgraphEndpoints — FUTARCHY_API_BASE is env-overridable with a non-empty https default', () => {
+    // The host is deployment-specific and MEANT to change, so it is not
+    // pinned. What must hold: the env var is read, and a literal https
+    // fallback exists. Without the fallback every derived URL silently
+    // becomes "undefined/registry/graphql" in any build that forgets to
+    // set NEXT_PUBLIC_FUTARCHY_API_URL — and static export bakes that in
+    // without failing the build.
+    assert.match(SRC, /process\.env\.NEXT_PUBLIC_FUTARCHY_API_URL/,
+        'FUTARCHY_API_BASE must read NEXT_PUBLIC_FUTARCHY_API_URL');
+
+    const fallback = SRC.match(/DEFAULT_API_BASE\s*=\s*['"]([^'"]+)['"]/);
+    assert.ok(fallback, 'DEFAULT_API_BASE fallback not found');
+    assert.match(fallback[1], /^https:\/\/[^/]+$/,
+        `DEFAULT_API_BASE must be a bare https origin, got "${fallback[1]}"`);
+});
+
+test('subgraphEndpoints — AGGREGATOR_SUBGRAPH_URL is the registry path on the API base', () => {
+    const m = SRC.match(/AGGREGATOR_SUBGRAPH_URL\s*=\s*`([^`]+)`/);
+    assert.ok(m, 'AGGREGATOR_SUBGRAPH_URL not found (expected a template literal)');
+    assert.equal(m[1], '${FUTARCHY_API_BASE}/registry/graphql',
+        `AGGREGATOR_SUBGRAPH_URL drifted: got "${m[1]}".`);
 });
 
 // ---------------------------------------------------------------------------
@@ -46,22 +67,24 @@ test('subgraphEndpoints — AGGREGATOR_SUBGRAPH_URL is the canonical Checkpoint 
 // ---------------------------------------------------------------------------
 
 test('subgraphEndpoints — SUBGRAPH_ENDPOINTS has entries for chain 1 and chain 100', () => {
-    // Chain 1 = Ethereum Mainnet, Chain 100 = Gnosis. The frontend
-    // currently routes both through the same Checkpoint backend.
-    assert.match(SRC, /SUBGRAPH_ENDPOINTS\s*=\s*\{[\s\S]*?\b1\s*:\s*['"][^'"]+['"]/,
-        `SUBGRAPH_ENDPOINTS missing chain id "1" entry`);
-    assert.match(SRC, /SUBGRAPH_ENDPOINTS\s*=\s*\{[\s\S]*?\b100\s*:\s*['"][^'"]+['"]/,
-        `SUBGRAPH_ENDPOINTS missing chain id "100" entry`);
+    // Chain 1 = Ethereum Mainnet, Chain 100 = Gnosis. A missing key makes
+    // getSubgraphEndpoint return null and the caller skip the fetch.
+    const block = SRC.match(/SUBGRAPH_ENDPOINTS\s*=\s*\{([\s\S]*?)\n\};/);
+    assert.ok(block, 'SUBGRAPH_ENDPOINTS object not found');
+    assert.match(block[1], /\b1\s*:\s*`[^`]+`/, 'missing chain id "1" entry');
+    assert.match(block[1], /\b100\s*:\s*`[^`]+`/, 'missing chain id "100" entry');
 });
 
-test('subgraphEndpoints — both chain endpoints point to api.futarchy.fi (pinned current state)', () => {
-    // Both chains route through the Checkpoint service, with chain 1 selected
-    // explicitly and chain 100 remaining the default endpoint.
-    const m1   = SRC.match(/\b1\s*:\s*['"]([^'"]+)['"]/);
-    const m100 = SRC.match(/\b100\s*:\s*['"]([^'"]+)['"]/);
+test('subgraphEndpoints — both chain endpoints derive from the API base, chain 1 keeps its discriminator', () => {
+    // Both chains hit the same candles path; chain 1 is selected by the
+    // ?chainId=1 query param, which is how the backend routes to the
+    // mainnet indexer. Dropping it silently serves Gnosis data on mainnet.
+    const block = SRC.match(/SUBGRAPH_ENDPOINTS\s*=\s*\{([\s\S]*?)\n\};/)[1];
+    const m1   = block.match(/\b1\s*:\s*`([^`]+)`/);
+    const m100 = block.match(/\b100\s*:\s*`([^`]+)`/);
     assert.ok(m1 && m100);
-    assert.equal(m1[1], 'https://api.futarchy.fi/candles/graphql?chainId=1');
-    assert.equal(m100[1], 'https://api.futarchy.fi/candles/graphql');
+    assert.equal(m1[1], '${FUTARCHY_API_BASE}/candles/graphql?chainId=1');
+    assert.equal(m100[1], '${FUTARCHY_API_BASE}/candles/graphql');
 });
 
 // ---------------------------------------------------------------------------

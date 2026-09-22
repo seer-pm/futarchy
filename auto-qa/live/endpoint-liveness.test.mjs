@@ -32,30 +32,54 @@ const ENDPOINTS_FILE = resolve(__dirname, '../../src/config/subgraphEndpoints.js
 const API_BASE_URL_FILE = resolve(__dirname, '../../src/hooks/usePoolData.js');
 
 /**
- * Pull every `https://…/graphql` URL out of the endpoints config.
- * Deliberately permissive: any string literal that ends in `/graphql`
- * counts. Keeps the test resilient to refactors that rename the
- * exported constants.
+ * The endpoints config builds its URLs as `${FUTARCHY_API_BASE}/…`, where
+ * the base comes from NEXT_PUBLIC_FUTARCHY_API_URL with a literal
+ * DEFAULT_API_BASE fallback. Resolve the same way the app does, so this
+ * test probes whichever deployment the build would actually talk to.
  */
-function loadEndpointUrls() {
-    const text = readFileSync(ENDPOINTS_FILE, 'utf8');
-    const matches = text.matchAll(/['"`](https?:\/\/[^'"`]+\/graphql)['"`]/g);
-    return [...new Set([...matches].map(m => m[1]))];
+function resolveApiBase(text) {
+    const fromEnv = process.env.NEXT_PUBLIC_FUTARCHY_API_URL;
+    if (fromEnv) return fromEnv.replace(/\/+$/, '');
+    const m = text.match(/DEFAULT_API_BASE\s*=\s*['"`](https?:\/\/[^'"`]+)['"`]/);
+    return m ? m[1].replace(/\/+$/, '') : null;
 }
 
 /**
- * Pull the futarchy-api base URL out of usePoolData.js. The string
- * literal we look for is the `||` fallback after the env-var read:
- *   process.env.NEXT_PUBLIC_POOL_API_URL || 'https://api.futarchy.fi'
- * If the file is refactored to use a different default URL we want to
- * notice. Returns null if not found (test then skips that case).
+ * Pull every `…/graphql` endpoint out of the endpoints config, resolving
+ * the ${FUTARCHY_API_BASE} interpolation. Deliberately permissive: any
+ * string or template literal whose path ends in `/graphql` counts, with
+ * an optional query string (chain 1 is selected via `?chainId=1`).
+ * Keeps the test resilient to refactors that rename the exported
+ * constants.
+ */
+function loadEndpointUrls() {
+    const text = readFileSync(ENDPOINTS_FILE, 'utf8');
+    const base = resolveApiBase(text);
+    const matches = text.matchAll(/['"`]((?:https?:\/\/|\$\{FUTARCHY_API_BASE\})[^'"`]*\/graphql(?:\?[^'"`]*)?)['"`]/g);
+    const urls = [...matches]
+        .map(m => m[1].replace('${FUTARCHY_API_BASE}', base ?? ''))
+        // Drop anything we could not resolve rather than probing a
+        // half-interpolated URL and reporting a confusing failure.
+        .filter(u => /^https?:\/\//.test(u));
+    return [...new Set(urls)];
+}
+
+/**
+ * Pull the futarchy-api base URL used by usePoolData.js. It reads
+ *   process.env.NEXT_PUBLIC_POOL_API_URL || FUTARCHY_API_BASE
+ * so an explicit literal override wins; otherwise it inherits the shared
+ * API base. Returns null if neither is found (test then skips that case).
  */
 function loadApiBaseUrl() {
     let text;
     try { text = readFileSync(API_BASE_URL_FILE, 'utf8'); }
     catch { return null; }
-    const m = text.match(/NEXT_PUBLIC_POOL_API_URL\s*\|\|\s*['"`](https?:\/\/[^'"`]+)['"`]/);
-    return m ? m[1] : null;
+    const literal = text.match(/NEXT_PUBLIC_POOL_API_URL\s*\|\|\s*['"`](https?:\/\/[^'"`]+)['"`]/);
+    if (literal) return literal[1];
+    if (/NEXT_PUBLIC_POOL_API_URL\s*\|\|\s*FUTARCHY_API_BASE/.test(text)) {
+        return resolveApiBase(readFileSync(ENDPOINTS_FILE, 'utf8'));
+    }
+    return null;
 }
 
 const INTROSPECTION = `{ __schema { queryType { name } } }`;

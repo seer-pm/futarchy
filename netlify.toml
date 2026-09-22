@@ -5,6 +5,11 @@
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--legacy-peer-deps"
+  # Host serving /registry/graphql and /candles/graphql. Point this at your
+  # own deployment to switch indexer backends; every subgraph URL in
+  # src/config/subgraphEndpoints.js is derived from it. Deploy-preview and
+  # branch-deploy contexts inherit this block unless they override it.
+  NEXT_PUBLIC_FUTARCHY_API_URL = "https://api.futarchy.fi"
   NEXT_PUBLIC_API_URL = "https://api.futarchy.fi"
   NEXT_PUBLIC_POOL_API_URL = "https://api.futarchy.fi"
   NEXT_PUBLIC_API_VERSION = "v1"

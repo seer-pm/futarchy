@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { getSubgraphEndpoint } from '../config/subgraphEndpoints';
+import { getSubgraphEndpoint, FUTARCHY_API_BASE } from '../config/subgraphEndpoints';
 import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS } from '../config/featureFlags';
 import { getBestRpcProvider } from '../utils/getBestRpc';
 
@@ -9,7 +9,7 @@ const ERC20_BALANCE_ABI = ['function balanceOf(address account) view returns (ui
 // Pool data subgraph endpoints are now dynamic per chain - see getSubgraphEndpoint(chainId)
 
 // API base URL - avoid mixed content (upgrade http->https when page is https)
-const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_POOL_API_URL || 'https://api.futarchy.fi';
+const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_POOL_API_URL || FUTARCHY_API_BASE;
 const normalizeBaseUrl = (url) => {
   try {
     if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && url.startsWith('http://')) {
