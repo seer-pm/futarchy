@@ -5,7 +5,6 @@
  * Used when ?tradeSource=subgraph URL parameter is set.
  */
 
-import { ethers } from 'ethers';
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 import { formatTokenAmount } from './precisionFormatter';
 
@@ -103,11 +102,9 @@ export async function fetchSwapsFromSubgraph(chainId, poolAddresses, userAddress
         whereClause = `{ pool_in: ${JSON.stringify(poolIds)} }`;
     }
 
-    // Checkpoint exposes tokenIn/tokenOut/pool as scalar strings (addresses) and
-    // already inlines symbolIn/symbolOut/decimalsIn/decimalsOut on the swap, so we
-    // don't need nested entity selections. We fetch swaps + the relevant pool
-    // metadata in parallel and stitch them client-side to keep the same
-    // {tokenIn, tokenOut, pool} object shape downstream code expects.
+    // tokenIn/tokenOut/pool are entity references, so the nested selection
+    // returns the exact {tokenIn, tokenOut, pool} shape downstream code
+    // expects — no second query and no client-side stitching.
     const swapsQuery = `{
         swaps(
             where: ${whereClause}
@@ -122,30 +119,18 @@ export async function fetchSwapsFromSubgraph(chainId, poolAddresses, userAddress
             amountIn
             amountOut
             price
-            tokenIn
-            tokenOut
-            symbolIn
-            symbolOut
-            decimalsIn
-            decimalsOut
-            pool
-        }
-    }`;
-
-    const poolsQuery = `{
-        pools(where: { id_in: ${JSON.stringify(poolIds)} }) {
-            id
-            name
-            type
-            outcomeSide
+            tokenIn { id symbol decimals role }
+            tokenOut { id symbol decimals role }
+            pool { id name type outcomeSide }
         }
     }`;
 
     try {
-        const [swapsRes, poolsRes] = await Promise.all([
-            fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: swapsQuery }) }),
-            fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: poolsQuery }) }),
-        ]);
+        const swapsRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: swapsQuery }),
+        });
 
         const swapsJson = await swapsRes.json();
         if (swapsJson.errors) {
@@ -153,29 +138,7 @@ export async function fetchSwapsFromSubgraph(chainId, poolAddresses, userAddress
             return { swaps: [], error: swapsJson.errors[0]?.message };
         }
 
-        const poolsJson = await poolsRes.json();
-        const poolMap = new Map();
-        for (const p of (poolsJson.data?.pools || [])) {
-            poolMap.set(p.id?.toLowerCase(), p);
-        }
-
-        // Stitch into the legacy nested shape so the rest of the file
-        // (formatting / classification) doesn't need to change.
-        const swaps = (swapsJson.data?.swaps || []).map(s => {
-            const poolMeta = poolMap.get((s.pool || '').toLowerCase());
-            return {
-                id: s.id,
-                transactionHash: s.transactionHash,
-                timestamp: s.timestamp,
-                origin: s.origin,
-                amountIn: s.amountIn,
-                amountOut: s.amountOut,
-                price: s.price,
-                tokenIn:  { id: s.tokenIn,  symbol: s.symbolIn,  decimals: s.decimalsIn,  role: null },
-                tokenOut: { id: s.tokenOut, symbol: s.symbolOut, decimals: s.decimalsOut, role: null },
-                pool: poolMeta || { id: s.pool, name: null, type: null, outcomeSide: null },
-            };
-        });
+        const swaps = swapsJson.data?.swaps || [];
 
         console.log(`[SubgraphTradesClient] ✅ Fetched ${swaps.length} swaps`);
         return { swaps, error: null };
@@ -186,12 +149,12 @@ export async function fetchSwapsFromSubgraph(chainId, poolAddresses, userAddress
     }
 }
 
-function formatAmount(value, decimals = 18) {
-    try {
-        return formatTokenAmount(ethers.utils.formatUnits(value || '0', Number(decimals) || 18));
-    } catch (_) {
-        return formatTokenAmount(value);
-    }
+// amountIn/amountOut are BigDecimal and already divided by 10^decimals in
+// the subgraph mapping, so they arrive as human-readable values such as
+// "0.000004254967638581". Running formatUnits over that throws (it wants an
+// integer string) and used to be rescued by the catch below.
+function formatAmount(value) {
+    return formatTokenAmount(value ?? '0');
 }
 
 /**
@@ -287,12 +250,12 @@ export function convertSwapToTradeFormat(swap, chainId) {
             // tokenOUT = what user GIVES (subgraph's amountIn/tokenIn)
             tokenIN: {
                 symbol: swap.tokenOut?.symbol || 'UNKNOWN',
-                value: formatAmount(swap.amountOut, swap.tokenOut?.decimals ?? swap.decimalsOut),
+                value: formatAmount(swap.amountOut),
                 address: swap.tokenOut?.id
             },
             tokenOUT: {
                 symbol: swap.tokenIn?.symbol || 'UNKNOWN',
-                value: formatAmount(swap.amountIn, swap.tokenIn?.decimals ?? swap.decimalsIn),
+                value: formatAmount(swap.amountIn),
                 address: swap.tokenIn?.id
             }
         },

@@ -91,8 +91,8 @@ const QUERIES = {
       proposal(id: $proposalId) {
         id
         marketName
-        companyToken
-        currencyToken
+        companyToken { id symbol }
+        currencyToken { id symbol }
         pools {
           id
           name

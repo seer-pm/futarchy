@@ -22,11 +22,13 @@ export async function fetchProposalMetadataFromRegistry(proposalAddress) {
 
     const normalizedAddress = proposalAddress.toLowerCase();
 
-    // Checkpoint indexer: lowercased type name and no nested-relation
-    // filter syntax (`organization_: { aggregator: ... }`). We instead
-    // filter by proposalAddress, then verify the aggregator client-side.
+    // Filter by proposalAddress and verify the aggregator client-side.
+    // Graph Node does support nested-relation filters
+    // (`organization_: { aggregator: ... }`), so this could be pushed into
+    // the query, but the client-side check is what the callers already
+    // depend on and the result set here is at most 5 rows.
     const query = `{
-    proposalentities(
+    proposalEntities(
       where: { proposalAddress: "${normalizedAddress}" },
       first: 5
     ) {
@@ -57,7 +59,7 @@ export async function fetchProposalMetadataFromRegistry(proposalAddress) {
 
         const result = await response.json();
         const matchingAgg = DEFAULT_AGGREGATOR.toLowerCase();
-        const entity = (result.data?.proposalentities || []).find(
+        const entity = (result.data?.proposalEntities || []).find(
             e => e.organization?.aggregator?.id?.toLowerCase() === matchingAgg
         ) || null;
 

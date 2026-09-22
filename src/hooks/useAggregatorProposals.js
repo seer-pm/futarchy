@@ -51,7 +51,7 @@ const ORGANIZATIONS_QUERY = `
 
 const PROPOSALS_QUERY = `
   query($orgIds: [String!]!) {
-    proposalentities(where: { organization_in: $orgIds }, first: 1000) {
+    proposalEntities(where: { organization_in: $orgIds }, first: 1000) {
       id
       displayNameEvent
       displayNameQuestion
@@ -244,7 +244,7 @@ async function fetchAggregatorProposals(aggregatorAddress) {
     if (organizations.length > 0) {
         const orgIds = organizations.map(o => o.id);
         const propResult = await gqlPost(SUBGRAPH_URL, PROPOSALS_QUERY, { orgIds });
-        for (const p of propResult?.proposalentities || []) {
+        for (const p of propResult?.proposalEntities || []) {
             const orgId = p.organization?.id;
             if (!orgId) continue;
             if (!proposalsByOrg.has(orgId)) proposalsByOrg.set(orgId, []);
@@ -280,8 +280,7 @@ async function bulkFetchPoolsByChain(proposals) {
     const ids = [];
     for (const p of proposals) {
         if (!p.proposalAddress) continue;
-        const chainId = p.chainId || 100;
-        ids.push(`${chainId}-${p.proposalAddress.toLowerCase()}`);
+        ids.push(p.proposalAddress.toLowerCase());
     }
 
     if (ids.length === 0) return {};
@@ -292,7 +291,7 @@ async function bulkFetchPoolsByChain(proposals) {
         query GetProposalPools($ids: [String!]!) {
             pools(where: { proposal_in: $ids }, first: 1000) {
                 id
-                proposal
+                proposal { id }
                 type
                 outcomeSide
             }
@@ -320,11 +319,7 @@ async function bulkFetchPoolsByChain(proposals) {
     const poolMap = {};
     for (const pool of result?.data?.pools || []) {
         if (pool.type !== 'CONDITIONAL' && pool.type !== 'conditional') continue;
-        // Key by plain proposal address. The /candles/graphql proxy already
-        // strips the "<chainId>-" prefix from response IDs, so handle both
-        // shapes (prefixed for direct upstream, plain for proxied).
-        const raw = (pool.proposal || '').toLowerCase();
-        const propAddr = raw.includes('-') ? raw.split('-').slice(1).join('-') : raw;
+        const propAddr = (pool.proposal?.id || '').toLowerCase();
         if (!propAddr) continue;
         if (!poolMap[propAddr]) poolMap[propAddr] = { yes: null, no: null };
         if (pool.outcomeSide === 'YES' || pool.outcomeSide === 'yes') {

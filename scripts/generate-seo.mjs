@@ -104,7 +104,7 @@ const ORGANIZATIONS_QUERY = `
 
 const PROPOSALS_QUERY = `
   query($orgIds: [String!]!) {
-    proposalentities(where: { organization_in: $orgIds }, first: 1000) {
+    proposalEntities(where: { organization_in: $orgIds }, first: 1000) {
       id
       title
       description
@@ -131,7 +131,7 @@ async function fetchRegistryProposals() {
 
   const orgById = new Map(organizations.map((o) => [o.id, o]));
   const propData = await gql(PROPOSALS_QUERY, { orgIds: organizations.map((o) => o.id) });
-  const proposals = propData?.proposalentities || [];
+  const proposals = propData?.proposalEntities || [];
   if (proposals.length === 0) {
     throw new Error('Registry returned zero proposals for the aggregator — refusing to generate an empty market list');
   }

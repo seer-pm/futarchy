@@ -22,9 +22,9 @@ const LoadingSpinner = ({ className = "" }) => (
 async function fetchOrganizationFromSubgraph(organizationAddress) {
     const query = `
         query GetOrganization($id: ID!) {
-            organizationEntity(id: $id) {
+            organization(id: $id) {
                 id
-                companyName
+                name
                 description
                 metadata
                 metadataURI
@@ -49,7 +49,7 @@ async function fetchOrganizationFromSubgraph(organizationAddress) {
         throw new Error(result.errors[0]?.message || 'Subgraph query failed');
     }
 
-    return result.data?.organizationEntity || null;
+    return result.data?.organization || null;
 }
 
 /**
@@ -190,7 +190,7 @@ const EditCompanyModal = ({ isOpen, onClose, organizationAddress, initialData = 
                 throw new Error('Organization not found in Registry Subgraph');
             }
 
-            setCompanyName(org.companyName || '');
+            setCompanyName(org.name || '');
             setDescription(org.description || '');
             const loadedMetadata = org.metadata || '';
             setMetadata(loadedMetadata);

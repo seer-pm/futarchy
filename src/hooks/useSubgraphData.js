@@ -32,7 +32,7 @@ function buildCandlesQuery(poolIds, limit, closeTimestamp) {
         orderDirection: desc,
         where: { pool_in: [${idList}], period: 3600, periodStartUnix_lte: ${closeTimestamp} }
       ) {
-        pool
+        pool { id }
         periodStartUnix
         period
         open
@@ -228,7 +228,7 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
                 const yesId = (yesPool?.id || '').toLowerCase();
                 const noId = (noPool?.id || '').toLowerCase();
                 for (const c of candlesData.candles || []) {
-                    const poolAddr = (c.pool || '').toLowerCase();
+                    const poolAddr = (c.pool?.id || '').toLowerCase();
                     if (poolAddr === yesId) yesCandles.push(c);
                     else if (poolAddr === noId) noCandles.push(c);
                 }

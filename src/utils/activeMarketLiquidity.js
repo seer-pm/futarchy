@@ -48,8 +48,8 @@ export function calculatePoolLiquidityUsd(pool, tokensByAddress, balancesByToken
 
   const chainId = Number(pool.chainId);
   const hasChainId = Number.isFinite(chainId);
-  const token0Address = normalizeAddress(pool.token0);
-  const token1Address = normalizeAddress(pool.token1);
+  const token0Address = normalizeAddress(pool.token0?.id);
+  const token1Address = normalizeAddress(pool.token1?.id);
   const poolAddress = normalizeAddress(pool.id);
   const token0 = (hasChainId && tokensByAddress.get(chainAddressKey(chainId, token0Address)))
     || tokensByAddress.get(token0Address);
@@ -99,9 +99,9 @@ async function fetchIndexedPools(events, fetchImpl) {
     }
     const ids = idsByChain.get(chainId);
     const proposalAddress = normalizeAddress(event.proposalAddress || event.eventId);
-    if (proposalAddress) ids.proposalIds.push(`${chainId}-${proposalAddress}`);
+    if (proposalAddress) ids.proposalIds.push(proposalAddress);
     for (const address of [event.poolAddresses?.yes, event.poolAddresses?.no]) {
-      if (address) ids.poolIds.push(`${chainId}-${normalizeAddress(address)}`);
+      if (address) ids.poolIds.push(normalizeAddress(address));
     }
   }
 
@@ -109,13 +109,17 @@ async function fetchIndexedPools(events, fetchImpl) {
     return { pools: [], tokens: [] };
   }
 
+  // `first` is capped at 1000 per selection. At 4 outcome tokens per proposal
+  // that covers 250 proposals; beyond that the tail is truncated, its pools
+  // fail the token lookup below and those markets are hidden rather than
+  // mispriced — the same fail-closed direction as an index outage, but silent.
   const query = `
     query ActiveMarketLiquidity($poolIds: [String!]!, $proposalIds: [String!]!) {
       pools(where: { id_in: $poolIds }, first: 1000) {
-        id proposal type outcomeSide token0 token1 tick
+        id proposal { id } type outcomeSide token0 { id } token1 { id } tick
       }
-      whitelistedtokens(where: { proposal_in: $proposalIds }, first: 2000) {
-        proposal address decimals role symbol
+      whitelistedTokens(where: { proposal_in: $proposalIds }, first: 1000) {
+        id proposal { id } decimals role symbol
       }
     }
   `;
@@ -148,7 +152,7 @@ async function fetchIndexedPools(events, fetchImpl) {
       if (result.errors?.length) throw new Error(result.errors[0]?.message || 'GraphQL query failed');
       return {
         pools: (result.data?.pools || []).map((pool) => ({ ...pool, chainId })),
-        tokens: (result.data?.whitelistedtokens || []).map((token) => ({ ...token, chainId })),
+        tokens: (result.data?.whitelistedTokens || []).map((token) => ({ ...token, chainId })),
       };
     } catch (error) {
       // Fail closed only for the affected chain. A Gnosis index outage must not
@@ -175,7 +179,7 @@ async function fetchReserveBalances(pools, fetchImpl, rpcUrls) {
     if (!callsByChain.has(chainId)) callsByChain.set(chainId, []);
 
     for (const token of [pool.token0, pool.token1]) {
-      const tokenAddress = normalizeAddress(token);
+      const tokenAddress = normalizeAddress(token?.id);
       callsByChain.get(chainId).push({
         id: nextId++,
         key: `${chainId}:${tokenAddress}:${poolAddress}`,
@@ -236,7 +240,7 @@ export async function filterEventsByMinimumLiquidity(
       pools.map((pool) => [chainAddressKey(pool.chainId, pool.id), pool])
     );
     const tokensByAddress = new Map(
-      tokens.map((token) => [chainAddressKey(token.chainId, token.address), token])
+      tokens.map((token) => [chainAddressKey(token.chainId, token.id), token])
     );
     const balances = await fetchReserveBalances(pools, fetchImpl, rpcUrls);
 

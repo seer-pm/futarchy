@@ -177,22 +177,10 @@ export async function fetchProposalFromChain(proposalAddress, chainId) {
 }
 
 /**
- * Strip a "<chainId>-" prefix from a Checkpoint ID. Defensive — the
- * api.futarchy.fi passthrough already strips these from response IDs,
- * but this is harmless if the prefix isn't present.
- */
-function stripChainPrefix(id) {
-    if (typeof id !== 'string') return id;
-    const m = id.match(/^\d+-(.+)$/);
-    return m ? m[1] : id;
-}
-
-/**
  * Fetch proposal data from the candles indexer.
  *
- * Checkpoint exposes `companyToken` / `currencyToken` / `outcomeTokens`
- * as scalar string addresses (not nested objects), so we issue 3 flat
- * queries and assemble a Graph-Node-shape object that matches what
+ * Three top-level lookups batched into one request, assembled into the
+ * shape that matches what
  * `transformSubgraphToSupabaseFormat` expects.
  *
  * @param {string} proposalAddress - The proposal contract address (plain)
@@ -208,19 +196,15 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
 
     const proposalId = proposalAddress.toLowerCase();
 
-    // Single query batches three top-level lookups against the Checkpoint
-    // indexer. The api.futarchy.fi /candles/graphql passthrough handles
-    // chain-prefix translation in both directions.
     const query = `{
         proposal(id: "${proposalId}") {
             id
             marketName
-            companyToken
-            currencyToken
+            companyToken { id }
+            currencyToken { id }
         }
-        whitelistedtokens(where: { proposal: "${proposalId}" }, first: 100) {
+        whitelistedTokens(where: { proposal: "${proposalId}" }, first: 100) {
             id
-            address
             symbol
             decimals
             role
@@ -252,7 +236,7 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
         const proposal = result.data?.proposal;
         if (!proposal) return null;
 
-        const wls = result.data?.whitelistedtokens || [];
+        const wls = result.data?.whitelistedTokens || [];
         const pools = result.data?.pools || [];
 
         // Derive the underlying COMPANY/CURRENCY symbol by stripping the
@@ -272,17 +256,15 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
         const companySymbol  = stripPrefix(yesCompany?.symbol)  || stripPrefix(noCompany?.symbol);
         const currencySymbol = stripPrefix(yesCurrency?.symbol) || stripPrefix(noCurrency?.symbol);
 
-        const companyAddr  = stripChainPrefix(proposal.companyToken);
-        const currencyAddr = stripChainPrefix(proposal.currencyToken);
+        const companyAddr  = proposal.companyToken?.id ?? null;
+        const currencyAddr = proposal.currencyToken?.id ?? null;
 
         // Default decimals to 18 (true for all current tokens; if a future token
         // differs we'll add an on-chain fallback). Outcome tokens carry their own.
         const decimalsDefault = yesCompany?.decimals ?? 18;
 
-        // Assemble a Graph-Node-style object so transformSubgraphToSupabaseFormat
-        // doesn't need to know about the schema difference.
         const outcomeTokens = wls.map(t => ({
-            id: stripChainPrefix(t.id) || t.address,
+            id: t.id,
             symbol: t.symbol,
             decimals: t.decimals,
         }));
@@ -298,7 +280,7 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
                 : null,
             outcomeTokens,
             pools: pools.map(p => ({
-                id: stripChainPrefix(p.id),
+                id: p.id,
                 name: p.name,
                 type: p.type,
                 outcomeSide: p.outcomeSide,

@@ -214,33 +214,37 @@ test('only ONE type-filter literal in source — adding another would split logi
     assert.equal(matches.length, 1, 'exactly one CONDITIONAL filter');
 });
 
-// ───── 5. Stitching invariant ─────
+// ───── 5. Nested-selection invariant ─────
+//
+// tokenIn/tokenOut/pool are entity references, so the swaps query asks for
+// them nested and the response already has the shape the UI consumes. The
+// client used to issue a second pools query and stitch the two together;
+// these tests pin that it does not need to any more.
 
-test('pool metadata Map keyed by lowercased pool ID', () => {
-    assert.match(SRC, /poolMap\.set\(p\.id\?\.toLowerCase\(\),\s*p\)/);
+test('swaps query selects pool metadata nested, not as a bare reference', () => {
+    assert.match(SRC, /pool\s*\{\s*id\s+name\s+type\s+outcomeSide\s*\}/);
 });
 
-test('stitched swap reads pool meta via lowercased s.pool address', () => {
-    assert.match(SRC, /poolMap\.get\(\(s\.pool\s*\|\|\s*''\)\.toLowerCase\(\)\)/);
+test('swaps query selects tokenIn/tokenOut nested with the fields the UI reads', () => {
+    assert.match(SRC, /tokenIn\s*\{\s*id\s+symbol\s+decimals\s+role\s*\}/);
+    assert.match(SRC, /tokenOut\s*\{\s*id\s+symbol\s+decimals\s+role\s*\}/);
 });
 
-test('stitched swap fallback preserves {id,name:null,type:null,outcomeSide:null} when meta missing', () => {
-    assert.match(
-        SRC,
-        /poolMeta\s*\|\|\s*\{\s*id:\s*s\.pool,\s*name:\s*null,\s*type:\s*null,\s*outcomeSide:\s*null\s*\}/,
-    );
+test('no client-side stitching remains — a second pools query would be dead weight', () => {
+    assert.ok(!/poolMap/.test(SRC), 'poolMap stitching should be gone');
+    assert.ok(!/poolsQuery/.test(SRC), 'the separate pools query should be gone');
 });
 
 // ───── 6. Field swap convention ─────
 
 test('UI tokenIN comes FROM swap.tokenOut (user receives) — inversion preserved', () => {
     assert.match(SRC, /tokenIN:\s*\{[^}]*symbol:\s*swap\.tokenOut\?\.symbol/);
-    assert.match(SRC, /tokenIN:\s*\{[^}]*value:\s*formatAmount\(swap\.amountOut,[^)]+\)/);
+    assert.match(SRC, /tokenIN:\s*\{[^}]*value:\s*formatAmount\(swap\.amountOut\)/);
 });
 
 test('UI tokenOUT comes FROM swap.tokenIn (user gives) — inversion preserved', () => {
     assert.match(SRC, /tokenOUT:\s*\{[^}]*symbol:\s*swap\.tokenIn\?\.symbol/);
-    assert.match(SRC, /tokenOUT:\s*\{[^}]*value:\s*formatAmount\(swap\.amountIn,[^)]+\)/);
+    assert.match(SRC, /tokenOUT:\s*\{[^}]*value:\s*formatAmount\(swap\.amountIn\)/);
 });
 
 test('inversion explainer comment is present (load-bearing for new contributors)', () => {
@@ -374,8 +378,12 @@ test('formatAmount: tiny raw wei never renders in exponent notation', () => {
     assert.doesNotMatch(formatted, /e/i);
 });
 
-test('formatAmount: production source uses decimals-aware ethers formatUnits and shared formatter', () => {
-    assert.match(SRC, /ethers\.utils\.formatUnits\(value \|\| '0', Number\(decimals\) \|\| 18\)/);
+test('formatAmount: no unit conversion — subgraph amounts are already decimal-adjusted', () => {
+    // amountIn/amountOut are BigDecimal, divided by 10^decimals in the
+    // subgraph mapping, so they arrive as e.g. "0.000004254967638581".
+    // formatUnits wants an integer string and throws on that.
+    assert.ok(!/formatUnits\s*\(/.test(SRC),
+        'formatAmount must not call formatUnits on an already-adjusted value');
     assert.match(SRC, /return formatTokenAmount\(/);
 });
 

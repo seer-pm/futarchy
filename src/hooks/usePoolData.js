@@ -24,18 +24,17 @@ const API_BASE_URL = normalizeBaseUrl(RAW_API_BASE_URL);
 
 console.log('Pool API URL configured as:', API_BASE_URL);
 
-// Checkpoint indexer shape: no nested entity refs (proposal, token0/token1
-// and currencyToken are flat string fields), no Proposal.pools reverse field,
-// no BigInt scalar. We assemble the equivalent shape with three flat top-level
-// queries in a single request and join in JS using a whitelistedtokens map.
+// Pools carry their tokens as nested entities, so each pool arrives already
+// enriched with symbol/decimals/role. whitelistedTokens is still queried
+// separately, but only to derive the proposal's currency symbol by role.
 const buildProposalPoolsQuery = (proposalId) => `{
   proposal(id: "${proposalId}") {
     id
-    currencyToken
-    companyToken
+    currencyToken { id }
+    companyToken { id }
   }
-  whitelistedtokens(where: { proposal: "${proposalId}" }, first: 100) {
-    address
+  whitelistedTokens(where: { proposal: "${proposalId}" }, first: 100) {
+    id
     symbol
     decimals
     role
@@ -47,8 +46,8 @@ const buildProposalPoolsQuery = (proposalId) => `{
     liquidity
     volumeToken0
     volumeToken1
-    token0
-    token1
+    token0 { id symbol decimals role }
+    token1 { id symbol decimals role }
     tick
   }
 }`;
@@ -59,19 +58,10 @@ const buildPoolQuery = (poolId) => `{
     liquidity
     volumeToken0
     volumeToken1
-    token0
-    token1
+    token0 { id symbol decimals role }
+    token1 { id symbol decimals role }
     tick
-    proposal
-  }
-}`;
-
-const buildTokensForPoolQuery = (proposalId) => `{
-  whitelistedtokens(where: { proposal: "${proposalId}" }, first: 100) {
-    address
-    symbol
-    decimals
-    role
+    proposal { id }
   }
 }`;
 
@@ -99,12 +89,10 @@ const formatSubgraphPoolData = async (pool, proposalCurrencySymbol, provider) =>
     return t.symbol?.replace(/^(YES|NO)_/i, '').toLowerCase() === proposalCurrencySymbol.toLowerCase();
   };
 
-  // Checkpoint stores volumeToken0/1 as raw token-decimal strings (e.g.
-  // "6153878689256497859232" for ~6153.88 sDAI at 18 decimals). Divide
-  // by 10^decimals to express in human units.
-  const toHuman = (raw, dec) => parseFloat(raw || 0) / Math.pow(10, dec ?? 18);
-  const vol0 = toHuman(pool.volumeToken0, t0.decimals);
-  const vol1 = toHuman(pool.volumeToken1, t1.decimals);
+  // volumeToken0/1 are BigDecimal and already decimal-adjusted by the
+  // subgraph, so they are human units as-is — do NOT divide by 10^decimals.
+  const vol0 = parseFloat(pool.volumeToken0 || 0);
+  const vol1 = parseFloat(pool.volumeToken1 || 0);
 
   // Check Token 0
   if (isCurrencyRole(t0) || isCurrencySymbol(t0)) {
@@ -213,35 +201,13 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
       return null;
     }
 
-    // Build a token map keyed by lowercased address, derived from
-    // whitelistedtokens. Used to enrich each pool's flat token0/token1
-    // address strings with { symbol, decimals, role } so the downstream
-    // formatter (which expects Graph-Node-shaped objects) keeps working.
-    const wls = result.data.whitelistedtokens || [];
-    const tokenByAddr = new Map();
-    for (const t of wls) {
-      if (!t.address) continue;
-      tokenByAddr.set(t.address.toLowerCase(), {
-        symbol: t.symbol || null,
-        decimals: t.decimals ?? 18,
-        role: t.role || null,
-      });
-    }
-    const enrichToken = (addr) => {
-      const lc = (addr || '').toLowerCase();
-      const meta = tokenByAddr.get(lc) || { symbol: null, decimals: 18, role: null };
-      return { id: lc, ...meta };
-    };
-
-    // Derive currencySymbol from any *_CURRENCY whitelistedtoken.
+    // Derive currencySymbol from any *_CURRENCY whitelisted token.
+    const wls = result.data.whitelistedTokens || [];
     const currencyMeta = wls.find(t => t.role === 'YES_CURRENCY' || t.role === 'NO_CURRENCY');
     const currencySymbol = currencyMeta?.symbol?.replace(/^(YES|NO)_/i, '') || null;
 
-    const pools = (result.data.pools || []).map(p => ({
-      ...p,
-      token0: enrichToken(p.token0),
-      token1: enrichToken(p.token1),
-    }));
+    // Pools arrive with token0/token1 as full entities, so no join is needed.
+    const pools = result.data.pools || [];
 
     console.log(`[Pool Data] Found ${pools.length} pools for proposal on chain ${chainId}`);
 
@@ -344,41 +310,10 @@ const fetchSubgraphPoolData = async (poolId, chainId = 100) => {
     const pool = result.data?.pool?.[0];
     if (!pool) return null;
 
-    // Resolve token symbols/decimals/roles via the proposal's whitelistedtokens.
-    // proposal comes back from the proxy as a plain (already chain-prefix-stripped)
-    // address string in Checkpoint mode.
-    const proposalAddr = (pool.proposal || '').toLowerCase();
-    let tokenByAddr = new Map();
-    if (proposalAddr) {
-      try {
-        const tokensResp = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: buildTokensForPoolQuery(proposalAddr) })
-        });
-        const tokensJson = await tokensResp.json();
-        for (const t of tokensJson.data?.whitelistedtokens || []) {
-          if (!t.address) continue;
-          tokenByAddr.set(t.address.toLowerCase(), {
-            symbol: t.symbol || null,
-            decimals: t.decimals ?? 18,
-            role: t.role || null,
-          });
-        }
-      } catch (_) { /* fall through with empty map */ }
-    }
-    const enrichToken = (addr) => {
-      const lc = (addr || '').toLowerCase();
-      const meta = tokenByAddr.get(lc) || { symbol: null, decimals: 18, role: null };
-      return { id: lc, ...meta };
-    };
-
+    // token0/token1 come back as full entities, so the second round-trip
+    // that used to resolve symbol/decimals/role is no longer needed.
     const provider = await getBestRpcProvider(chainId);
-    return formatSubgraphPoolData({
-      ...pool,
-      token0: enrichToken(pool.token0),
-      token1: enrichToken(pool.token1),
-    }, null, provider);
+    return formatSubgraphPoolData(pool, null, provider);
 
 
   } catch (error) {

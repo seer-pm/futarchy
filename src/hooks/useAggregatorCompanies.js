@@ -42,7 +42,7 @@ const ORGANIZATIONS_QUERY = `
 
 const PROPOSALS_QUERY = `
   query($orgIds: [String!]!) {
-    proposalentities(where: { organization_in: $orgIds }, first: 1000) {
+    proposalEntities(where: { organization_in: $orgIds }, first: 1000) {
       id
       metadata
       organization { id }
@@ -74,7 +74,7 @@ function parseMetadata(metadataString) {
 
 /**
  * @param {Object} org - Raw organization row from Checkpoint
- * @param {Array<Object>} proposalsForOrg - Raw proposalentity rows whose organization === org
+ * @param {Array<Object>} proposalsForOrg - Raw proposalEntity rows whose organization === org
  */
 function transformOrgToCard(org, proposalsForOrg) {
     const meta = parseMetadata(org.metadata);
@@ -144,7 +144,7 @@ async function fetchAggregatorCompanies(aggregatorAddress, connectedWallet = nul
     if (visible.length > 0) {
         const orgIds = visible.map(o => o.id);
         const propData = await gqlPost(PROPOSALS_QUERY, { orgIds });
-        for (const p of propData?.proposalentities || []) {
+        for (const p of propData?.proposalEntities || []) {
             const oid = p.organization?.id;
             if (!oid) continue;
             if (!propsByOrg.has(oid)) propsByOrg.set(oid, []);

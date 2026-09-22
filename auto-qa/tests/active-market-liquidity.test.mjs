@@ -30,8 +30,8 @@ const NO_POOL = '0x0000000000000000000000000000000000000012';
 const PROPOSAL = '0x0000000000000000000000000000000000000021';
 
 const tokens = new Map([
-  [COMPANY, { address: COMPANY, decimals: 18, role: 'YES_COMPANY' }],
-  [CURRENCY, { address: CURRENCY, decimals: 18, role: 'YES_CURRENCY' }],
+  [COMPANY, { id: COMPANY, decimals: 18, role: 'YES_COMPANY' }],
+  [CURRENCY, { id: CURRENCY, decimals: 18, role: 'YES_CURRENCY' }],
 ]);
 
 const wei = (amount) => BigInt(amount) * 10n ** 18n;
@@ -46,7 +46,7 @@ test('pool valuation uses real reserves and values either token orientation', ()
     [`${CURRENCY}:${YES_POOL}`, wei(400)],
   ]);
   const companyFirst = calculatePoolLiquidityUsd(
-    { id: YES_POOL, token0: COMPANY, token1: CURRENCY, tick: 0 },
+    { id: YES_POOL, token0: { id: COMPANY }, token1: { id: CURRENCY }, tick: 0 },
     tokens,
     balances
   );
@@ -57,7 +57,7 @@ test('pool valuation uses real reserves and values either token orientation', ()
     [`${COMPANY}:${YES_POOL}`, wei(600)],
   ]);
   const currencyFirst = calculatePoolLiquidityUsd(
-    { id: YES_POOL, token0: CURRENCY, token1: COMPANY, tick: 0 },
+    { id: YES_POOL, token0: { id: CURRENCY }, token1: { id: COMPANY }, tick: 0 },
     tokens,
     reversedBalances
   );
@@ -65,7 +65,7 @@ test('pool valuation uses real reserves and values either token orientation', ()
 });
 
 test('pool valuation fails closed for missing balances or ambiguous token roles', () => {
-  const pool = { id: YES_POOL, token0: COMPANY, token1: CURRENCY, tick: 0 };
+  const pool = { id: YES_POOL, token0: { id: COMPANY }, token1: { id: CURRENCY }, tick: 0 };
   assert.equal(calculatePoolLiquidityUsd(pool, tokens, new Map()), null);
 
   const ambiguous = new Map([
@@ -86,10 +86,10 @@ test('active filter requires both indexed pools and at least $1,000 combined rea
   const graphqlData = {
     data: {
       pools: [
-        { id: YES_POOL, proposal: PROPOSAL, type: 'CONDITIONAL', outcomeSide: 'YES', token0: COMPANY, token1: CURRENCY, tick: 0 },
-        { id: NO_POOL, proposal: PROPOSAL, type: 'CONDITIONAL', outcomeSide: 'NO', token0: COMPANY, token1: CURRENCY, tick: 0 },
+        { id: YES_POOL, proposal: { id: PROPOSAL }, type: 'CONDITIONAL', outcomeSide: 'YES', token0: { id: COMPANY }, token1: { id: CURRENCY }, tick: 0 },
+        { id: NO_POOL, proposal: { id: PROPOSAL }, type: 'CONDITIONAL', outcomeSide: 'NO', token0: { id: COMPANY }, token1: { id: CURRENCY }, tick: 0 },
       ],
-      whitelistedtokens: [...tokens.values()],
+      whitelistedTokens: [...tokens.values()],
     },
   };
 
@@ -156,21 +156,21 @@ test('active filter queries and preserves Ethereum and Gnosis markets together',
       const { variables } = JSON.parse(options.body);
       graphqlChains.push(chainId);
       assert.deepEqual(variables.poolIds.sort(), [
-        `${chainId}-${fixture.noPool}`,
-        `${chainId}-${fixture.yesPool}`,
+        fixture.noPool,
+        fixture.yesPool,
       ].sort());
-      assert.deepEqual(variables.proposalIds, [`${chainId}-${fixture.proposal}`]);
+      assert.deepEqual(variables.proposalIds, [fixture.proposal]);
       return {
         ok: true,
         json: async () => ({
           data: {
             pools: [
-              { id: fixture.yesPool, proposal: fixture.proposal, type: 'CONDITIONAL', outcomeSide: 'YES', token0: fixture.company, token1: fixture.currency, tick: 0 },
-              { id: fixture.noPool, proposal: fixture.proposal, type: 'CONDITIONAL', outcomeSide: 'NO', token0: fixture.company, token1: fixture.currency, tick: 0 },
+              { id: fixture.yesPool, proposal: { id: fixture.proposal }, type: 'CONDITIONAL', outcomeSide: 'YES', token0: { id: fixture.company }, token1: { id: fixture.currency }, tick: 0 },
+              { id: fixture.noPool, proposal: { id: fixture.proposal }, type: 'CONDITIONAL', outcomeSide: 'NO', token0: { id: fixture.company }, token1: { id: fixture.currency }, tick: 0 },
             ],
-            whitelistedtokens: [
-              { address: fixture.company, decimals: 18, role: 'YES_COMPANY' },
-              { address: fixture.currency, decimals: 18, role: 'YES_CURRENCY' },
+            whitelistedTokens: [
+              { id: fixture.company, decimals: 18, role: 'YES_COMPANY' },
+              { id: fixture.currency, decimals: 18, role: 'YES_CURRENCY' },
             ],
           },
         }),
@@ -214,8 +214,8 @@ test('active filter fails closed when either pool or RPC evidence is unavailable
         ok: true,
         json: async () => ({
           data: {
-            pools: [{ id: YES_POOL, proposal: PROPOSAL, type: 'CONDITIONAL', token0: COMPANY, token1: CURRENCY, tick: 0 }],
-            whitelistedtokens: [...tokens.values()],
+            pools: [{ id: YES_POOL, proposal: { id: PROPOSAL }, type: 'CONDITIONAL', token0: { id: COMPANY }, token1: { id: CURRENCY }, tick: 0 }],
+            whitelistedTokens: [...tokens.values()],
           },
         }),
       };
