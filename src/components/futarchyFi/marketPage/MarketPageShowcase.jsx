@@ -14,16 +14,13 @@ import MarketBadgeList from './components/MarketBadgeList';
 import ArrowDownIcon from '../../common/icons/ArrowDownIcon';
 import PageLayout from '../../layout/PageLayout';
 import ShowcaseSwapComponent from "./ShowcaseSwapComponent";
-import CollateralModal from "./collateralModal/CollateralModal";
 import { useAccount } from 'wagmi';
 import { ethers } from "ethers";
 import { motion, AnimatePresence } from 'framer-motion';
 
 import RedeemTokens from "./redeemTokens/RedeemTokens";
-import EditProposalModal from '../../debug/EditProposalModal';
 
 import MarketStatsDebugToast from './MarketStatsDebugToast';
-import SwapNativeToCurrencyModal from "./SwapNativeToCurrencyModal";
 import PositionsTable from "./PositionsTable";
 import { useSnapshotData } from '../../../hooks/useSnapshotData';
 import MarketBalancePanel from "./MarketBalancePanel";
@@ -222,12 +219,23 @@ import { useMarketPageViewModel } from './MarketPageShowcaseViewModel';
 // Add this at the top with other imports
 import { formatBalance } from '../../../utils/formatters';
 import TripleChart from "@components/chart/TripleChart";
-import SubgraphChart from "@components/chart/SubgraphChart";
 import ChartParameters from './tripleChart/chartParameters/ChartParameters';
 
 // Opens only on user action, and it is one of the heaviest components in
 // the market bundle — load it on demand.
 const ConfirmSwapModal = dynamic(() => import('./ConfirmSwapModal'), { ssr: false });
+
+// Opens only from the collateral actions — load it on demand.
+const CollateralModal = dynamic(() => import("./collateralModal/CollateralModal"), { ssr: false });
+
+// Opens only from the native-swap action — load it on demand.
+const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
+
+// Debug-only editor, opened from the proposal menu — load it on demand.
+const EditProposalModal = dynamic(() => import('../../debug/EditProposalModal'), { ssr: false });
+
+// Renders only when the useSubgraph query param asks for it.
+const SubgraphChart = dynamic(() => import("@components/chart/SubgraphChart"), { ssr: false });
 
 import useLatestPrices from '../../../hooks/useLatestPrices'; // Add this import at the top with other imports
 import { getFormattedTrades, openTransactionInExplorer } from './MarketHistoryViewModel';
@@ -1684,6 +1692,10 @@ const PredictionMarketModal = ({ isOpen, onClose, config }) => {
 
 // AddLiquidityModal has been moved to its own file
 import AddLiquidityModal from './AddLiquidityModal';
+
+
+
+
 
 // Results Breakdown Component for Snapshot Widget - Matches exact design from screenshot
 const ResultsBreakdown = ({ items = [], totalCount = 0, quorumPercent = null, title = "VOTING RESULTS" }) => {
