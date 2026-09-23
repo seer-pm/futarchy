@@ -2,14 +2,6 @@
 import Image from "next/image";
 import BrandLogo from "./BrandLogo";
 
-const NAV_LINKS = [
-  { label: 'Companies', href: '/companies' },
-  // Documentation and Status pointed at the upstream project's docs and status
-  // sites. Restore them once the Seer equivalents exist.
-  // { label: 'Documentation', href: '', external: true },
-  // { label: 'Status', href: '', external: true },
-];
-
 const SOCIAL_LINKS = [
   { src: '/assets/x-logo.png', alt: 'X (Twitter)', href: 'https://x.com/seer_pm' },
   { src: '/assets/github-icon.svg', alt: 'GitHub', href: 'https://github.com/seer-pm/futarchy' },
@@ -20,30 +12,13 @@ const Footer = ({ className = '' }) => {
     <footer className={`w-full mt-auto ${className}`}>
       <div className="bg-futarchyDarkGray1 text-white py-8 w-full">
         <div className="container mx-auto px-5 flex flex-col space-y-6">
-          {/* Top row: logo + nav + social */}
+          {/* Top row: logo + social */}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
             {/* Logo and tagline */}
             <div>
               <BrandLogo />
               <div className="text-sm text-futarchyGray112 mt-4">
                 Market-based evaluation of governance decisions and milestones
-              </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="flex flex-col gap-3">
-              <div className="text-sm text-futarchyGray10 font-medium">Navigate</div>
-              <div className="flex flex-col gap-2">
-                {NAV_LINKS.map((link) => (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    {...(link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                    className="text-sm text-futarchyGray112 hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </a>
-                ))}
               </div>
             </div>
 
