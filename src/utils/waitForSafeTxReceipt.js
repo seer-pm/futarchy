@@ -1,5 +1,3 @@
-import SafeApiKit from '@safe-global/api-kit';
-
 const SAFE_TX_SERVICE_URLS = {
     1: 'https://safe-transaction-mainnet.safe.global',
     100: 'https://safe-transaction-gnosis-chain.safe.global',
@@ -22,6 +20,14 @@ export async function waitForSafeTxReceipt({
     if (!txServiceUrl) {
         throw new Error(`No Safe tx service URL for chainId=${chainId}`);
     }
+
+    // @safe-global/api-kit drags in protocol-kit, types-kit and
+    // safe-deployments — over half a megabyte of source that only matters once
+    // a transaction has actually gone out through a Safe. Importing it here
+    // rather than at module scope keeps it out of the market bundle; the wait
+    // that follows is measured in blocks, so the fetch costs nothing next to
+    // it. Same pattern as useSafeDetection.js.
+    const { default: SafeApiKit } = await import('@safe-global/api-kit');
 
     const apiKit = new SafeApiKit({
         chainId,
