@@ -1,7 +1,7 @@
-import LandingPage from "../components/futarchyFi/landingPage/LandingPage";
+import Companies from "../components/futarchyFi/companyList/page/CompaniesPage";
 
 export default function Home() {
-  return <LandingPage />;
+  return <Companies />;
 }
 
 export async function getStaticProps() {
