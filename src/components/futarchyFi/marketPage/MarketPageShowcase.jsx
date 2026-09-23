@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, memo, useState, useCallback, useMemo } from "react";
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import Image from "next/image";
 import RootLayout from "../../../components/layout/RootLayout";
@@ -21,7 +22,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import RedeemTokens from "./redeemTokens/RedeemTokens";
 import EditProposalModal from '../../debug/EditProposalModal';
 
-import ConfirmSwapModal from './ConfirmSwapModal';
 import MarketStatsDebugToast from './MarketStatsDebugToast';
 import SwapNativeToCurrencyModal from "./SwapNativeToCurrencyModal";
 import PositionsTable from "./PositionsTable";
@@ -224,6 +224,11 @@ import { formatBalance } from '../../../utils/formatters';
 import TripleChart from "@components/chart/TripleChart";
 import SubgraphChart from "@components/chart/SubgraphChart";
 import ChartParameters from './tripleChart/chartParameters/ChartParameters';
+
+// Opens only on user action, and it is one of the heaviest components in
+// the market bundle — load it on demand.
+const ConfirmSwapModal = dynamic(() => import('./ConfirmSwapModal'), { ssr: false });
+
 import useLatestPrices from '../../../hooks/useLatestPrices'; // Add this import at the top with other imports
 import { getFormattedTrades, openTransactionInExplorer } from './MarketHistoryViewModel';
 import { useTradeHistory } from './MarketHistoryViewModel';

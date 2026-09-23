@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import ConfirmSwapModal from './ConfirmSwapModal';
+import dynamic from 'next/dynamic';
 import SwapNativeToCurrencyModal from './SwapNativeToCurrencyModal';
 import { STEPS_CONFIG } from './constants/swapSteps';
 import { ethers } from 'ethers';
@@ -38,6 +38,11 @@ import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter
 import { getUniswapV3QuoteWithPriceImpact, getPoolSqrtPrice, sqrtPriceX96ToPrice } from '../../../utils/uniswapSdk';
 import { usePublicClient, useChainId } from 'wagmi';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
+
+// Opens only on user action, and it is one of the heaviest components in
+// the market bundle — load it on demand.
+const ConfirmSwapModal = dynamic(() => import('./ConfirmSwapModal'), { ssr: false });
+
 
 // Configuration for this showcase implementation
 const SHOWCASE_CHECK_SELL_COLLATERAL = true;
