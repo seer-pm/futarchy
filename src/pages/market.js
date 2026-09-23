@@ -1,9 +1,18 @@
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
-import MarketPageShowcase from '../components/futarchyFi/marketPage/MarketPageShowcase';
+import dynamic from 'next/dynamic';
 import { DEFAULT_PROPOSAL_ID } from '../components/futarchyFi/marketPage/constants/contracts';
 import { getStaticMarketAddresses } from '../config/markets';
+
+// This route almost always redirects to /markets/:address — it only renders
+// the showcase for a market that is not in the static config. Loading the
+// showcase lazily keeps that redirect from pulling the whole market bundle,
+// matching what /markets/[address] already does.
+const MarketPageShowcase = dynamic(
+  () => import('../components/futarchyFi/marketPage/MarketPageShowcase'),
+  { ssr: false }
+);
 
 const CONFIGURED_MARKETS = new Set(
   getStaticMarketAddresses().map((address) => (address || '').toLowerCase())
