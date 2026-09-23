@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { RPC_ENDPOINTS, RPC_NETWORKS } from '../config/rpcEndpoints';
+import { createStaticBatchProvider } from '../utils/staticBatchProvider';
 import {
     SDAI_CONTRACT_RATE,
     SDAI_RATE_PROVIDER_ABI,
@@ -26,8 +27,8 @@ const rateLimitCooldowns = new Map();
 function getProvider(rpcUrl) {
   if (!providers.has(rpcUrl)) {
     console.log("[SDAI PROVIDER] Creating new provider for:", rpcUrl);
-    // Stating the network skips ethers' eth_chainId detection call.
-    providers.set(rpcUrl, new ethers.providers.JsonRpcBatchProvider(rpcUrl, RPC_NETWORKS[100]));
+    // Static + batching — see utils/staticBatchProvider.js.
+    providers.set(rpcUrl, createStaticBatchProvider(rpcUrl, RPC_NETWORKS[100]));
   }
   return providers.get(rpcUrl);
 }

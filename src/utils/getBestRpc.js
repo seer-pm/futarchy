@@ -22,20 +22,16 @@
  * so a static build needs them present in CI.
  */
 
-import { ethers } from 'ethers';
-
 import { RPC_ENDPOINTS as RPC_LISTS, RPC_NETWORKS as NETWORKS } from '../config/rpcEndpoints';
+import { createStaticBatchProvider } from './staticBatchProvider';
 
 // chainId -> { index, provider }
 const activeProviders = new Map();
 
 function buildProvider(chainId, url) {
-  // Passing the network explicitly is what skips eth_chainId; the batch
-  // provider coalesces calls made in the same tick into one POST.
-  const provider = new ethers.providers.JsonRpcBatchProvider(url, NETWORKS[chainId]);
-  // Nothing here subscribes to blocks; keep any incidental polling rare.
-  provider.pollingInterval = 60_000;
-  return withFailover(provider, chainId);
+  // Static so ethers never asks the endpoint for its chain id, batching so
+  // reads in the same tick share a POST — see utils/staticBatchProvider.js.
+  return withFailover(createStaticBatchProvider(url, NETWORKS[chainId]), chainId);
 }
 
 /**
@@ -110,7 +106,7 @@ export async function getBestRpc(chainId) {
  * The shared provider for a chain. Built on first use and reused afterwards.
  *
  * @param {number} chainId
- * @returns {Promise<ethers.providers.JsonRpcProvider>}
+ * @returns {Promise<import('./staticBatchProvider').StaticJsonRpcBatchProvider>}
  */
 export async function getBestRpcProvider(chainId) {
   return getRpcProvider(chainId);
@@ -121,7 +117,7 @@ export async function getBestRpcProvider(chainId) {
  * more, so there is no reason to force them to be.
  *
  * @param {number} chainId
- * @returns {ethers.providers.JsonRpcProvider}
+ * @returns {import('./staticBatchProvider').StaticJsonRpcBatchProvider}
  */
 export function getRpcProvider(chainId) {
   return getState(chainId).provider;

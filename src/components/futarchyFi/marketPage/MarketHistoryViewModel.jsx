@@ -4,6 +4,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { ethers } from 'ethers';
 import { RPC_ENDPOINTS, RPC_NETWORKS } from '../../../config/rpcEndpoints';
+import { createStaticBatchProvider } from '../../../utils/staticBatchProvider';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -25,8 +26,8 @@ const RANDOM_RETRY_RANGE = 10 * 1000; // 1-10 seconds
 function getProvider(rpcUrl) {
   if (!providers.has(rpcUrl)) {
     console.log("[HISTORY PROVIDER] Creating new provider for:", rpcUrl);
-    // Stating the network skips ethers' eth_chainId detection call.
-    providers.set(rpcUrl, new ethers.providers.JsonRpcBatchProvider(rpcUrl, RPC_NETWORKS[100]));
+    // Static + batching — see utils/staticBatchProvider.js.
+    providers.set(rpcUrl, createStaticBatchProvider(rpcUrl, RPC_NETWORKS[100]));
   }
   return providers.get(rpcUrl);
 }
