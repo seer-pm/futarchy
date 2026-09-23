@@ -7,20 +7,20 @@
 const EXAMPLE_NEW_MARKET = {
   "0x1234567890123456789012345678901234567890": {
     title: "Example Market Title",
-    description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions at futarchy.fi!",
+    description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions!",
     image: "/assets/your-market-image.png", // Make sure this image exists in public/assets/
     path: "/markets/0x1234567890123456789012345678901234567890",
     openGraph: {
-      title: "Example Market Title | Futarchy.fi",
-      description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions at futarchy.fi!",
+      title: "Example Market Title | Futarchy",
+      description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions!",
       image: "/assets/your-market-image.png",
       type: "website",
-      siteName: "Futarchy.fi"
+      siteName: "Futarchy"
     },
     twitter: {
       card: "summary_large_image",
-      title: "Example Market Title | Futarchy.fi",
-      description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions at futarchy.fi!",
+      title: "Example Market Title | Futarchy",
+      description: "Markets are currently forecasting the impact of this proposal. Trade your insights or follow the predictions!",
       image: "/assets/your-market-image.png"
     },
     keywords: ["futarchy", "prediction market", "your", "custom", "keywords"],

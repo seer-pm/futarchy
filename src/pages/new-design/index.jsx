@@ -26,8 +26,8 @@ export default function NewDesignPage() {
   return (
     <>
       <Head>
-        <title>Futarchy.fi - New Design</title>
-        <meta name="description" content="Predict the future with Futarchy.fi" />
+        <title>Futarchy - New Design</title>
+        <meta name="description" content="Predict the future with Futarchy" />
       </Head>
       <div className="min-h-screen bg-black text-white font-sans selection:bg-primary selection:text-black">
         {/* Header */}

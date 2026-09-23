@@ -1,10 +1,10 @@
 {
-  "name": "Futarchy Fi",
+  "name": "Futarchy",
   "description": "Decentralized prediction markets platform with futarchy governance",
-  "iconPath": "assets/futarchy-logo-white-text.svg",
+  "iconPath": "assets/seer-logo.svg",
   "providedBy": {
-    "name": "Futarchy Fi",
-    "url": "https://futarchy.fi"
+    "name": "Futarchy",
+    "url": "https://futarchy.seer.pm"
   },
   "chainIds": [
     "100"

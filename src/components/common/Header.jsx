@@ -1,6 +1,5 @@
 // components/common/Header.jsx
 import React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { WalletIcon } from "../futarchyFi/proposalsList/cards/Resources";
@@ -10,6 +9,7 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useAccount, useSwitchChain, useDisconnect } from 'wagmi';
 import RpcRefreshButton from './RpcRefreshButton';
+import BrandLogo from './BrandLogo';
 
 const Header = ({ config = 'landing' }) => {
   const { selectedCurrency, setSelectedCurrency, baseTokenSymbol, allowWXDAI } = useCurrency();
@@ -145,14 +145,7 @@ const Header = ({ config = 'landing' }) => {
               href="/"
               className="flex items-center gap-2 group cursor-pointer"
             >
-              <Image
-                src="/assets/futarchy-fi-logo-text-white.svg"
-                alt="Futarchy Logo"
-                width={128}
-                height={22}
-                className="transition-opacity group-hover:opacity-70"
-                priority
-              />
+              <BrandLogo className="transition-opacity group-hover:opacity-70" />
             </Link>
 
             {/* Additional Elements (e.g., Home button for proposals) */}

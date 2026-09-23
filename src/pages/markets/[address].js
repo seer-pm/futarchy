@@ -62,8 +62,8 @@ export default function DynamicMarketPage({ address, seoData, marketConfig }) {
             "image": seoData.image,
             "publisher": {
               "@type": "Organization",
-              "name": "Futarchy.fi",
-              "url": "https://futarchy.fi"
+              "name": "Futarchy",
+              "url": "https://futarchy.seer.pm"
             },
             "category": marketConfig.category,
             "keywords": marketConfig.keywords?.join(', ')
@@ -71,7 +71,7 @@ export default function DynamicMarketPage({ address, seoData, marketConfig }) {
         </script>
         
         {/* Favicon */}
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/assets/favicon.svg" />
       </Head>
       
       <MarketPageShowcase proposal={address} />

@@ -134,7 +134,7 @@ export const CompaniesCard = ({
                 <div className="absolute inset-0 z-10 items-center justify-center opacity-30 group-hover:opacity-40 transition-opacity hidden md:flex">
                   <div className="w-1/2">
                     <Image
-                      src="/assets/futarchy-logo-gray.svg"
+                      src="/assets/seer-logo.svg"
                       alt="Futarchy Logo"
                       width={100}
                       height={100}

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Futarchy">
+  <rect width="64" height="64" rx="14" fill="#191919"/>
+  <path d="M22 17h22v7.5H29.5v8H42V40H29.5v10H22V17z" fill="#fff"/>
+</svg>

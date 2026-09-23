@@ -47,15 +47,15 @@ const projectId = "76fa3deb89f7aa56f09cf1ac472eccb4";
 
 // Enhanced app metadata for better mobile wallet recognition
 const appMetadata = {
-  appName: 'Futarchy Fi',
+  appName: 'Futarchy',
   projectId,
   chains,
   metadata: {
-    name: 'Futarchy Fi',
+    name: 'Futarchy',
     description: 'Decentralized prediction markets platform',
-    url: typeof window !== 'undefined' ? window.location.origin : 'https://app.futarchy.fi',
+    url: typeof window !== 'undefined' ? window.location.origin : 'https://futarchy.seer.pm',
     icons: [
-      typeof window !== 'undefined' ? `${window.location.origin}/favicon.ico` : 'https://app.futarchy.fi/favicon.ico'
+      typeof window !== 'undefined' ? `${window.location.origin}/assets/favicon.svg` : 'https://futarchy.seer.pm/assets/favicon.svg'
     ],
   }
 };
@@ -159,7 +159,7 @@ const Providers = ({ children }) => {
           })}
           showRecentTransactions={true}
           appInfo={{
-            appName: 'Futarchy Fi',
+            appName: 'Futarchy',
             learnMoreUrl: '#',
             disclaimer: () => (
               <div style={{ padding: '16px', textAlign: 'center' }}>

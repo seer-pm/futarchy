@@ -4,7 +4,7 @@ import axios from "axios";
 const mockSingleProposal = {
   company: {
     name: "Futarchy DAO",
-    logo: "/assets/futarchy-logo-black.svg",
+    logo: "/assets/seer-logo.svg",
     status: "Active Protocol",
     description:
       "Futarchy is revolutionizing DAO governance through market-driven decision making.",
@@ -110,7 +110,7 @@ export const fetchAndTransformSingleProposal = async (proposalId) => {
     const transformedProposal = {
       company: {
         name: "Futarchy DAO", // Default company info
-        logo: "/assets/futarchy-logo-black.svg",
+        logo: "/assets/seer-logo.svg",
         status: "Active Protocol",
         description:
           "Futarchy is revolutionizing DAO governance through market-driven decision making.",

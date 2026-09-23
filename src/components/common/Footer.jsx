@@ -1,15 +1,18 @@
 // components/common/Footer.jsx
 import Image from "next/image";
+import BrandLogo from "./BrandLogo";
 
 const NAV_LINKS = [
   { label: 'Companies', href: '/companies' },
-  { label: 'Documentation', href: 'https://docs.futarchy.fi', external: true },
-  { label: 'Status', href: 'https://status.futarchy.fi', external: true },
+  // Documentation and Status pointed at the upstream project's docs and status
+  // sites. Restore them once the Seer equivalents exist.
+  // { label: 'Documentation', href: '', external: true },
+  // { label: 'Status', href: '', external: true },
 ];
 
 const SOCIAL_LINKS = [
-  { src: '/assets/x-logo.png', alt: 'X (Twitter)', href: 'https://x.com/_futarchy' },
-  { src: '/assets/github-icon.svg', alt: 'GitHub', href: 'https://github.com/futarchy-fi' },
+  { src: '/assets/x-logo.png', alt: 'X (Twitter)', href: 'https://x.com/seer_pm' },
+  { src: '/assets/github-icon.svg', alt: 'GitHub', href: 'https://github.com/seer-pm/futarchy' },
 ];
 
 const Footer = ({ className = '' }) => {
@@ -21,13 +24,7 @@ const Footer = ({ className = '' }) => {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
             {/* Logo and tagline */}
             <div>
-              <Image
-                src="/assets/futarchy-fi-logo-text-white.svg"
-                alt="Futarchy Logo"
-                width={128}
-                height={22}
-                priority
-              />
+              <BrandLogo />
               <div className="text-sm text-futarchyGray112 mt-4">
                 Market-based evaluation of governance decisions and milestones
               </div>

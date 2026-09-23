@@ -7,12 +7,11 @@
  *   (a) Mis-shaped entries (missing label/href, or `external: true` on
  *       a path-relative href, which would render as a broken absolute
  *       link)
- *   (b) Documentation link target — currently the unstable external
- *       `https://docs.futarchy.fi`. PR #41 (open) replaces this with
- *       in-app `/documents` (alias `/docs`). The test accepts EITHER
- *       so it stays green across the transition, and pins which states
- *       are valid so a typo or accidental third value (`/doc`,
- *       `https://github.com/...`) surfaces immediately.
+ *   (b) Documentation and Status are currently absent. They pointed at
+ *       the upstream project's docs and status sites, which this fork
+ *       must not link to, and were commented out pending Seer
+ *       equivalents. This pins that absence so the upstream URLs cannot
+ *       reappear, and names the accepted values for when they return.
  *
  * Static-grep style — no import, since the Footer is a Next.js JSX file
  * and node:test's strict ESM doesn't resolve extension-less relative
@@ -30,12 +29,17 @@ function parseNavLinks() {
     const m = src.match(/const NAV_LINKS = \[([\s\S]*?)\];/);
     assert.ok(m, 'NAV_LINKS array not found in Footer.jsx — has the file been refactored?');
 
+    // Drop `//` comment lines before scanning for object literals: a
+    // commented-out entry is not a rendered link, and the naive brace
+    // scan below would otherwise treat it as one.
+    const body = m[1].split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+
     // Pull each `{ ... }` object literal out of the array body. Avoids
     // pulling in a JS parser dep — the array shape is small and stable.
     const entries = [];
     const re = /\{\s*([^{}]+?)\s*\}/g;
     let item;
-    while ((item = re.exec(m[1])) !== null) {
+    while ((item = re.exec(body)) !== null) {
         const obj = {};
         // Match key: value pairs. Handles single-quoted strings and bare
         // booleans.
@@ -86,30 +90,31 @@ test('Footer — non-external entries have a path-relative href', () => {
     }
 });
 
-test('PR #41 — Documentation link target is one of the accepted values', () => {
-    // Accepted set spans the pre- and post-PR-#41 worlds. If the link
-    // gets pointed at a third value (typo, accidental redirect to a
-    // GitHub URL, etc.) this test surfaces it.
-    const ACCEPTED_DOCS_HREFS = new Set([
-        'https://docs.futarchy.fi',  // pre-PR-#41 (current)
-        '/documents',                 // post-PR-#41
-        '/docs',                      // post-PR-#41 alias
-    ]);
-    const docs = NAV_LINKS.find(e => e.label === 'Documentation');
-    assert.ok(docs, 'no NAV_LINKS entry with label "Documentation"');
-    assert.ok(ACCEPTED_DOCS_HREFS.has(docs.href),
-        `Documentation href "${docs.href}" is not in the accepted set ` +
-        `[${[...ACCEPTED_DOCS_HREFS].join(', ')}]. ` +
-        `Either fix the link or add the new value to ACCEPTED_DOCS_HREFS in this test.`);
-});
+test('Documentation and Status do not point at the upstream project', () => {
+    // Both entries are commented out in the Footer while this fork has no
+    // docs or status site of its own. Linking them at docs.futarchy.fi /
+    // status.futarchy.fi would send users to the project we forked from,
+    // so the one thing this must never allow is those hosts coming back.
+    const FORBIDDEN_HOST = 'futarchy.fi';
+    for (const e of NAV_LINKS) {
+        assert.ok(!e.href.includes(FORBIDDEN_HOST),
+            `NAV_LINKS entry "${e.label}" points at the upstream project: ${e.href}`);
+    }
 
-test('PR #41 — Status link is the canonical status URL', () => {
-    // Adjacent invariant — the same NAV_LINKS array also holds Status,
-    // which has historically been a deployment regression target. Pin it.
-    const status = NAV_LINKS.find(e => e.label === 'Status');
-    assert.ok(status, 'no NAV_LINKS entry with label "Status"');
-    assert.equal(status.href, 'https://status.futarchy.fi',
-        `Status link drifted from canonical URL; got "${status.href}"`);
-    assert.equal(status.external, true,
-        `Status link must be marked external: true`);
+    // When these come back, they must carry a real destination — an entry
+    // with an empty href renders as a dead link.
+    const ACCEPTED = {
+        Documentation: new Set(['/documents', '/docs']),
+        Status: new Set([]),
+    };
+    for (const label of Object.keys(ACCEPTED)) {
+        const entry = NAV_LINKS.find(e => e.label === label);
+        if (!entry) continue;  // still commented out — that is the expected state
+        assert.ok(entry.href, `"${label}" is present but has no href`);
+        if (ACCEPTED[label].size) {
+            assert.ok(ACCEPTED[label].has(entry.href),
+                `"${label}" href "${entry.href}" is not in the accepted set ` +
+                `[${[...ACCEPTED[label]].join(', ')}]. Fix the link or widen the set here.`);
+        }
+    }
 });

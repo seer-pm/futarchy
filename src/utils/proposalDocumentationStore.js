@@ -48,7 +48,7 @@ export const setProposalDocumentationData = (data) => {
     proposalId: "USER-1",
     company: {
       name: "User Created Proposal",
-      logo: "/assets/futarchy-logo-black.svg",
+      logo: "/assets/seer-logo.svg",
       description: "User generated proposal documentation",
       tokens: ["USER"],
       status: "Draft"

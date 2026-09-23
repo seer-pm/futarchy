@@ -59,6 +59,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                   content={metadata.openGraph.description}
                 />
                 <meta property="og:site_name" content={metadata.openGraph.siteName} />
+                <meta property="og:image" content={metadata.openGraph.image} />
 
                 {/* Twitter */}
                 <meta name="twitter:card" content={metadata.twitter.card} />
@@ -67,10 +68,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                   name="twitter:description"
                   content={metadata.twitter.description}
                 />
+                <meta name="twitter:image" content={metadata.twitter.image} />
 
                 {/* Icons */}
                 <link rel="icon" href={metadata.icons.icon} />
-                <link rel="apple-touch-icon" href={metadata.icons.apple} />
               </>
             )}
             {isMarketPage && (
@@ -78,7 +79,6 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                 {/* Basic fallback for icons only on market pages */}
                 {/* SEO will be handled by individual market pages */}
                 <link rel="icon" href={metadata.icons.icon} />
-                <link rel="apple-touch-icon" href={metadata.icons.apple} />
               </>
             )}
           </Head>

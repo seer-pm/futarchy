@@ -34,7 +34,7 @@ const MarketPage = ({ selectedMarket, availableToTrade, priceBand }) => {
         {/* Giant watermark logo */}
         <div className="absolute inset-0 flex items-center justify-start pointer-events-none">
           <Image
-            src="/assets/futarchy-logo-white.svg"
+            src="/assets/seer-logo.svg"
             alt="Futarchy Watermark"
             width={600}
             height={600}

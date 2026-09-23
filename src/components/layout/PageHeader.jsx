@@ -14,7 +14,7 @@ const PageHeader = ({
         {watermark && (
           <div className="absolute top-1/2 right-[100px] -translate-y-1/2 pointer-events-none hidden lg:block">
             <Image
-              src="/assets/futarchy-logo-white.svg"
+              src="/assets/seer-logo.svg"
               alt="Futarchy Watermark"
               width={286}
               height={286}

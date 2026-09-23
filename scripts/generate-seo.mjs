@@ -4,7 +4,7 @@
  * SEO Generator Script (registry-fed)
  *
  * Derives the static market list from the on-chain registry (Checkpoint
- * indexer behind api.futarchy.fi) — the same data source the frontend
+ * indexer behind api.futarchy.seer.pm) — the same data source the frontend
  * runtime uses (see src/hooks/useAggregatorProposals.js and
  * src/adapters/registryAdapter.js). The old Supabase backend
  * (market_event / ai_prompts tables) is permanently gone.
@@ -41,10 +41,10 @@ import path from 'path';
 // script in this CJS package).
 // ─────────────────────────────────────────────────────────────────────
 const REGISTRY_GRAPHQL_URL =
-  process.env.REGISTRY_GRAPHQL_URL || 'https://api.futarchy.fi/registry/graphql';
+  process.env.REGISTRY_GRAPHQL_URL || 'https://api.futarchy.seer.pm/registry/graphql';
 const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
-const SITE_ORIGIN = 'https://futarchy.fi';
-const DEFAULT_IMAGE = '/assets/futarchy-logo-gray.png';
+const SITE_ORIGIN = 'https://futarchy.seer.pm';
+const DEFAULT_IMAGE = '/assets/og-default.png';
 
 const LEGACY_SEO_PATH = path.join(process.cwd(), 'src', 'config', 'legacy-seo.json');
 const MAPPED_SEO_PATH = path.join(process.cwd(), 'src', 'config', 'mapped-seo.json');
@@ -239,7 +239,7 @@ function buildRegistryEntry({ addressKey, entity, org, mappedSeoByAddress, nowSe
     entity.description ||
     meta.description ||
     truncate(
-      `Live futarchy prediction market${org?.name ? ` by ${org.name}` : ''}: ${title} Trade your insights or follow the forecast at futarchy.fi!`,
+      `Live futarchy prediction market${org?.name ? ` by ${org.name}` : ''}: ${title} Trade your insights or follow the forecast.`,
       160
     );
 
@@ -267,15 +267,15 @@ function buildRegistryEntry({ addressKey, entity, org, mappedSeoByAddress, nowSe
     image,
     path: pagePath,
     openGraph: {
-      title: `${title} | Futarchy.fi`,
+      title: `${title} | Futarchy`,
       description,
       image: image.startsWith('http') ? image : `${SITE_ORIGIN}${image}`,
       type: 'website',
-      siteName: 'Futarchy.fi',
+      siteName: 'Futarchy',
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${title} | Futarchy.fi`,
+      title: `${title} | Futarchy`,
       description,
       image: image.startsWith('http') ? image : `${SITE_ORIGIN}${image}`,
     },
@@ -385,20 +385,20 @@ export function generateMarketSEO(address, marketData = null) {
   const image = marketData?.seoImage || config.image;
 
   return {
-    title: \`\${title} | Futarchy.fi\`,
+    title: \`\${title} | Futarchy\`,
     description,
     image,
     url: \`${SITE_ORIGIN}\${config.path}\`,
     openGraph: {
       ...config.openGraph,
-      title: marketData?.seoTitle ? \`\${marketData.seoTitle} | Futarchy.fi\` : config.openGraph.title,
+      title: marketData?.seoTitle ? \`\${marketData.seoTitle} | Futarchy\` : config.openGraph.title,
       description: marketData?.seoDescription || config.openGraph.description,
       image: marketData?.seoImage || config.openGraph.image,
       url: \`${SITE_ORIGIN}\${config.path}\`
     },
     twitter: {
       ...config.twitter,
-      title: marketData?.seoTitle ? \`\${marketData.seoTitle} | Futarchy.fi\` : config.twitter.title,
+      title: marketData?.seoTitle ? \`\${marketData.seoTitle} | Futarchy\` : config.twitter.title,
       description: marketData?.seoDescription || config.twitter.description,
       image: marketData?.seoImage || config.twitter.image
     }

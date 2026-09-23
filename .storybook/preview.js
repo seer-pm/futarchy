@@ -17,7 +17,7 @@ const projectId = "76fa3deb89f7aa56f09cf1ac472eccb4";
 
 // Configure wallets
 const { connectors } = getDefaultWallets({
-  appName: 'Futarchy Fi',
+  appName: 'Futarchy',
   projectId,
   chains,
 });
@@ -60,7 +60,7 @@ export const decorators = [
           })}
           showRecentTransactions={false}
           appInfo={{
-            appName: 'Futarchy Fi',
+            appName: 'Futarchy',
             learnMoreUrl: '#',
           }}
           initialChain={gnosis}

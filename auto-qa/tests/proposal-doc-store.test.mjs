@@ -14,7 +14,7 @@
  *   2. The convertToMarkdown rules are non-obvious (strips <ul>/<ol>,
  *      replaces <li> with "- ", &nbsp; with space, etc.). A regression
  *      that drops a rule would silently produce malformed markdown.
- *   3. Hardcoded asset paths (/assets/futarchy-logo-black.svg,
+ *   3. Hardcoded asset paths (/assets/seer-logo.svg,
  *      /assets/protocol-upgrade-banner.png) — must exist in public/
  *      or any rendering caller would 404 on those images.
  *   4. Module-level mutable state pattern (`let proposalDocumentationData = null`).
@@ -177,15 +177,15 @@ test('multi-topic — topics joined with "\\n\\n" separator', () => {
 // Hardcoded asset paths — must exist in public/
 // ---------------------------------------------------------------------------
 
-test('hardcoded assets — /assets/futarchy-logo-black.svg exists in public/', () => {
+test('hardcoded assets — /assets/seer-logo.svg exists in public/', () => {
     // If this dead module is ever revived, the asset paths it bakes
     // in must still resolve. Cross-checks against the asset-refs
     // baseline ratchet pattern.
-    assert.match(SRC, /\/assets\/futarchy-logo-black\.svg/,
+    assert.match(SRC, /\/assets\/seer-logo\.svg/,
         `hardcoded company.logo path drifted`);
-    const expected = resolve(REPO_ROOT, 'public/assets/futarchy-logo-black.svg');
+    const expected = resolve(REPO_ROOT, 'public/assets/seer-logo.svg');
     assert.ok(existsSync(expected),
-        `hardcoded /assets/futarchy-logo-black.svg does not exist at ${expected}`);
+        `hardcoded /assets/seer-logo.svg does not exist at ${expected}`);
 });
 
 test('hardcoded assets — /assets/protocol-upgrade-banner.png exists in public/', () => {

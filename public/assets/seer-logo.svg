@@ -1,0 +1,8 @@
+<!-- Placeholder mark. Overwrite this one file with the real Seer logo: every
+     call site references /assets/seer-logo.svg, so nothing else needs to change.
+     Neutral gray on purpose — it is rendered over both the dark app chrome and
+     the white proposal documents. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Futarchy">
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#B3B3B3" stroke-width="3" opacity="0.6"/>
+  <path d="M22 17h22v7.5H29.5v8H42V40H29.5v10H22V17z" fill="#B3B3B3"/>
+</svg>

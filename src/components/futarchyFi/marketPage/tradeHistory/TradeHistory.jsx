@@ -10,13 +10,11 @@ const tradeHistoryData = {
       side: "sell",
       amountOut: {
         token: "YES_GNO",
-        amount: "0.000012",
-        icon: "https://tokens.futarchy.fi/gno_yes.png"
+        amount: "0.000012"
       },
       amountIn: {
         token: "sDAI",
-        amount: "0.001",
-        icon: "https://tokens.futarchy.fi/sDAI.png"
+        amount: "0.001"
       },
       price: "89.77",
       date: "2025-06-23T14:25:00Z"
@@ -26,13 +24,11 @@ const tradeHistoryData = {
       side: "buy",
       amountOut: {
         token: "NO_GNO",
-        amount: "0.000025",
-        icon: "https://tokens.futarchy.fi/gno_no.png"
+        amount: "0.000025"
       },
       amountIn: {
         token: "sDAI",
-        amount: "0.002",
-        icon: "https://tokens.futarchy.fi/sDAI.png"
+        amount: "0.002"
       },
       price: "80.10",
       date: "2025-06-23T15:05:00Z"
@@ -40,32 +36,32 @@ const tradeHistoryData = {
     {
       outcome: "YES",
       side: "buy",
-      amountOut: { token: "sDAI", amount: "10.50", icon: "https://tokens.futarchy.fi/sDAI.png" },
-      amountIn: { token: "YES_GNO", amount: "0.12", icon: "https://tokens.futarchy.fi/gno_yes.png" },
+      amountOut: { token: "sDAI", amount: "10.50" },
+      amountIn: { token: "YES_GNO", amount: "0.12" },
       price: "87.50",
       date: "2025-06-24T10:15:00Z"
     },
     {
       outcome: "NO",
       side: "sell",
-      amountOut: { token: "NO_GNO", amount: "0.05", icon: "https://tokens.futarchy.fi/gno_no.png" },
-      amountIn: { token: "sDAI", amount: "4.00", icon: "https://tokens.futarchy.fi/sDAI.png" },
+      amountOut: { token: "NO_GNO", amount: "0.05" },
+      amountIn: { token: "sDAI", amount: "4.00" },
       price: "80.00",
       date: "2025-06-24T11:30:00Z"
     },
     {
         outcome: "YES",
         side: "sell",
-        amountOut: { token: "YES_GNO", amount: "0.02", icon: "https://tokens.futarchy.fi/gno_yes.png" },
-        amountIn: { token: "sDAI", amount: "1.78", icon: "https://tokens.futarchy.fi/sDAI.png" },
+        amountOut: { token: "YES_GNO", amount: "0.02" },
+        amountIn: { token: "sDAI", amount: "1.78" },
         price: "89.00",
         date: "2025-06-24T12:00:00Z"
     },
     {
         outcome: "NO",
         side: "buy",
-        amountOut: { token: "sDAI", amount: "20.00", icon: "https://tokens.futarchy.fi/sDAI.png" },
-        amountIn: { token: "NO_GNO", amount: "0.25", icon: "https://tokens.futarchy.fi/gno_no.png" },
+        amountOut: { token: "sDAI", amount: "20.00" },
+        amountIn: { token: "NO_GNO", amount: "0.25" },
         price: "80.00",
         date: "2025-06-24T14:45:00Z"
     }

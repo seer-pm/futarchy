@@ -25,7 +25,7 @@ export default function Custom404() {
   return (
     <>
       <Head>
-        <title>{redirecting ? 'Loading market…' : 'Page not found'} — Futarchy.fi</title>
+        <title>{redirecting ? 'Loading market…' : 'Page not found'} — Futarchy</title>
         <meta name="robots" content="noindex" />
       </Head>
       <div className="flex flex-col items-center justify-center min-h-screen bg-white text-gray-800 px-6">

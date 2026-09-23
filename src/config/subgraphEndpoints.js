@@ -18,7 +18,7 @@
  * callers must issue flat queries and join in JS.
  */
 
-const DEFAULT_API_BASE = 'https://api.futarchy.fi';
+const DEFAULT_API_BASE = 'https://api.futarchy.seer.pm';
 
 // Trailing slashes would produce '//registry/graphql' — strip them.
 export const FUTARCHY_API_BASE = (

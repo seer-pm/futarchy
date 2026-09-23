@@ -47,7 +47,7 @@ export default function MarketDetailPage() {
   return (
     <>
       <Head>
-        <title>{title} | Futarchy.fi</title>
+        <title>{title} | Futarchy</title>
       </Head>
       <div className="min-h-screen bg-black text-white font-sans selection:bg-primary selection:text-black pb-20">
         {/* Header */}
