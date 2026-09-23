@@ -11,7 +11,8 @@
 import { useState, useEffect } from 'react';
 
 import { getSubgraphEndpoint } from '../config/subgraphEndpoints';
-import { cachedOnce, fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
+import { fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
+import { cachedOnce } from '../services/requestCache';
 import {
     getProposalCloseTimestamp,
     isProposalArchived,

@@ -4,6 +4,7 @@
  */
 
 import { AGGREGATOR_SUBGRAPH_URL as REGISTRY_SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { cachedOnce } from '../services/requestCache';
 
 // Default Aggregator address (Futarchy Finance production)
 const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
@@ -14,13 +15,23 @@ const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
  * @param {string} proposalAddress - The trading contract address (from URL)
  * @returns {Promise<Object|null>} - ProposalEntity or null
  */
-export async function fetchProposalMetadataFromRegistry(proposalAddress) {
+export function fetchProposalMetadataFromRegistry(proposalAddress) {
     if (!proposalAddress || !/^0x[a-fA-F0-9]{40}$/.test(proposalAddress)) {
         console.log('[Registry] Invalid proposal address:', proposalAddress);
-        return null;
+        return Promise.resolve(null);
     }
 
     const normalizedAddress = proposalAddress.toLowerCase();
+
+    // Every useContractConfig instance on a market page asks for this, and the
+    // market page mounts several. Share one request between them.
+    return cachedOnce(
+        `registry:proposal:${normalizedAddress}`,
+        () => queryProposalMetadata(normalizedAddress)
+    );
+}
+
+async function queryProposalMetadata(normalizedAddress) {
 
     // Filter by proposalAddress and verify the aggregator client-side.
     // Graph Node does support nested-relation filters

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
+import { fetchConditionalPools } from '../services/conditionalPools';
 
 // Build queries for the Checkpoint indexer (no BigInt scalar; candles aren't
 // a reverse field on Pool; proposal/pool are flat string IDs that the
@@ -10,19 +11,6 @@ import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 // We inline the proposal ID and pool IDs as string literals so the proxy
 // regex (which only rewrites literals like `proposal: "0x…"`) picks them
 // up — variables like $proposalId aren't in the proxy's prefix list.
-function buildPoolsQuery(proposalId) {
-    return `{
-      pools(where: { proposal: "${proposalId}", type: "CONDITIONAL" }) {
-        id
-        name
-        type
-        outcomeSide
-        price
-        isInverted
-      }
-    }`;
-}
-
 function buildCandlesQuery(poolIds, limit, closeTimestamp) {
     const idList = poolIds.map(id => `"${id}"`).join(', ');
     return `{
@@ -186,13 +174,9 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
         // Create promise and cache it
         const fetchPromise = (async () => {
             try {
-                // Step 1 — fetch CONDITIONAL pools for this proposal.
-                const poolsData = await executeQuery(
-                    endpoint,
-                    buildPoolsQuery(proposalId.toLowerCase())
-                );
-
-                const pools = poolsData.pools || [];
+                // Step 1 — fetch CONDITIONAL pools for this proposal. Shared
+                // with the trades panel, which needs the same list.
+                const pools = await fetchConditionalPools(chainId, proposalId);
                 const yesPool = pools.find(p => p.outcomeSide === 'YES') || null;
                 const noPool = pools.find(p => p.outcomeSide === 'NO') || null;
 

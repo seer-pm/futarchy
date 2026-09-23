@@ -2727,14 +2727,17 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
         const subgraphChainId = config?.chainId || 100;
 
-        // Fetch latest pool prices + THIRD pool candle history in parallel
-        const [yesResult, noResult, thirdResult, baseResult] = await Promise.all([
-          subgraphPoolFetcher.fetch('pools.price', {
-            id: config.POOL_CONFIG_YES.address,
-            chainId: subgraphChainId
-          }),
-          subgraphPoolFetcher.fetch('pools.price', {
-            id: config.POOL_CONFIG_NO.address,
+        // One batched pool query for every price we need — YES, NO and BASE —
+        // instead of a `pool(id:)` request each.
+        const priceAddresses = [
+          config.POOL_CONFIG_YES.address,
+          config.POOL_CONFIG_NO.address,
+          config.BASE_POOL_CONFIG?.address
+        ].filter(Boolean);
+
+        const [priceResult, thirdResult] = await Promise.all([
+          subgraphPoolFetcher.fetch('pools.batch', {
+            ids: priceAddresses,
             chainId: subgraphChainId
           }),
           config.POOL_CONFIG_THIRD?.address
@@ -2743,34 +2746,24 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               limit: 500,
               chainId: subgraphChainId
             })
-            : Promise.resolve(null),
-          config.BASE_POOL_CONFIG?.address
-            ? subgraphPoolFetcher.fetch('pools.price', {
-              id: config.BASE_POOL_CONFIG.address,
-              chainId: subgraphChainId
-            })
             : Promise.resolve(null)
         ]);
 
+        // Pool IDs come back lowercased from the subgraph.
+        const pricesByAddress = new Map(
+          (priceResult?.data || []).map(pool => [String(pool.id).toLowerCase(), pool.price])
+        );
+        const priceFor = (address) =>
+          address ? (pricesByAddress.get(String(address).toLowerCase()) ?? null) : null;
+
         // Extract prices from latest candles
-        let yesPrice = null;
-        let noPrice = null;
         let thirdPrice = null;
-        let basePrice = null;
 
-        if (yesResult?.status === 'success' && yesResult.data.length > 0) {
-          const rawYesPrice = yesResult.data[0].price;
-          // Backend now handles token slot inversion, use raw price directly
-          yesPrice = rawYesPrice;
-          console.log('[MarketPageShowcase] YES price from pool_candles:', { raw: rawYesPrice, used: yesPrice });
-        }
-
-        if (noResult?.status === 'success' && noResult.data.length > 0) {
-          const rawNoPrice = noResult.data[0].price;
-          // Backend now handles token slot inversion, use raw price directly
-          noPrice = rawNoPrice;
-          console.log('[MarketPageShowcase] NO price from pool_candles:', { raw: rawNoPrice, used: noPrice });
-        }
+        // Backend now handles token slot inversion, use raw prices directly
+        const yesPrice = priceFor(config.POOL_CONFIG_YES.address);
+        const noPrice = priceFor(config.POOL_CONFIG_NO.address);
+        const basePrice = priceFor(config.BASE_POOL_CONFIG?.address);
+        console.log('[MarketPageShowcase] Pool prices from batch:', { yesPrice, noPrice, basePrice });
 
         if (thirdResult?.status === 'success' && thirdResult.data.length > 0) {
           const processedThirdCandles = thirdResult.data
@@ -2792,13 +2785,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           });
         } else {
           setThirdCandles([]);
-        }
-
-        if (baseResult?.status === 'success' && baseResult.data.length > 0) {
-          const rawBasePrice = baseResult.data[0].price;
-          // Backend now handles currency slot inversion, use raw price directly
-          basePrice = rawBasePrice;
-          console.log('[MarketPageShowcase] BASE price from pool_candles:', { raw: rawBasePrice, used: basePrice });
         }
 
         if (isMounted) {

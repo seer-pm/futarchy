@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/contracts';
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
+import { invalidateCache } from '../services/requestCache';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
 
 // Public RPCs for the on-chain resolution fallback check
@@ -573,10 +574,15 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
   }, [proposalId, forceTestPools, refreshKey]);
 
   // Function to trigger a refetch of config (useful after pool creation)
+  // The registry and candles reads behind this hook are shared through
+  // services/requestCache, so a refetch has to drop those entries or it would
+  // just re-read the response the new pool predates. Both are keyed by the
+  // proposal address, so one substring match clears the pair.
   const refetch = useCallback(() => {
     console.log('[useContractConfig] Triggering config refetch...');
+    if (proposalId) invalidateCache(String(proposalId).toLowerCase());
     setRefreshKey(k => k + 1);
-  }, []);
+  }, [proposalId]);
 
   return { config, loading, error, refetch };
 };

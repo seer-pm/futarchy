@@ -6,6 +6,7 @@
  */
 
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
+import { fetchConditionalPools } from '../services/conditionalPools';
 import { formatTokenAmount } from './precisionFormatter';
 
 const ENDPOINTS = SUBGRAPH_ENDPOINTS;
@@ -23,9 +24,7 @@ const EXPLORERS = {
  * @returns {Promise<{pools: Array, error: string|null}>}
  */
 export async function fetchPoolsForProposal(chainId, proposalId) {
-    const endpoint = ENDPOINTS[chainId];
-
-    if (!endpoint) {
+    if (!ENDPOINTS[chainId]) {
         return { pools: [], error: `Unsupported chain: ${chainId}` };
     }
 
@@ -33,33 +32,12 @@ export async function fetchPoolsForProposal(chainId, proposalId) {
         return { pools: [], error: 'No proposal ID provided' };
     }
 
-    const query = `{
-        pools(where: { proposal: "${proposalId.toLowerCase()}", type: "CONDITIONAL" }) {
-            id
-            name
-            type
-            outcomeSide
-        }
-    }`;
-
     try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
-        });
-
-        const result = await response.json();
-
-        if (result.errors) {
-            return { pools: [], error: result.errors[0]?.message };
-        }
-
-        const pools = result.data?.pools || [];
+        // Shared with the chart, which needs the same list — see
+        // services/conditionalPools.js.
+        const pools = await fetchConditionalPools(chainId, proposalId);
         console.log(`[SubgraphTradesClient] Found ${pools.length} pools for proposal ${proposalId}`);
-
         return { pools, error: null };
-
     } catch (error) {
         console.error('[SubgraphTradesClient] Error fetching pools:', error.message);
         return { pools: [], error: error.message };

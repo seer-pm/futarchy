@@ -16,12 +16,11 @@
  *      rules are applied by the callers on top of this raw data, so one
  *      cache entry is correct for every caller and every wallet state.
  *
- * The cache lives at the fetch layer rather than in TanStack Query
- * because two of the callers (the highlight/resolved transformers) are
- * plain async functions, not hooks, and would otherwise bypass it.
+ * Sharing and caching are handled by services/requestCache.js.
  */
 
 import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { cachedOnce, invalidateCache } from './requestCache';
 
 const SNAPSHOT_QUERY = `
   query RegistrySnapshot($aggregatorId: String!) {
@@ -54,56 +53,14 @@ const SNAPSHOT_QUERY = `
   }
 `;
 
-// Long enough to collapse a page load (including StrictMode's double
-// effect pass and the refetch wagmi triggers when the wallet resolves),
-// short enough that a registry write shows up on the next interaction.
-const SNAPSHOT_TTL_MS = 30_000;
-
-const snapshotCache = new Map();   // key -> { at, value }
-const inflightRequests = new Map(); // key -> Promise
-
 /**
- * Run `producer` at most once per key per TTL window, and share the
- * promise with every concurrent caller. Rejections are never cached.
- */
-export function cachedOnce(key, producer, ttlMs = SNAPSHOT_TTL_MS) {
-    const hit = snapshotCache.get(key);
-    if (hit && Date.now() - hit.at < ttlMs) {
-        return Promise.resolve(hit.value);
-    }
-
-    const pending = inflightRequests.get(key);
-    if (pending) return pending;
-
-    const request = Promise.resolve()
-        .then(producer)
-        .then((value) => {
-            snapshotCache.set(key, { at: Date.now(), value });
-            return value;
-        })
-        .finally(() => {
-            inflightRequests.delete(key);
-        });
-
-    inflightRequests.set(key, request);
-    return request;
-}
-
-/**
- * Drop cached data so the next read hits the network. Call after a
+ * Drop cached registry data so the next read hits the network. Call after a
  * registry write (proposal/organization edit) to surface it immediately.
  *
- * @param {string} [key] - cache key prefix; omit to clear everything
+ * @param {string} [aggregatorAddress] - omit to clear every aggregator
  */
-export function invalidateRegistrySnapshot(key) {
-    if (!key) {
-        snapshotCache.clear();
-        return;
-    }
-    const prefix = String(key).toLowerCase();
-    for (const cached of snapshotCache.keys()) {
-        if (cached.includes(prefix)) snapshotCache.delete(cached);
-    }
+export function invalidateRegistrySnapshot(aggregatorAddress) {
+    invalidateCache(aggregatorAddress ? `registry:${String(aggregatorAddress).toLowerCase()}` : 'registry:');
 }
 
 /**

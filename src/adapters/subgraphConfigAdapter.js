@@ -6,6 +6,7 @@
  */
 
 import { createPublicClient, http, fallback } from 'viem';
+import { fetchProposalMarketData } from '../services/proposalMarketData';
 import { gnosis, mainnet } from 'viem/chains';
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 
@@ -188,109 +189,71 @@ export async function fetchProposalFromChain(proposalAddress, chainId) {
  * @returns {Promise<Object|null>} - Assembled proposal data
  */
 export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
-    const endpoint = SUBGRAPH_ENDPOINTS[chainId];
-    if (!endpoint) {
+    if (!SUBGRAPH_ENDPOINTS[chainId]) {
         console.error(`[SubgraphAdapter] No endpoint for chain ${chainId}`);
         return null;
     }
 
-    const proposalId = proposalAddress.toLowerCase();
+    console.log(`[SubgraphAdapter] Fetching from chain ${chainId}: ${proposalAddress.toLowerCase()}`);
 
-    const query = `{
-        proposal(id: "${proposalId}") {
-            id
-            marketName
-            companyToken { id }
-            currencyToken { id }
-        }
-        whitelistedTokens(where: { proposal: "${proposalId}" }, first: 100) {
-            id
-            symbol
-            decimals
-            role
-        }
-        pools(where: { proposal: "${proposalId}" }, first: 100) {
-            id
-            name
-            type
-            outcomeSide
-            price
-        }
-    }`;
+    // One shared request per proposal, also serving usePoolData — see
+    // services/proposalMarketData.js.
+    const data = await fetchProposalMarketData(chainId, proposalAddress);
 
-    try {
-        console.log(`[SubgraphAdapter] Fetching from chain ${chainId}: ${proposalId}`);
+    const proposal = data?.proposal;
+    if (!proposal) return null;
 
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-        });
+    const wls = data.whitelistedTokens;
+    const pools = data.pools;
 
-        const result = await response.json();
-        if (result.errors) {
-            console.error('[SubgraphAdapter] GraphQL errors:', result.errors);
-            return null;
-        }
+    // Derive the underlying COMPANY/CURRENCY symbol by stripping the
+    // YES_/NO_ prefix from the corresponding outcome-token symbol.
+    // role values: "YES_COMPANY" | "NO_COMPANY" | "YES_CURRENCY" | "NO_CURRENCY"
+    const findRole = role => wls.find(t => t.role === role);
+    const yesCompany = findRole('YES_COMPANY');
+    const noCompany = findRole('NO_COMPANY');
+    const yesCurrency = findRole('YES_CURRENCY');
+    const noCurrency = findRole('NO_CURRENCY');
 
-        const proposal = result.data?.proposal;
-        if (!proposal) return null;
+    const stripPrefix = (sym) => {
+        if (!sym) return null;
+        return sym.replace(/^(YES|NO)_/i, '') || null;
+    };
 
-        const wls = result.data?.whitelistedTokens || [];
-        const pools = result.data?.pools || [];
+    const companySymbol  = stripPrefix(yesCompany?.symbol)  || stripPrefix(noCompany?.symbol);
+    const currencySymbol = stripPrefix(yesCurrency?.symbol) || stripPrefix(noCurrency?.symbol);
 
-        // Derive the underlying COMPANY/CURRENCY symbol by stripping the
-        // YES_/NO_ prefix from the corresponding outcome-token symbol.
-        // role values: "YES_COMPANY" | "NO_COMPANY" | "YES_CURRENCY" | "NO_CURRENCY"
-        const findRole = role => wls.find(t => t.role === role);
-        const yesCompany = findRole('YES_COMPANY');
-        const noCompany = findRole('NO_COMPANY');
-        const yesCurrency = findRole('YES_CURRENCY');
-        const noCurrency = findRole('NO_CURRENCY');
+    const companyAddr  = proposal.companyToken?.id ?? null;
+    const currencyAddr = proposal.currencyToken?.id ?? null;
 
-        const stripPrefix = (sym) => {
-            if (!sym) return null;
-            return sym.replace(/^(YES|NO)_/i, '') || null;
-        };
+    // Default decimals to 18 (true for all current tokens; if a future token
+    // differs we'll add an on-chain fallback). Outcome tokens carry their own.
+    const decimalsDefault = yesCompany?.decimals ?? 18;
 
-        const companySymbol  = stripPrefix(yesCompany?.symbol)  || stripPrefix(noCompany?.symbol);
-        const currencySymbol = stripPrefix(yesCurrency?.symbol) || stripPrefix(noCurrency?.symbol);
+    const outcomeTokens = wls.map(t => ({
+        id: t.id,
+        symbol: t.symbol,
+        decimals: t.decimals,
+    }));
 
-        const companyAddr  = proposal.companyToken?.id ?? null;
-        const currencyAddr = proposal.currencyToken?.id ?? null;
-
-        // Default decimals to 18 (true for all current tokens; if a future token
-        // differs we'll add an on-chain fallback). Outcome tokens carry their own.
-        const decimalsDefault = yesCompany?.decimals ?? 18;
-
-        const outcomeTokens = wls.map(t => ({
-            id: t.id,
-            symbol: t.symbol,
-            decimals: t.decimals,
-        }));
-
-        return {
-            id: proposal.id,
-            marketName: proposal.marketName,
-            companyToken: companySymbol
-                ? { id: companyAddr, symbol: companySymbol, decimals: decimalsDefault }
-                : null,
-            currencyToken: currencySymbol
-                ? { id: currencyAddr, symbol: currencySymbol, decimals: decimalsDefault }
-                : null,
-            outcomeTokens,
-            pools: pools.map(p => ({
-                id: p.id,
-                name: p.name,
-                type: p.type,
-                outcomeSide: p.outcomeSide,
-                price: p.price,
-            })),
-        };
-    } catch (error) {
-        console.error('[SubgraphAdapter] Fetch error:', error);
-        return null;
-    }
+    return {
+        id: proposal.id,
+        marketName: proposal.marketName,
+        companyToken: companySymbol
+            ? { id: companyAddr, symbol: companySymbol, decimals: decimalsDefault }
+            : null,
+        currencyToken: currencySymbol
+            ? { id: currencyAddr, symbol: currencySymbol, decimals: decimalsDefault }
+            : null,
+        outcomeTokens,
+        pools: pools.map(p => ({
+            id: p.id,
+            name: p.name,
+            type: p.type,
+            outcomeSide: p.outcomeSide,
+            price: p.price,
+        })),
+    };
 }
 
 /**

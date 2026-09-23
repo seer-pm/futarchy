@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { getSubgraphEndpoint, FUTARCHY_API_BASE } from '../config/subgraphEndpoints';
 import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS } from '../config/featureFlags';
 import { getBestRpcProvider } from '../utils/getBestRpc';
+import { fetchProposalMarketData } from '../services/proposalMarketData';
 
 const ERC20_BALANCE_ABI = ['function balanceOf(address account) view returns (uint256)'];
 
@@ -23,34 +24,6 @@ const normalizeBaseUrl = (url) => {
 const API_BASE_URL = normalizeBaseUrl(RAW_API_BASE_URL);
 
 console.log('Pool API URL configured as:', API_BASE_URL);
-
-// Pools carry their tokens as nested entities, so each pool arrives already
-// enriched with symbol/decimals/role. whitelistedTokens is still queried
-// separately, but only to derive the proposal's currency symbol by role.
-const buildProposalPoolsQuery = (proposalId) => `{
-  proposal(id: "${proposalId}") {
-    id
-    currencyToken { id }
-    companyToken { id }
-  }
-  whitelistedTokens(where: { proposal: "${proposalId}" }, first: 100) {
-    id
-    symbol
-    decimals
-    role
-  }
-  pools(where: { proposal: "${proposalId}" }, first: 100) {
-    id
-    outcomeSide
-    type
-    liquidity
-    volumeToken0
-    volumeToken1
-    token0 { id symbol decimals role }
-    token1 { id symbol decimals role }
-    tick
-  }
-}`;
 
 const buildPoolQuery = (poolId) => `{
   pool: pools(where: { id: "${poolId}" }, first: 1) {
@@ -187,27 +160,23 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
 
     console.log(`[Pool Data] Fetching pools for ${proposalId} from chain ${chainId}`);
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: buildProposalPoolsQuery(proposalId.toLowerCase())
-      })
-    });
-
-    const result = await response.json();
-    if (result.errors || !result.data || !result.data.proposal) {
-      console.warn(`[Pool Data] No proposal found on chain ${chainId}:`, result.errors?.[0]?.message);
+    // Shared with useContractConfig, which needs the same proposal — see
+    // services/proposalMarketData.js. Pools carry their tokens as nested
+    // entities, so each pool arrives already enriched with
+    // symbol/decimals/role; whitelistedTokens only serves to derive the
+    // proposal's currency symbol by role.
+    const data = await fetchProposalMarketData(chainId, proposalId);
+    if (!data?.proposal) {
+      console.warn(`[Pool Data] No proposal found on chain ${chainId}`);
       return null;
     }
 
     // Derive currencySymbol from any *_CURRENCY whitelisted token.
-    const wls = result.data.whitelistedTokens || [];
-    const currencyMeta = wls.find(t => t.role === 'YES_CURRENCY' || t.role === 'NO_CURRENCY');
+    const currencyMeta = data.whitelistedTokens.find(t => t.role === 'YES_CURRENCY' || t.role === 'NO_CURRENCY');
     const currencySymbol = currencyMeta?.symbol?.replace(/^(YES|NO)_/i, '') || null;
 
     // Pools arrive with token0/token1 as full entities, so no join is needed.
-    const pools = result.data.pools || [];
+    const pools = data.pools;
 
     console.log(`[Pool Data] Found ${pools.length} pools for proposal on chain ${chainId}`);
 
@@ -228,31 +197,40 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
 
     if (!yesPool && !noPool) return null;
 
-    // Fetch latest candle close price for each pool (more accurate than tick)
-    const fetchLatestCandlePrice = async (poolId) => {
-      if (!poolId) return null;
+    // Fetch the latest candle close for both pools (more accurate than tick).
+    // `first: 1` per pool can't be expressed as one filter, but GraphQL
+    // aliases let both lookups ride in a single request.
+    const fetchLatestCandlePrices = async (poolIds) => {
+      const wanted = poolIds.filter(Boolean);
+      if (wanted.length === 0) return {};
+      const selection = wanted
+        .map((id, i) => `p${i}: candles(where: { pool: "${id.toLowerCase()}" }, orderBy: time, orderDirection: desc, first: 1) { close }`)
+        .join('\n          ');
       try {
         const resp = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `{ candles(where: { pool: "${poolId.toLowerCase()}" }, orderBy: time, orderDirection: desc, first: 1) { close } }`
-          })
+          body: JSON.stringify({ query: `{\n          ${selection}\n        }` })
         });
         const res = await resp.json();
-        const closePrice = res.data?.candles?.[0]?.close;
-        return closePrice ? parseFloat(closePrice) : null;
+        const prices = {};
+        wanted.forEach((id, i) => {
+          const close = res.data?.[`p${i}`]?.[0]?.close;
+          prices[id] = close ? parseFloat(close) : null;
+        });
+        return prices;
       } catch (err) {
-        console.warn('[Pool Data] Failed to fetch candle price for', poolId, err);
-        return null;
+        console.warn('[Pool Data] Failed to fetch candle prices for', wanted, err);
+        return {};
       }
     };
 
-    const [yesCandlePrice, noCandlePrice, provider] = await Promise.all([
-      yesPool ? fetchLatestCandlePrice(yesPool.id) : Promise.resolve(null),
-      noPool ? fetchLatestCandlePrice(noPool.id) : Promise.resolve(null),
+    const [candlePrices, provider] = await Promise.all([
+      fetchLatestCandlePrices([yesPool?.id, noPool?.id]),
       getBestRpcProvider(chainId)
     ]);
+    const yesCandlePrice = yesPool ? (candlePrices[yesPool.id] ?? null) : null;
+    const noCandlePrice = noPool ? (candlePrices[noPool.id] ?? null) : null;
 
     const [yesData, noData] = await Promise.all([
       formatSubgraphPoolData(yesPool, currencySymbol, provider),
