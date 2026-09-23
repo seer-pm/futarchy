@@ -11,57 +11,9 @@
 
 import { useState, useEffect } from 'react';
 
-import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { fetchRegistrySnapshot } from '../services/registrySnapshot';
 import { getFlmPathForOrg } from '../utils/flm';
 import { isProposalActive, isProposalArchived } from '../utils/proposalLifecycle';
-
-// Three flat queries — Checkpoint has no auto-generated reverse fields.
-const AGGREGATOR_QUERY = `
-  query($id: String!) {
-    aggregator(id: $id) {
-      id
-      name
-      description
-    }
-  }
-`;
-
-const ORGANIZATIONS_QUERY = `
-  query($aggregatorId: String!) {
-    organizations(where: { aggregator: $aggregatorId }, first: 1000) {
-      id
-      name
-      description
-      metadata
-      metadataURI
-      owner
-      editor
-    }
-  }
-`;
-
-const PROPOSALS_QUERY = `
-  query($orgIds: [String!]!) {
-    proposalEntities(where: { organization_in: $orgIds }, first: 1000) {
-      id
-      metadata
-      organization { id }
-    }
-  }
-`;
-
-async function gqlPost(query, variables) {
-    const response = await fetch(SUBGRAPH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables }),
-    });
-    const result = await response.json();
-    if (result.errors) {
-        throw new Error(result.errors[0]?.message || 'GraphQL query failed');
-    }
-    return result.data;
-}
 
 function parseMetadata(metadataString) {
     if (!metadataString) return {};
@@ -115,19 +67,15 @@ function transformOrgToCard(org, proposalsForOrg) {
  * if the connected wallet is the org owner/editor).
  */
 async function fetchAggregatorCompanies(aggregatorAddress, connectedWallet = null) {
-    const aggregatorId = aggregatorAddress.toLowerCase();
     const wallet = connectedWallet?.toLowerCase() || null;
 
-    const aggData = await gqlPost(AGGREGATOR_QUERY, { id: aggregatorId });
-    if (!aggData?.aggregator) {
+    const { aggregator, organizations, proposalEntities } = await fetchRegistrySnapshot(aggregatorAddress);
+    if (!aggregator) {
         throw new Error(`Aggregator not found: ${aggregatorAddress}`);
     }
 
-    const orgsData = await gqlPost(ORGANIZATIONS_QUERY, { aggregatorId });
-    const orgs = orgsData?.organizations || [];
-
     // Visibility filter at org level
-    const visible = orgs.filter(o => {
+    const visible = organizations.filter(o => {
         const m = parseMetadata(o.metadata);
         if (m.archived === true) return false;
         if (m.visibility === 'hidden') {
@@ -140,20 +88,17 @@ async function fetchAggregatorCompanies(aggregatorAddress, connectedWallet = nul
     });
 
     // Group proposals by org
+    const visibleOrgIds = new Set(visible.map(o => o.id));
     const propsByOrg = new Map();
-    if (visible.length > 0) {
-        const orgIds = visible.map(o => o.id);
-        const propData = await gqlPost(PROPOSALS_QUERY, { orgIds });
-        for (const p of propData?.proposalEntities || []) {
-            const oid = p.organization?.id;
-            if (!oid) continue;
-            if (!propsByOrg.has(oid)) propsByOrg.set(oid, []);
-            propsByOrg.get(oid).push(p);
-        }
+    for (const p of proposalEntities) {
+        const oid = p.organization?.id;
+        if (!oid || !visibleOrgIds.has(oid)) continue;
+        if (!propsByOrg.has(oid)) propsByOrg.set(oid, []);
+        propsByOrg.get(oid).push(p);
     }
 
     return {
-        ...aggData.aggregator,
+        ...aggregator,
         organizations: visible.map(o => transformOrgToCard(o, propsByOrg.get(o.id) || [])),
     };
 }

@@ -10,60 +10,14 @@
 
 import { useState, useEffect } from 'react';
 
-// Subgraph endpoint for futarchy-complete (metadata hierarchy)
-import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL, getSubgraphEndpoint } from '../config/subgraphEndpoints';
+import { getSubgraphEndpoint } from '../config/subgraphEndpoints';
+import { cachedOnce, fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
 import {
     getProposalCloseTimestamp,
     isProposalArchived,
     isProposalClosed,
     isProposalResolved,
 } from '../utils/proposalLifecycle';
-
-// The Checkpoint indexer doesn't auto-generate reverse relation fields,
-// so we issue three flat queries and assemble the legacy nested shape
-// in JS. The downstream code already expects { aggregator, organizations,
-// proposals } as nested objects.
-
-const AGGREGATOR_QUERY = `
-  query($id: String!) {
-    aggregator(id: $id) {
-      id
-      name
-      description
-      metadata
-    }
-  }
-`;
-
-const ORGANIZATIONS_QUERY = `
-  query($aggregatorId: String!) {
-    organizations(where: { aggregator: $aggregatorId }, first: 1000) {
-      id
-      name
-      description
-      metadata
-      metadataURI
-      owner
-      editor
-    }
-  }
-`;
-
-const PROPOSALS_QUERY = `
-  query($orgIds: [String!]!) {
-    proposalEntities(where: { organization_in: $orgIds }, first: 1000) {
-      id
-      displayNameEvent
-      displayNameQuestion
-      description
-      metadata
-      metadataURI
-      proposalAddress
-      owner
-      organization { id }
-    }
-  }
-`;
 
 /**
  * Parse metadata JSON safely
@@ -210,57 +164,6 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     };
 }
 
-async function gqlPost(url, query, variables) {
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables }),
-    });
-    const result = await response.json();
-    if (result.errors) {
-        throw new Error(result.errors[0]?.message || 'GraphQL query failed');
-    }
-    return result.data;
-}
-
-/**
- * Fetch the aggregator + its organizations + their proposals from the
- * Checkpoint registry indexer (3 flat queries, joined into the legacy
- * nested shape downstream code expects).
- */
-async function fetchAggregatorProposals(aggregatorAddress) {
-    const aggregatorId = aggregatorAddress.toLowerCase();
-
-    const aggResult = await gqlPost(SUBGRAPH_URL, AGGREGATOR_QUERY, { id: aggregatorId });
-    const aggregator = aggResult?.aggregator;
-    if (!aggregator) {
-        throw new Error(`Aggregator not found: ${aggregatorAddress}`);
-    }
-
-    const orgsResult = await gqlPost(SUBGRAPH_URL, ORGANIZATIONS_QUERY, { aggregatorId });
-    const organizations = orgsResult?.organizations || [];
-
-    let proposalsByOrg = new Map();
-    if (organizations.length > 0) {
-        const orgIds = organizations.map(o => o.id);
-        const propResult = await gqlPost(SUBGRAPH_URL, PROPOSALS_QUERY, { orgIds });
-        for (const p of propResult?.proposalEntities || []) {
-            const orgId = p.organization?.id;
-            if (!orgId) continue;
-            if (!proposalsByOrg.has(orgId)) proposalsByOrg.set(orgId, []);
-            proposalsByOrg.get(orgId).push(p);
-        }
-    }
-
-    return {
-        ...aggregator,
-        organizations: organizations.map(org => ({
-            ...org,
-            proposals: proposalsByOrg.get(org.id) || [],
-        })),
-    };
-}
-
 // Candles checkpoint indexer — single endpoint serves both chains;
 // IDs use the form "<chainId>-<address>" so we can query in one shot.
 const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
@@ -285,6 +188,18 @@ async function bulkFetchPoolsByChain(proposals) {
 
     if (ids.length === 0) return {};
 
+    // Both homepage transformers ask for the same proposal set, so share
+    // the request rather than hitting the candles indexer twice. Failures
+    // are handled here so they never land in the cache.
+    try {
+        return await cachedOnce(`pools:${ids.slice().sort().join(',')}`, () => fetchPoolsByIds(ids));
+    } catch (e) {
+        console.warn('[🔗 REGISTRY-POOLS] candles fetch failed:', e.message);
+        return {};
+    }
+}
+
+async function fetchPoolsByIds(ids) {
     console.log(`[🔗 REGISTRY-POOLS] Bulk-fetching pools for ${ids.length} proposals`);
 
     const query = `
@@ -298,22 +213,15 @@ async function bulkFetchPoolsByChain(proposals) {
         }
     `;
 
-    let result;
-    try {
-        const response = await fetch(CANDLES_GRAPHQL_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, variables: { ids } }),
-        });
-        result = await response.json();
-    } catch (e) {
-        console.warn('[🔗 REGISTRY-POOLS] candles fetch failed:', e.message);
-        return {};
-    }
+    const response = await fetch(CANDLES_GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { ids } }),
+    });
+    const result = await response.json();
 
     if (result?.errors) {
-        console.warn('[🔗 REGISTRY-POOLS] candles query error:', result.errors[0]?.message);
-        return {};
+        throw new Error(result.errors[0]?.message || 'candles query failed');
     }
 
     const poolMap = {};
@@ -366,7 +274,9 @@ export function useAggregatorProposals(aggregatorAddress, connectedWallet = null
             setError(null);
 
             try {
-                const aggregator = await fetchAggregatorProposals(aggregatorAddress);
+                // One shared request for the whole registry — see
+                // services/registrySnapshot.js.
+                const aggregator = await fetchNestedRegistrySnapshot(aggregatorAddress);
 
                 if (cancelled) return;
 
@@ -426,8 +336,8 @@ export function useAggregatorProposals(aggregatorAddress, connectedWallet = null
 export async function fetchProposalsFromAggregator(aggregatorAddress, connectedWallet = null) {
     console.log(`[fetchProposalsFromAggregator] Starting fetch from aggregator: ${aggregatorAddress}`);
 
-    // Step 1: Get proposals from registry subgraph
-    const aggregator = await fetchAggregatorProposals(aggregatorAddress);
+    // Step 1: Get proposals from the shared registry snapshot
+    const aggregator = await fetchNestedRegistrySnapshot(aggregatorAddress);
 
     const allProposals = [];
     for (const org of aggregator.organizations || []) {

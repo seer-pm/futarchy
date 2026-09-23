@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAccount } from 'wagmi';
 import RootLayout from "../../../layout/RootLayout";
-import { fetchEventHighlightData } from "./EventsHighlightDataTransformer";
 
 import CompaniesListCarousel from "../components/CompaniesListCarousel";
 import { OrganizationsTable } from "../table";
@@ -17,6 +16,7 @@ import OrganizationManagerModal from "../../../debug/OrganizationManagerModal";
 import EditProposalModal from "../../../debug/EditProposalModal";
 import { CONTRACT_ADDRESSES } from "../../marketPage/constants/contracts";
 import { ENABLE_V2_SUBGRAPH } from "../../../../config/featureFlags";
+import { useMediaQuery } from "../../../../hooks/useMediaQuery";
 
 // Configuration flags
 // Recently Closed works with V2 subgraph via fetchProposalsFromAggregator
@@ -24,8 +24,9 @@ const HIDE_RECENTLY_CLOSED = false;
 
 const CompaniesPage = ({ useStorybookUrl = false }) => {
   const { address: connectedWallet } = useAccount();
-  const [isEventsCarouselLoading, setIsEventsCarouselLoading] = useState(true);
-  const [isResolvedCarouselLoading, setIsResolvedCarouselLoading] = useState(true);
+  // Tailwind's md:hidden only hides the mobile carousel — mounting it on
+  // desktop would still fire its registry fetch, so gate it in JS.
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCreateProposalOpen, setIsCreateProposalOpen] = useState(false);
   const [isOrgModalOpen, setIsOrgModalOpen] = useState(false);
@@ -51,24 +52,6 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
     }
   }, []);
 
-  // Load highlights data — the carousels render their own data internally;
-  // the page just flips loading flags so the spinners disappear once mounted.
-  useEffect(() => {
-    const loadEventHighlights = async () => {
-      try {
-        await fetchEventHighlightData("all");
-      } catch (error) {
-        console.error("Error loading event highlights:", error);
-      } finally {
-        setIsEventsCarouselLoading(false);
-      }
-    };
-
-    loadEventHighlights();
-    setIsResolvedCarouselLoading(false);
-  }, []);
-
-
 
   return (
     <RootLayout
@@ -81,21 +64,15 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
           <h2 className="text-2xl font-semibold text-futarchyGray12 dark:text-white mb-6">
             Active Milestones
           </h2>
-          {isEventsCarouselLoading ? (
-            <div className="flex justify-center items-center h-[200px]">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
-            </div>
-          ) : (
-            <EventsHighlightCarousel
-              companyId="all"
-              useStorybookUrl={useStorybookUrl}
-              aggregatorAddress={aggregatorAddress}
-              connectedWallet={connectedWallet}
-              onEditProposal={(proposalMetadataAddress) => {
-                setEditProposalModal({ isOpen: true, proposalMetadataAddress });
-              }}
-            />
-          )}
+          <EventsHighlightCarousel
+            companyId="all"
+            useStorybookUrl={useStorybookUrl}
+            aggregatorAddress={aggregatorAddress}
+            connectedWallet={connectedWallet}
+            onEditProposal={(proposalMetadataAddress) => {
+              setEditProposalModal({ isOpen: true, proposalMetadataAddress });
+            }}
+          />
         </div>
 
         {/* Recently Closed Section */}
@@ -104,21 +81,15 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
             <h2 className="text-2xl font-semibold text-futarchyGray12 dark:text-white mb-6">
               Recently Closed
             </h2>
-            {isResolvedCarouselLoading ? (
-              <div className="flex justify-center items-center h-[200px]">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-              </div>
-            ) : (
-              <ResolvedEventsCarousel
-                companyId="all"
-                limit={10}
-                aggregatorAddress={aggregatorAddress}
-                connectedWallet={connectedWallet}
-                onEditProposal={(proposalMetadataAddress) => {
-                  setEditProposalModal({ isOpen: true, proposalMetadataAddress });
-                }}
-              />
-            )}
+            <ResolvedEventsCarousel
+              companyId="all"
+              limit={10}
+              aggregatorAddress={aggregatorAddress}
+              connectedWallet={connectedWallet}
+              onEditProposal={(proposalMetadataAddress) => {
+                setEditProposalModal({ isOpen: true, proposalMetadataAddress });
+              }}
+            />
           </div>
         )}
 
@@ -150,9 +121,11 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
         </div>
 
         {/* Companies Carousel (Mobile Fallback) */}
-        <div className="md:hidden">
-          <CompaniesListCarousel useStorybookUrl={useStorybookUrl} />
-        </div>
+        {!isDesktop && (
+          <div className="md:hidden">
+            <CompaniesListCarousel useStorybookUrl={useStorybookUrl} />
+          </div>
+        )}
       </PageLayout>
 
       {debugMode && (
