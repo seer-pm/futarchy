@@ -7,6 +7,7 @@
 
 import { createPublicClient, http, fallback } from 'viem';
 import { fetchProposalMarketData } from '../services/proposalMarketData';
+import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
 import { gnosis, mainnet } from 'viem/chains';
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 
@@ -24,7 +25,7 @@ const CHAIN_CONFIG = {
         // Uniswap V3 factory (Ethereum) — for the on-chain pool-discovery fallback
         ammFactory: '0x1F98431c8aD98523631AE4a59f267346ea31F984',
         viemChain: mainnet,
-        rpcUrls: ['https://eth.llamarpc.com', 'https://rpc.ankr.com/eth', 'https://ethereum-rpc.publicnode.com']
+        rpcUrls: RPC_ENDPOINTS[1]
     },
     100: {
         factoryAddress: '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345',
@@ -35,7 +36,7 @@ const CHAIN_CONFIG = {
         // Algebra (Swapr) factory on Gnosis — for the on-chain pool-discovery fallback
         ammFactory: '0xA0864cCA6E114013AB0e27cbd5B6f4c8947da766',
         viemChain: gnosis,
-        rpcUrls: ['https://gnosis.drpc.org', 'https://rpc.gnosischain.com', 'https://gnosis-rpc.publicnode.com', 'https://rpc.gnosis.gateway.fm']
+        rpcUrls: RPC_ENDPOINTS[100]
     }
 };
 
@@ -70,7 +71,7 @@ function getPublicClient(chainId) {
     if (!cfg) return null;
     const client = createPublicClient({
         chain: cfg.viemChain,
-        transport: fallback((cfg.rpcUrls || []).map(u => http(u))),
+        transport: fallback((cfg.rpcUrls || []).map(u => http(u, { batch: true }))),
     });
     _clients[chainId] = client;
     return client;

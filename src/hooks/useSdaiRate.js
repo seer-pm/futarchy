@@ -1,22 +1,16 @@
 // src/hooks/useSdaiRate.js
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { RPC_ENDPOINTS, RPC_NETWORKS } from '../config/rpcEndpoints';
 import {
     SDAI_CONTRACT_RATE,
     SDAI_RATE_PROVIDER_ABI,
     BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG
 } from '../components/futarchyFi/marketPage/constants/contracts';
 
-// List of reliable Gnosis Chain RPC endpoints (same as getAlgebraPoolPrice)
-// A private endpoint from NEXT_PUBLIC_GNOSIS_RPC_URL is tried first; the public
-// ones stay behind it as fallbacks.
-const GNOSIS_RPCS = [
-  process.env.NEXT_PUBLIC_GNOSIS_RPC_URL,
-  "https://rpc.ankr.com/gnosis",
-  "https://gnosis.drpc.org",
-  "https://gnosis-rpc.publicnode.com",
-  "https://1rpc.io/gnosis"
-].filter(Boolean);
+// Endpoints come from config/rpcEndpoints.js. This module keeps its own
+// rotation because it tracks endpoints that have failed.
+const GNOSIS_RPCS = RPC_ENDPOINTS[100];
 
 const REFRESH_INTERVAL = 60000; // Refresh rate every 60 seconds
 const TIMEOUT_DURATION = 15000; // 15 second timeout for contract call
@@ -32,7 +26,8 @@ const rateLimitCooldowns = new Map();
 function getProvider(rpcUrl) {
   if (!providers.has(rpcUrl)) {
     console.log("[SDAI PROVIDER] Creating new provider for:", rpcUrl);
-    providers.set(rpcUrl, new ethers.providers.JsonRpcProvider(rpcUrl));
+    // Stating the network skips ethers' eth_chainId detection call.
+    providers.set(rpcUrl, new ethers.providers.JsonRpcBatchProvider(rpcUrl, RPC_NETWORKS[100]));
   }
   return providers.get(rpcUrl);
 }

@@ -20,7 +20,7 @@ import { useState, useCallback, useEffect } from "react";
 import { ethers } from "ethers";
 import { useAccount } from 'wagmi';
 import { useBalanceManager } from "./useBalanceManager";
-import { getRpcUrl } from "../utils/getRpcUrl";
+import { getRpcProvider } from "../utils/getBestRpc";
 import {
   getProviderAndSigner,
   formatTokenAmount,
@@ -1134,8 +1134,9 @@ export const useFutarchy = (config = {}) => {
   const fetchSdaiPrice = useCallback(async () => {
     try {
       // Get provider with correct RPC for current chain
-      const rpcUrl = getRpcUrl(chainId);
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      // Shared provider — see utils/getBestRpc.js. Building one per call cost
+      // a network-detection round trip each time, and this runs on a timer.
+      const provider = getRpcProvider(chainId);
       
       // Create contract instance for SDAI rate provider
       const sdaiRateContract = new ethers.Contract(
@@ -1166,8 +1167,9 @@ export const useFutarchy = (config = {}) => {
   const fetchCurrencyPricesInXdai = useCallback(async () => {
     try {
       // Use a provider with correct RPC for current chain
-      const rpcUrl = getRpcUrl(chainId);
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      // Shared provider — see utils/getBestRpc.js. Building one per call cost
+      // a network-detection round trip each time, and this runs on a timer.
+      const provider = getRpcProvider(chainId);
       
       // Create factory contract instance
       const factory = new ethers.Contract(
@@ -1246,8 +1248,9 @@ export const useFutarchy = (config = {}) => {
       setPoolPrices(prev => ({ ...prev, loading: true, error: null }));
 
       // Get provider with correct RPC for current chain
-      const rpcUrl = getRpcUrl(chainId);
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      // Shared provider — see utils/getBestRpc.js. Building one per call cost
+      // a network-detection round trip each time, and this runs on a timer.
+      const provider = getRpcProvider(chainId);
       
       // Create contract instances
       const yesPoolContract = new ethers.Contract(

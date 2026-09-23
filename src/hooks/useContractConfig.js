@@ -3,13 +3,8 @@ import { ethers } from 'ethers';
 import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/contracts';
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
 import { invalidateCache } from '../services/requestCache';
+import { getRpcProvider } from '../utils/getBestRpc';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
-
-// Public RPCs for the on-chain resolution fallback check
-const RESOLUTION_RPC_BY_CHAIN = {
-  1: 'https://eth.llamarpc.com',
-  100: process.env.NEXT_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com'
-};
 
 /**
  * Check resolution directly on-chain via ConditionalTokens payouts.
@@ -24,8 +19,9 @@ const RESOLUTION_RPC_BY_CHAIN = {
  */
 async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress, chainId) {
   try {
-    const rpcUrl = RESOLUTION_RPC_BY_CHAIN[Number(chainId)] || RESOLUTION_RPC_BY_CHAIN[100];
-    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    // Shared provider — see utils/getBestRpc.js. Building one here would
+    // cost a network-detection round trip before the read.
+    const provider = getRpcProvider(Number(chainId) === 1 ? 1 : 100);
     // URL-sourced addresses may carry a bad EIP-55 checksum; lowercase so
     // ethers doesn't throw before the read.
     const proposal = new ethers.Contract(

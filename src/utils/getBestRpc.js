@@ -1,250 +1,150 @@
 /**
- * Get the best working RPC for a given chain ID.
- * Tests multiple RPCs and caches the top performers so we can
- * reuse the fastest three before probing the full list again.
+ * RPC endpoints — one shared provider per chain.
+ *
+ * This module used to probe every endpoint in a list on each call and rank
+ * them by latency. Two things made that expensive: the probe itself fired an
+ * eth_blockNumber at half a dozen hosts, and every call site built its own
+ * `JsonRpcProvider`, each of which opens with a network-detection round trip.
+ * A market page load spent 39 eth_chainId requests before doing any real work.
+ *
+ * Now a chain gets exactly one provider, built once and reused:
+ *
+ *   - the configured endpoint is primary, with public endpoints behind it,
+ *     which is the same arrangement providers.jsx uses for wagmi;
+ *   - the network is passed explicitly, so ethers never issues the detection
+ *     request;
+ *   - calls are batched, so reads issued in the same tick share one POST;
+ *   - a failing endpoint advances to the next one and the call is retried,
+ *     which is the part of the old probe worth keeping.
+ *
+ * Set NEXT_PUBLIC_GNOSIS_RPC_URL / NEXT_PUBLIC_MAINNET_RPC_URL to put a
+ * private endpoint first. These are inlined at build time (output: 'export'),
+ * so a static build needs them present in CI.
  */
 
 import { ethers } from 'ethers';
 
-// Hardcoded RPC lists (faster than fetching from chainlist). A private
-// endpoint from the environment is probed first; the public ones remain as
-// fallbacks, and the probe below still drops any that are slow or failing.
-const RPC_LISTS = {
-  1: [ // Ethereum Mainnet
-    process.env.NEXT_PUBLIC_MAINNET_RPC_URL,
-    'https://ethereum-rpc.publicnode.com',
-    'https://1rpc.io/eth',
-    'https://rpc.ankr.com/eth'
-  ].filter(Boolean),
-  100: [ // Gnosis Chain
-    process.env.NEXT_PUBLIC_GNOSIS_RPC_URL,
-    'https://rpc.gnosischain.com',
-    'https://gnosis-rpc.publicnode.com',
-    'https://1rpc.io/gnosis',
-    'https://rpc.ankr.com/gnosis'
-  ].filter(Boolean)
-};
+import { RPC_ENDPOINTS as RPC_LISTS, RPC_NETWORKS as NETWORKS } from '../config/rpcEndpoints';
 
-const RPC_TIMEOUT_MS = 5000; // 5 second timeout
-const CACHE_DURATION_MS = 5 * 60 * 1000; // Cache for 5 minutes
-const MAX_CACHED_RPC_COUNT = 3; // Keep the best three RPCs warm
+// chainId -> { index, provider }
+const activeProviders = new Map();
 
-// Cache for best RPC results
-const rpcCache = {};
-
-function normalizeCacheEntry(entry) {
-  if (!entry) return null;
-  if (Array.isArray(entry.urls)) {
-    return entry;
-  }
-
-  // Backwards compatibility for older single-url cache shape
-  if (entry.url) {
-    return {
-      urls: [entry.url],
-      timestamp: entry.timestamp || Date.now()
-    };
-  }
-
-  return null;
-}
-
-async function tryCachedRpcs(chainId, cacheKey, now) {
-  const rawEntry = rpcCache[cacheKey];
-  const cacheEntry = normalizeCacheEntry(rawEntry);
-
-  if (!cacheEntry || !cacheEntry.urls.length) {
-    return null;
-  }
-
-  if (now - cacheEntry.timestamp > CACHE_DURATION_MS) {
-    return null;
-  }
-
-  console.log(`[RPC-TEST] Attempting cached RPCs for chain ${chainId}...`);
-
-  const candidates = cacheEntry.urls.slice(0, MAX_CACHED_RPC_COUNT);
-
-  for (const candidateUrl of candidates) {
-    const result = await testRpc(candidateUrl);
-
-    if (result.success) {
-      const deduped = cacheEntry.urls.filter(url => url !== candidateUrl);
-      cacheEntry.urls = [candidateUrl, ...deduped].slice(0, MAX_CACHED_RPC_COUNT);
-      cacheEntry.timestamp = now;
-      rpcCache[cacheKey] = cacheEntry;
-      console.log(`[RPC-TEST] Using cached RPC for chain ${chainId}: ${candidateUrl}`);
-      return candidateUrl;
-    }
-  }
-
-  console.log(`[RPC-TEST] Cached RPCs exhausted for chain ${chainId}, running full probe...`);
-  return null;
+function buildProvider(chainId, url) {
+  // Passing the network explicitly is what skips eth_chainId; the batch
+  // provider coalesces calls made in the same tick into one POST.
+  const provider = new ethers.providers.JsonRpcBatchProvider(url, NETWORKS[chainId]);
+  // Nothing here subscribes to blocks; keep any incidental polling rare.
+  provider.pollingInterval = 60_000;
+  return withFailover(provider, chainId);
 }
 
 /**
- * Test a single RPC endpoint using browser fetch to detect CORS issues
+ * Advance to the next endpoint and retry once when a call fails. Without
+ * this, losing the primary endpoint would take the page down — it is the one
+ * thing the old latency probe bought us.
  */
-async function testRpc(rpcUrl) {
-  const started = performance.now();
+function withFailover(provider, chainId) {
+  const originalSend = provider.send.bind(provider);
 
-  try {
-    // Use fetch API to test CORS compatibility in browser context
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-
-    // Make actual JSON-RPC request to test CORS
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_blockNumber',
-        params: [],
-        id: 1,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  provider.send = async (method, params) => {
+    try {
+      return await originalSend(method, params);
+    } catch (error) {
+      const next = advanceEndpoint(chainId, provider);
+      if (!next) throw error;
+      console.warn(`[RPC] ${method} failed, falling back to the next endpoint for chain ${chainId}`);
+      return next.send(method, params);
     }
+  };
 
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(`RPC Error: ${data.error.message}`);
-    }
-
-    const blockNumber = parseInt(data.result, 16);
-    const latency = performance.now() - started;
-
-    console.log(`[RPC-TEST] ✅ ${rpcUrl} - ${latency.toFixed(0)}ms (block: ${blockNumber})`);
-
-    return {
-      url: rpcUrl,
-      success: true,
-      latency,
-      blockNumber
-    };
-  } catch (error) {
-    // Detect specific CORS errors
-    const isCorsError = error.name === 'TypeError' && error.message.includes('fetch');
-    const errorType = isCorsError ? 'CORS blocked' :
-                     error.name === 'AbortError' ? 'timeout' :
-                     error.message;
-
-    console.warn(`[RPC-TEST] ❌ ${rpcUrl} - ${errorType}`);
-
-    return {
-      url: rpcUrl,
-      success: false,
-      error: errorType,
-      isCorsError
-    };
-  }
+  return provider;
 }
 
 /**
- * Get the best RPC for a chain ID
- * Tests all RPCs in parallel and returns the fastest working one
- * CORS-blocked RPCs are excluded from results
+ * Move a chain onto its next endpoint, unless it has already moved on (two
+ * concurrent failures should not skip an endpoint each).
+ *
+ * @returns {Object|null} the new provider, or null when the list is exhausted
  */
-export async function getBestRpc(chainId) {
-  const cacheKey = `chain-${chainId}`;
-  const now = Date.now();
+function advanceEndpoint(chainId, failedProvider) {
+  const state = activeProviders.get(chainId);
+  if (!state) return null;
+  if (state.provider !== failedProvider) return state.provider;
 
-  // Prefer cached candidates before hitting every endpoint again
-  const cachedUrl = await tryCachedRpcs(chainId, cacheKey, now);
-  if (cachedUrl) {
-    return cachedUrl;
-  }
+  const nextIndex = state.index + 1;
+  const urls = RPC_LISTS[chainId] || [];
+  if (nextIndex >= urls.length) return null;
 
-  const rpcList = RPC_LISTS[chainId];
+  const provider = buildProvider(chainId, urls[nextIndex]);
+  activeProviders.set(chainId, { index: nextIndex, provider, url: urls[nextIndex] });
+  return provider;
+}
 
-  if (!rpcList || rpcList.length === 0) {
+function getState(chainId) {
+  let state = activeProviders.get(chainId);
+  if (state) return state;
+
+  const urls = RPC_LISTS[chainId] || [];
+  if (urls.length === 0) {
     throw new Error(`No RPC endpoints configured for chain ${chainId}`);
   }
 
-  console.log(`[RPC-TEST] Testing ${rpcList.length} RPCs for chain ${chainId}...`);
-
-  // Test all RPCs in parallel
-  const results = await Promise.all(rpcList.map(testRpc));
-
-  // Separate CORS-blocked from other failures
-  const corsBlocked = results.filter(r => !r.success && r.isCorsError);
-  const otherFailures = results.filter(r => !r.success && !r.isCorsError);
-  const workingRpcs = results
-    .filter(r => r.success)
-    .sort((a, b) => a.latency - b.latency);
-
-  // Log CORS issues prominently
-  if (corsBlocked.length > 0) {
-    console.warn(`[RPC-TEST] ⚠️ ${corsBlocked.length} RPCs blocked by CORS:`,
-      corsBlocked.map(r => r.url));
-  }
-
-  if (otherFailures.length > 0) {
-    console.warn(`[RPC-TEST] ⚠️ ${otherFailures.length} RPCs failed (non-CORS):`,
-      otherFailures.map(r => `${r.url}: ${r.error}`));
-  }
-
-  if (workingRpcs.length === 0) {
-    console.error('[RPC-TEST] ❌ All RPCs failed!', {
-      corsBlocked: corsBlocked.length,
-      otherFailures: otherFailures.length,
-      total: results.length
-    });
-
-    // Provide helpful error message
-    if (corsBlocked.length === results.length) {
-      console.error('[RPC-TEST] All RPCs are CORS-blocked. This may be a browser configuration issue.');
-    }
-
-    // Fallback to first RPC in list (may still fail, but we tried)
-    rpcCache[cacheKey] = {
-      urls: [],
-      timestamp: now
-    };
-    return rpcList[0];
-  }
-
-  const bestRpc = workingRpcs[0];
-  console.log(`[RPC-TEST] ✅ Best RPC for chain ${chainId}: ${bestRpc.url} (${bestRpc.latency.toFixed(0)}ms)`);
-  console.log(`[RPC-TEST] 📊 Summary: ${workingRpcs.length} working, ${corsBlocked.length} CORS-blocked, ${otherFailures.length} other failures`);
-
-  // Cache the result
-  rpcCache[cacheKey] = {
-    urls: workingRpcs.map(r => r.url).slice(0, MAX_CACHED_RPC_COUNT),
-    timestamp: now
-  };
-
-  return bestRpc.url;
+  state = { index: 0, url: urls[0], provider: buildProvider(chainId, urls[0]) };
+  activeProviders.set(chainId, state);
+  return state;
 }
 
 /**
- * Get a provider for the best RPC
+ * The endpoint currently in use for a chain.
+ *
+ * Kept async because callers await it; there is no probing left to wait for.
+ *
+ * @param {number} chainId
+ * @returns {Promise<string>}
+ */
+export async function getBestRpc(chainId) {
+  return getState(chainId).url;
+}
+
+/**
+ * The shared provider for a chain. Built on first use and reused afterwards.
+ *
+ * @param {number} chainId
+ * @returns {Promise<ethers.providers.JsonRpcProvider>}
  */
 export async function getBestRpcProvider(chainId) {
-  const rpcUrl = await getBestRpc(chainId);
-  return new ethers.providers.JsonRpcProvider(rpcUrl);
+  return getRpcProvider(chainId);
 }
 
 /**
- * Clear the RPC cache (useful for forcing re-test)
+ * Same provider, for call sites that are not async. Nothing is awaited any
+ * more, so there is no reason to force them to be.
+ *
+ * @param {number} chainId
+ * @returns {ethers.providers.JsonRpcProvider}
+ */
+export function getRpcProvider(chainId) {
+  return getState(chainId).provider;
+}
+
+/**
+ * Drop the providers so the next call rebuilds from the primary endpoint.
+ * Used by the RPC refresh button and the diagnostics page.
  */
 export function clearRpcCache() {
-  Object.keys(rpcCache).forEach(key => delete rpcCache[key]);
-  console.log('[RPC-TEST] Cache cleared');
+  activeProviders.clear();
+  console.log('[RPC] Providers reset to the primary endpoint');
 }
 
+const RPC_TIMEOUT_MS = 5000;
+
 /**
- * Get diagnostic information about all RPCs for a chain
- * Useful for debugging CORS and connectivity issues
+ * Probe every endpoint of a chain and report latency and reachability.
+ *
+ * This is the old probe, kept for the /rpc-diagnostics page — it runs when
+ * someone asks for it, never on a page load.
+ *
+ * @param {number} chainId
  */
 export async function diagnoseRpcs(chainId) {
   const rpcList = RPC_LISTS[chainId];
@@ -280,26 +180,65 @@ export async function diagnoseRpcs(chainId) {
   return summary;
 }
 
+async function testRpc(rpcUrl) {
+  const started = performance.now();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+
+    // A real JSON-RPC request, so the probe also exercises CORS.
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(`RPC Error: ${data.error.message}`);
+    }
+
+    return {
+      url: rpcUrl,
+      success: true,
+      latency: performance.now() - started,
+      blockNumber: parseInt(data.result, 16)
+    };
+  } catch (error) {
+    const isCorsError = error.name === 'TypeError' && error.message.includes('fetch');
+    const errorType = isCorsError ? 'CORS blocked'
+      : error.name === 'AbortError' ? 'timeout'
+        : error.message;
+
+    console.warn(`[RPC-TEST] ❌ ${rpcUrl} - ${errorType}`);
+
+    return { url: rpcUrl, success: false, error: errorType, isCorsError };
+  }
+}
+
 /**
- * Get the current RPC cache status
+ * Which endpoint each chain is currently on. Shape kept for the diagnostics
+ * page, which renders `urls` and the expiry fields.
  */
 export function getRpcCacheStatus() {
   const status = {};
 
-  Object.keys(rpcCache).forEach(key => {
-    const entry = normalizeCacheEntry(rpcCache[key]);
-    if (entry) {
-      const age = Date.now() - entry.timestamp;
-      const isExpired = age > CACHE_DURATION_MS;
-
-      status[key] = {
-        urls: entry.urls,
-        age: Math.floor(age / 1000), // seconds
-        isExpired,
-        expiresIn: isExpired ? 0 : Math.floor((CACHE_DURATION_MS - age) / 1000)
-      };
-    }
-  });
+  for (const [chainId, state] of activeProviders.entries()) {
+    status[`chain-${chainId}`] = {
+      urls: [state.url],
+      age: 0,
+      isExpired: false,
+      expiresIn: 0
+    };
+  }
 
   return status;
 }

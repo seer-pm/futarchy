@@ -52,6 +52,7 @@ import { retryRpcCall } from '../../../utils/retryWithBackoff';
 import CreatePoolModal from './CreatePoolModal';
 // Subgraph-backed pool fetcher for latest prices (replaces SupabasePoolFetcher)
 import { createSubgraphPoolFetcher } from "../../../utils/SubgraphPoolFetcher";
+import { getRpcProvider } from "../../../utils/getBestRpc";
 // POOL_CONFIG_THIRD is now available in useContractConfig
 
 //lets import from contract.js 
@@ -61,7 +62,6 @@ import { UNISWAP_V3_POOL_ABI } from "./constants/contracts";
 // Subgraph pool fetcher instance for latest prices
 const subgraphPoolFetcher = createSubgraphPoolFetcher();
 
-const GNOSIS_DEFAULT_RPC = process.env.NEXT_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 const ALGEBRA_TWAP_ABI = [
   "function getTimepoints(uint32[] secondsAgos) external view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulatives, uint112[] volatilityCumulatives, uint256[] volumePerAvgLiquiditys)",
   "function token0() external view returns (address)"
@@ -541,7 +541,8 @@ const TwapCountdown = ({
 
   const ensureProvider = useCallback(() => {
     if (!providerRef.current) {
-      providerRef.current = new ethers.providers.JsonRpcProvider(GNOSIS_DEFAULT_RPC);
+      // Shared across the app — see utils/getBestRpc.js.
+      providerRef.current = getRpcProvider(100);
     }
     return providerRef.current;
   }, []);
@@ -3775,28 +3776,15 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           }
         }
 
-        // If no MetaMask or Web3Provider initialization failed, try RPC URL
+        // If no MetaMask or Web3Provider initialization failed, fall back to
+        // the shared RPC provider. It already carries its own endpoint
+        // fallback, so there is nothing to verify with a probe read here.
         if (!provider) {
-          const envRpcUrl = process.env.NEXT_PUBLIC_GNOSIS_RPC_URL;
-          console.log(`MarketPage: Trying to use environment RPC URL: ${envRpcUrl}`);
-
-          if (envRpcUrl) {
-            try {
-              // Create provider with timeout for better error handling
-              provider = new ethers.providers.JsonRpcProvider({
-                url: envRpcUrl,
-                timeout: 10000, // 10 second timeout
-              });
-
-              // Verify the connection works
-              const blockNumber = await provider.getBlockNumber();
-              console.log(`MarketPage: Successfully connected to RPC with block number: ${blockNumber}`);
-            } catch (rpcError) {
-              console.error("MarketPage: Environment RPC connection failed:", rpcError);
-              provider = null;
-            }
-          } else {
-            console.warn("MarketPage: No NEXT_PUBLIC_GNOSIS_RPC_URL found in environment variables");
+          try {
+            provider = getRpcProvider(100);
+          } catch (rpcError) {
+            console.error("MarketPage: Shared RPC provider unavailable:", rpcError);
+            provider = null;
           }
 
           // Final fallback to hardcoded URL if still no provider

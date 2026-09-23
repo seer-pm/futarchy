@@ -1,15 +1,9 @@
 import { ethers } from "ethers";
+import { RPC_ENDPOINTS, RPC_NETWORKS } from "../config/rpcEndpoints";
 
-// List of reliable Gnosis Chain RPC endpoints
-// A private endpoint from NEXT_PUBLIC_GNOSIS_RPC_URL is tried first; the public
-// ones stay behind it as fallbacks.
-const GNOSIS_RPCS = [
-  process.env.NEXT_PUBLIC_GNOSIS_RPC_URL,
-  "https://rpc.ankr.com/gnosis",
-  "https://gnosis.drpc.org",
-  "https://gnosis-rpc.publicnode.com",
-  "https://1rpc.io/gnosis"
-].filter(Boolean);
+// Endpoints come from config/rpcEndpoints.js. This module keeps its own
+// rotation because it tracks endpoints that have failed.
+const GNOSIS_RPCS = RPC_ENDPOINTS[100];
 
 // Track current RPC index and failed RPCs
 let currentRpcIndex = 0;
@@ -58,7 +52,8 @@ const RANDOM_RETRY_RANGE = 10 * 1000; // 1-10 seconds additional random delay
 function getProvider(rpcUrl) {
   if (!providers.has(rpcUrl)) {
     console.log("[PROVIDER] Creating new provider for:", rpcUrl);
-    providers.set(rpcUrl, new ethers.providers.JsonRpcProvider(rpcUrl));
+    // Stating the network skips ethers' eth_chainId detection call.
+    providers.set(rpcUrl, new ethers.providers.JsonRpcBatchProvider(rpcUrl, RPC_NETWORKS[100]));
   }
   return providers.get(rpcUrl);
 }

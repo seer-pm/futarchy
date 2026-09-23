@@ -19,28 +19,8 @@ import {
   safeWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import SafeAutoConnector from '../components/futarchyFi/SafeAutoConnector';
+import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
 import { SubgraphRefreshProvider } from '../contexts/SubgraphRefreshContext';
-
-// Gnosis Chain RPC endpoints, tried in order by the fallback transport.
-// A private endpoint in NEXT_PUBLIC_GNOSIS_RPC_URL goes first and the public
-// ones stay behind it as fallbacks, so a paid endpoint hitting its limit
-// degrades instead of taking the app down.
-const GNOSIS_RPCS = [
-  process.env.NEXT_PUBLIC_GNOSIS_RPC_URL,
-  "https://gnosis.drpc.org",
-  "https://rpc.gnosischain.com",
-  "https://gnosis-rpc.publicnode.com",
-  "https://1rpc.io/gnosis"
-].filter(Boolean);
-
-// Ethereum mainnet, same arrangement.
-const ETHEREUM_RPCS = [
-  process.env.NEXT_PUBLIC_MAINNET_RPC_URL,
-  "https://eth.drpc.org",
-  "https://ethereum-rpc.publicnode.com",
-  "https://1rpc.io/eth",
-  "https://rpc.ankr.com/eth"
-].filter(Boolean);
 
 const chains = [mainnet, gnosis];
 const projectId = "76fa3deb89f7aa56f09cf1ac472eccb4";
@@ -89,9 +69,15 @@ const queryClient = new QueryClient({
   },
 });
 
-// Create fallback transport with multiple RPC endpoints
-const gnosisTransport = fallback(
-  GNOSIS_RPCS.map(rpc => http(rpc)),
+// Endpoints come from config/rpcEndpoints.js: the configured endpoint first,
+// a public one behind it, so a paid endpoint hitting its limit degrades
+// instead of taking the app down.
+//
+// `batch: true` is the part that matters for traffic. viem leaves JSON-RPC
+// batching off by default, so every wagmi read used to cost its own POST;
+// batched, the reads issued in the same tick share one.
+const buildTransport = (chainId) => fallback(
+  RPC_ENDPOINTS[chainId].map(rpc => http(rpc, { batch: true })),
   {
     rank: false, // Use RPCs in order (don't rank by speed)
     retryCount: 3, // Increased retry count
@@ -99,15 +85,8 @@ const gnosisTransport = fallback(
   }
 );
 
-// Create fallback transport for Ethereum mainnet
-const ethereumTransport = fallback(
-  ETHEREUM_RPCS.map(rpc => http(rpc)),
-  {
-    rank: false,
-    retryCount: 3,
-    retryDelay: 1500,
-  }
-);
+const ethereumTransport = buildTransport(mainnet.id);
+const gnosisTransport = buildTransport(gnosis.id);
 
 // Create a new WagmiConfig instance
 const wagmiConfig = createConfig({
