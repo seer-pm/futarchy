@@ -2682,13 +2682,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   });
 
   // Process the market title with regex to extract components
-  const rawMarketTitle = config?.marketInfo?.title || "What will be the impact on GNO price if GnosisPay reaches $5mil weekly volume?";
+  const rawMarketTitle = config?.marketInfo?.title || "";
   // Updated regex to match everything after "if" regardless of what comes before it
   const titleMatch = rawMarketTitle.match(/.*if\s+(.*)/i);
 
   // Extract title components for display
-  const marketTitlePrefix = "What will be the impact on GNO price if";
-  const marketEvent = titleMatch ? titleMatch[1] : "GnosisPay reaches $5mil weekly volume?";
+  const marketTitlePrefix = titleMatch ? rawMarketTitle.slice(0, rawMarketTitle.length - titleMatch[1].length).trim() : rawMarketTitle;
+  const marketEvent = titleMatch ? titleMatch[1] : "";
 
   // Get the full description for the smaller text
   const marketDescription = config?.marketInfo?.description || "";
@@ -2919,12 +2919,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     error: null
   });
 
-  // Dynamic market data state
+  // Dynamic market data state. Starts empty (the hero shows a skeleton while
+  // isLoading) — never another market's copy.
   const [marketData, setMarketData] = useState({
-    display_title_0: "What will be the impact on GNO price",
-    display_title_1: "if GnosisPay reaches €2,000,000 weekly volume?",
-    title: "Will GnosisPay process transactions exceeding €2,000,000 in volume within any complete calendar week (Monday 00:00 UTC through Sunday 23:59 UTC) concluding on or prior to June 30, 2025?",
-    description: "This conditional market on Gnosis Chain evaluates whether GnosisPay will exceed €2M in EUR transaction volume in any complete calendar week before June 30, 2025. Participants can trade YES or NO outcomes using wrapped GNO and sDAI to speculate on its impact on GNO's price.",
+    display_title_0: "",
+    display_title_1: "",
+    title: "",
+    description: "",
     question_title: null,
     question_link: null,
     isLoading: true,
@@ -2978,11 +2979,16 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       const marketInfo = config.marketInfo;
 
       // Parse the market event data to extract display titles
+      // Neutral fallbacks: a market without metadata shows its address, not
+      // another market's title/description.
+      const fallbackTitle = config?.MARKET_ADDRESS
+        ? `Market ${config.MARKET_ADDRESS.slice(0, 6)}…${config.MARKET_ADDRESS.slice(-4)}`
+        : 'Market';
       let parsedData = {
-        display_title_0: "What will be the impact on GNO price",
-        display_title_1: "if Circle deploy native USDC on Gnosis Chain?",
-        title: marketInfo.title || "Market Event",
-        description: marketInfo.description || "This conditional market on Gnosis Chain evaluates whether Circle will will deploy native USDC on gnosis chain before December 31 2025",
+        display_title_0: marketInfo.title || fallbackTitle,
+        display_title_1: "",
+        title: marketInfo.title || fallbackTitle,
+        description: marketInfo.description || "",
         question_title: marketInfo.title || null,
         question_link: normalizeRealityQuestionUrl(marketInfo.questionLink, config?.chainId) || null,
         isLoading: false,
@@ -4789,19 +4795,16 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       <div className="container mx-auto px-5 flex-grow flex flex-col justify-center">
         <div className={`grid grid-cols-1 lg:grid-cols-3 transition-all duration-300 ease-in-out ${isScrolled ? 'py-8 lg:py-3' : 'py-4 lg:py-6'
           }`}>
-          <div className={`lg:col-span-2 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
+          <div className={`lg:col-span-2 min-w-0 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
             }`}>
             <h1 className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base' : 'text-sm lg:text-xl'
               }`}>
               {marketData.isLoading && (
-                <span className="inline-flex items-center gap-2 text-xs text-white/80">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading…
-                </span>
+                <span className="block h-5 lg:h-6 w-3/4 max-w-xl rounded bg-white/10 animate-pulse" aria-label="Loading market title" />
               )}
               {!marketData.isLoading && !marketData.error && (
                 <>
-                  <span className="whitespace-nowrap">{marketData.display_title_0}</span>{' '}
+                  <span className={marketData.display_title_1 ? 'lg:whitespace-nowrap' : ''}>{marketData.display_title_0}</span>{' '}
                   <span className="text-futarchyViolet7">{marketData.display_title_1}</span>
                 </>
               )}
@@ -4910,9 +4913,10 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             <div className={`flex items-center gap-3 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               {marketData.isLoading && (
-                <span className="inline-flex items-center gap-2 text-xs text-white/70">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading badges…
+                <span className="flex gap-2" aria-label="Loading badges">
+                  <span className="h-7 w-24 rounded-lg bg-white/10 animate-pulse" />
+                  <span className="h-7 w-32 rounded-lg bg-white/10 animate-pulse" />
+                  <span className="h-7 w-28 rounded-lg bg-white/10 animate-pulse" />
                 </span>
               )}
               {!marketData.isLoading && !marketData.error && (
@@ -5046,19 +5050,20 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             </div>
           </div>
 
-          <div className={`lg:col-span-1 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-2 lg:pl-6' : 'py-2 lg:py-3 lg:pl-6'
+          <div className={`lg:col-span-1 min-w-0 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-2 lg:pl-6' : 'py-2 lg:py-3 lg:pl-6'
             }`}>
             {/* Description - hides on scroll */}
             <div className={`transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               {marketData.isLoading && (
-                <p className="text-xs lg:text-sm text-white/80 inline-flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading description…
-                </p>
+                <div className="space-y-2" aria-label="Loading description">
+                  <span className="block h-3 w-full rounded bg-white/10 animate-pulse" />
+                  <span className="block h-3 w-5/6 rounded bg-white/10 animate-pulse" />
+                  <span className="block h-3 w-2/3 rounded bg-white/10 animate-pulse" />
+                </div>
               )}
               {!marketData.isLoading && !marketData.error && marketData.description && (
-                <p className="text-xs lg:text-sm text-white/70 leading-relaxed">{marketData.description}</p>
+                <p className="text-xs lg:text-sm text-white/70 leading-relaxed break-words [overflow-wrap:anywhere]">{marketData.description}</p>
               )}
               {!marketData.isLoading && marketData.error && (
                 <p className="text-xs lg:text-sm text-red-400/80">Description unavailable</p>
