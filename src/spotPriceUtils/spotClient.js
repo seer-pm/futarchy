@@ -17,6 +17,7 @@ import { ethers } from 'ethers';
 import { fetchBalancerHopCandles } from './balancerHopClient';
 import { fetchSpotFromBalancer } from '../lib/clients/balancerClient';
 import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
+import { pickSearchPool } from './searchPoolMatch.mjs';
 
 
 // ==============================================================
@@ -115,11 +116,16 @@ function parseConfig(input) {
 
 /**
  * Search for pool on GeckoTerminal
+ *
+ * Matches on the pool's base/quote token symbols, not its name: a name
+ * match also accepts the reversed pair (USDC / WETH for WETH/USDC), whose
+ * candles are the reciprocal price. A reversed pool is only used when no
+ * pool has the requested orientation, and is flagged so the caller inverts.
  */
 async function searchPool(network, base, quote) {
     const geckoNetwork = NETWORK_MAP[network]?.gecko || network;
     const query = `${base} ${quote}`;
-    const url = `${GECKO_API}/search/pools?query=${encodeURIComponent(query)}&network=${geckoNetwork}`;
+    const url = `${GECKO_API}/search/pools?query=${encodeURIComponent(query)}&network=${geckoNetwork}&include=base_token,quote_token`;
 
     console.log('[spotClient] Searching:', url);
 
@@ -127,20 +133,15 @@ async function searchPool(network, base, quote) {
     if (!res.ok) throw new Error(`Search failed: ${res.status}`);
 
     const data = await res.json();
-    const pools = data.data || [];
-
-    // Find matching pool
-    const match = pools.find(p => {
-        const name = p.attributes?.name?.toLowerCase() || '';
-        return name.includes(base.toLowerCase()) && name.includes(quote.toLowerCase());
-    });
+    const match = pickSearchPool(data, base, quote);
 
     if (!match) throw new Error(`Pool not found: ${base}/${quote}`);
 
     return {
-        address: match.attributes?.address,
-        name: match.attributes?.name,
-        network: match.relationships?.network?.data?.id || geckoNetwork,
+        address: match.pool.attributes?.address,
+        name: match.pool.attributes?.name,
+        network: match.pool.relationships?.network?.data?.id || geckoNetwork,
+        reversed: match.reversed,
     };
 }
 
@@ -456,6 +457,12 @@ export async function fetchSpotCandles(configString, closeTimestamp = null) {
         // Fetch candles
         let candles = await fetchCandles(pool, config.interval, config.limit, closeTimestamp);
         console.log('[spotClient] Fetched', candles.length, 'candles');
+
+        // A search that only found the reversed pair (quote / base) returns
+        // the reciprocal price; flip it before any rate is applied.
+        if (pool.reversed) {
+            candles = candles.map(c => ({ ...c, value: 1 / c.value }));
+        }
 
         // Filter candles by closeTimestamp if provided
         if (closeTimestamp && typeof closeTimestamp === 'number') {
