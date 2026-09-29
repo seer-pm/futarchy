@@ -5,27 +5,12 @@ import { ethers } from 'ethers';
 // Replace useMetaMask with wagmi hooks
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { CowSdk, OrderKind } from '@gnosis.pm/cow-sdk';
-import { fetchSushiSwapRoute } from '../../../utils/sushiswapHelper';
-import { executeV3Swap, checkAndApproveTokenForV3Swap, executeAlgebraExactSingle, SWAPR_V3_ROUTER } from '../../../utils/sushiswapV3Helper';
-import {
-    checkAndApproveForUniswapSDK,
-    executeSwapForUniswapSDK,
-    getUniswapV3QuoteWithPriceImpact,
-    getPoolSqrtPrice
-} from '../../../utils/uniswapSdk';
-import {
-    getAlgebraQuoteWithSlippage,
-    sqrtPriceX96ToPrice
-} from '../../../utils/algebraQuoter';
-import { getBestRpcProvider, getBestRpc, clearRpcCache } from '../../../utils/getBestRpc';
 import {
     ERC20_ABI,
     FUTARCHY_ROUTER_ABI,
     PRECISION_CONFIG as DEFAULT_PRECISION_CONFIG,
     DEFAULT_BASE_TOKENS_CONFIG,
     FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS,
-    SUSHISWAP_V2_ROUTER as DEFAULT_SUSHISWAP_V2_ROUTER,
 } from './constants/contracts';
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { useRequiredChain } from '../../../hooks/useChainValidation';
@@ -37,7 +22,8 @@ import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapter
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
 import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, describeQuoteError } from '../../../utils/txErrors';
-import { minReceiveFromQuote, compareQuotes } from '../../../utils/swapQuoteMath';
+import { minReceiveFromQuote, compareQuotes, slippagePctToBps, slippageBpsForMinimum, executionPriceFor } from '../../../utils/swapQuoteMath';
+import { quoteSeerSwap, executeSeerSwap, getSeerPublicClient, SEER_ROUTE_NAMES, SEER_DEFAULT_SWAP_ROUTER } from '../../../utils/seerSwap';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
 
@@ -93,46 +79,22 @@ export const STEPS_DATA = {
 };
 
 // Updated function to get steps data based on transaction type AND method
-const getStepsData = (transactionType, selectedMethod = 'cowswap') => {
-    // Default steps for Buy/Sell
-    // Special case for Uniswap with Permit2
-    if (selectedMethod === 'uniswapSdk') {
-        return {
-            1: {
-                title: 'Adding Collateral', // Method-agnostic
-                substeps: [
-                    { id: 1, text: 'Approving base token for Futarchy Router', completed: false },
-                    { id: 2, text: 'Split wrapping position', completed: false }
-                ]
-            },
-            2: {
-                title: 'Processing Swap',
-                substeps: [
-                    { id: 1, text: 'Step 1: Approve token to Permit2', completed: false },
-                    { id: 2, text: 'Step 2: Approve Permit2 to Universal Router', completed: false },
-                    { id: 3, text: 'Executing swap', completed: false }
-                ]
-            }
-        };
+const getStepsData = () => ({
+    1: {
+        title: 'Adding Collateral',
+        substeps: [
+            { id: 1, text: 'Approving base token for Futarchy Router', completed: false },
+            { id: 2, text: 'Split wrapping position', completed: false }
+        ]
+    },
+    2: {
+        title: 'Processing Swap',
+        substeps: [
+            { id: 1, text: 'Approving token for the swap router', completed: false },
+            { id: 2, text: 'Executing swap', completed: false }
+        ]
     }
-
-    return {
-        1: {
-            title: 'Adding Collateral', // Method-agnostic
-            substeps: [
-                { id: 1, text: 'Approving base token for Futarchy Router', completed: false },
-                { id: 2, text: 'Split wrapping position', completed: false }
-            ]
-        },
-        2: {
-            title: 'Processing Swap', // Method-agnostic
-            substeps: [
-                { id: 1, text: 'Approving token for spending', completed: false },
-                { id: 2, text: 'Executing swap', completed: false }
-            ]
-        }
-    };
-};
+});
 
 const LoadingSpinner = ({ className = "" }) => (
     <svg className={`animate-spin h-4 w-4 ${className}`} viewBox="0 0 24 24">
@@ -372,7 +334,6 @@ const ConfirmSwapModal = memo(({
     checkSellCollateral = false,
     useSushiV3 = true,  // Default to using SushiSwap V3
     hideToggleSushiSwap = true, // New flag to hide SushiSwap toggle
-    toggleHideCowSwap = true, // New flag to hide CoW Swap toggle (default: true)
     useBlockExplorer = false // Flag to force waiting for transaction confirmation
 }) => {
 
@@ -414,25 +375,6 @@ const ConfirmSwapModal = memo(({
         useSushiV3
     });
 
-    const [selectedSwapMethod, setSelectedSwapMethod] = useState(() => {
-        // Default to algebra, will be updated by useEffect when chain is known
-        if (typeof window !== 'undefined') {
-            const lastUsedMethod = localStorage.getItem('lastSwapMethod');
-            // Only allow saved methods that are valid
-            if (['cowswap', 'algebra', 'uniswapSdk'].includes(lastUsedMethod)) {
-                return lastUsedMethod;
-            }
-        }
-        return 'algebra'; // Default to 'algebra'
-    });
-
-    console.log(`[ConfirmSwapCow Debug - Render] selectedSwapMethod state: ${selectedSwapMethod}`);
-
-    // Get the steps data based on transaction type AND selected method
-    const stepsData = useMemo(() => {
-        console.log(`[ConfirmSwapCow Debug - Render] Recalculating stepsData for method: ${selectedSwapMethod}`);
-        return getStepsData(transactionData?.action, selectedSwapMethod);
-    }, [transactionData?.action, selectedSwapMethod]);
 
     const [expandedSteps, setExpandedSteps] = useState({});
     const [isProcessing, setIsProcessing] = useState(false);
@@ -448,8 +390,6 @@ const ConfirmSwapModal = memo(({
     const [transactionResultHash, setTransactionResultHash] = useState(null);
     const [orderStatus, setOrderStatus] = useState(null);
 
-    const [cowSwapQuoteData, setCowSwapQuoteData] = useState({ isLoading: true, error: null, data: null }); // <-- State for CoW quote
-    const [sushiSwapQuoteData, setSushiSwapQuoteData] = useState({ isLoading: true, error: null, data: null }); // <-- State for Sushi quote
 
     // ---> ADD State for final executed amount <---
     const [finalExecutedAmount, setFinalExecutedAmount] = useState(null);
@@ -484,8 +424,6 @@ const ConfirmSwapModal = memo(({
     // ---> Add State for UI-controlled explorer config <---
     const [uiExplorerUrl, setUiExplorerUrl] = useState(DEFAULT_EXPLORER_CONFIG.url);
     const [uiExplorerName, setUiExplorerName] = useState(DEFAULT_EXPLORER_CONFIG.name);
-    // ---> Add state for UI visibility <---
-    const [showExplorerConfigUi, setShowExplorerConfigUi] = useState(false);
 
     // Handle slippage changes with validation
     const handleSlippageChange = useCallback((value) => {
@@ -576,25 +514,6 @@ const ConfirmSwapModal = memo(({
     const publicClient = usePublicClient();
     const isSafeConnection = useSafeConnection();
 
-    // Effect to update swap method when chain changes
-    useEffect(() => {
-        if (chain?.id === 1) {
-            // Force UniswapSDK on Ethereum mainnet
-            setSelectedSwapMethod('uniswapSdk');
-        } else if (selectedSwapMethod === 'uniswapSdk' || selectedSwapMethod === 'uniswap') {
-            // If switching away from Ethereum and using Uniswap, switch to Algebra
-            setSelectedSwapMethod('algebra');
-        }
-    }, [chain?.id, selectedSwapMethod]);
-
-    // Effect to save the selected swap method to localStorage
-    useEffect(() => {
-        if (typeof window !== 'undefined' && selectedSwapMethod && chain?.id !== 1) {
-            // Only save preference for non-Ethereum chains
-            localStorage.setItem('lastSwapMethod', selectedSwapMethod);
-        }
-    }, [selectedSwapMethod, chain?.id]);
-
     // Add debugging for connection state
     useEffect(() => {
         console.log('Wallet connection state:', {
@@ -639,10 +558,6 @@ const ConfirmSwapModal = memo(({
         });
         return ethersProvider;
     }, [publicClient]);
-
-    // Ref for polling retries and max attempts
-    const pollingRetryCountRef = useRef(0);
-    const MAX_POLLING_ATTEMPTS = 5;
 
     // Define backdrop variants for Framer Motion. Fade the backdrop colour in,
     // not the element's opacity: the panel is a child of this element, so an
@@ -783,6 +698,13 @@ const ConfirmSwapModal = memo(({
 
     // Use the contract config hook - get proposal ID from props or URL
     const { config, loading: configLoading, error: configError } = useContractConfig(proposalIdFromProps);
+
+    // One route per chain, both executed through @seer-pm/sdk (see utils/seerSwap):
+    // Uniswap on Ethereum, Swapr (Algebra) on Gnosis. The value selects the
+    // dialog's per-chain summary rows.
+    const swapChainId = config?.chainId ?? chain?.id;
+    const selectedSwapMethod = swapChainId === 1 ? 'uniswapSdk' : 'algebra';
+    const stepsData = useMemo(() => getStepsData(), []);
     // The swap route, quotes and token addresses all come from this market's chain
     const requiredChain = useRequiredChain(config?.chainId || 100);
 
@@ -792,7 +714,6 @@ const ConfirmSwapModal = memo(({
     // Destructure config values with fallbacks only for missing configs
     const {
         FUTARCHY_ROUTER_ADDRESS = DEFAULT_FUTARCHY_ROUTER_ADDRESS,
-        SUSHISWAP_V2_ROUTER = DEFAULT_SUSHISWAP_V2_ROUTER,
         MARKET_ADDRESS, // This should come from the extracted proposal ID
         BASE_TOKENS_CONFIG = DEFAULT_BASE_TOKENS_CONFIG,
         MERGE_CONFIG, // This should come from config
@@ -823,6 +744,9 @@ const ConfirmSwapModal = memo(({
             ? mergeConfig.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress
             : mergeConfig.companyPositions?.no?.wrap?.wrappedCollateralTokenAddress;
 
+        // The router the quoted trade approves (from the panel's quote), else the chain's default
+        const swapRouter = transactionData?.swapSpender || SEER_DEFAULT_SWAP_ROUTER[swapChainId];
+
         // Pairs the swap path will need allowance for, by action.
         // Buy:  base currency → futarchyRouter (split), conditional currency → swap router.
         // Sell: conditional company → swap router, conditional currency → futarchyRouter (merge).
@@ -830,11 +754,11 @@ const ConfirmSwapModal = memo(({
         if (transactionData.action === 'Buy') {
             pairs = [
                 { token: baseTokenConfig.currency.address, spender: futarchyRouter },
-                { token: condCurrency, spender: SWAPR_V3_ROUTER },
+                { token: condCurrency, spender: swapRouter },
             ];
         } else if (transactionData.action === 'Sell') {
             pairs = [
-                { token: condCompany, spender: SWAPR_V3_ROUTER },
+                { token: condCompany, spender: swapRouter },
                 { token: condCurrency, spender: futarchyRouter },
             ];
         } else {
@@ -872,7 +796,7 @@ const ConfirmSwapModal = memo(({
             }
         })();
         return () => { cancelled = true; };
-    }, [publicClient, account, transactionData?.action, transactionData?.outcome, config, FUTARCHY_ROUTER_ADDRESS]);
+    }, [publicClient, account, transactionData?.action, transactionData?.outcome, transactionData?.swapSpender, swapChainId, config, FUTARCHY_ROUTER_ADDRESS]);
 
     // Create a console log for debugging
     console.log('🔄 ConfirmSwapModal config status:', {
@@ -1345,99 +1269,93 @@ const ConfirmSwapModal = memo(({
         }
     };
 
-    // A fresh on-chain quote for the confirmed amount: the Futarchy quote
-    // helper for Algebra (Gnosis) and QuoterV2 for the Uniswap SDK (Ethereum).
-    // Returns null when there is no fresh-quote source for this swap.
-    const fetchFreshQuote = async (amountInWei, amount) => {
-        if (transactionData.action !== 'Buy' && transactionData.action !== 'Sell') return null;
+    // Tokens this Buy/Sell swaps, on the chosen outcome's side:
+    // currency → company to buy, company → currency to sell.
+    const swapTokens = () => {
+        const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG;
         const isYes = transactionData.outcome === 'Event Will Occur';
-        const isBuy = transactionData.action === 'Buy';
+        const currency = (isYes ? mergeConfig.currencyPositions.yes : mergeConfig.currencyPositions.no).wrap.wrappedCollateralTokenAddress;
+        const company = (isYes ? mergeConfig.companyPositions.yes : mergeConfig.companyPositions.no).wrap.wrappedCollateralTokenAddress;
+        return transactionData.action === 'Buy'
+            ? { tokenIn: currency, tokenOut: company }
+            : { tokenIn: company, tokenOut: currency };
+    };
 
-        if (selectedSwapMethod === 'algebra') {
-            if (!proposalIdFromProps) return null;
-            const { getSwapQuote } = await import('../../../utils/FutarchyQuoteHelper');
-            const quote = await getSwapQuote({
-                proposal: proposalIdFromProps,
-                amount: ethers.utils.formatEther(amountInWei),
-                isYesPool: isYes,
-                isInputCompanyToken: !isBuy,
-                slippagePercentage: getSafeSlippageTolerance() / 100
-            }, await getBestRpcProvider(100));
-            return quote ? { amountOutRaw: quote.raw.amountOut, partialFill: Boolean(quote.partialFill) } : null;
-        }
-
-        if (selectedSwapMethod === 'uniswapSdk') {
-            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG;
-            const currency = isYes ? mergeConfig.currencyPositions.yes : mergeConfig.currencyPositions.no;
-            const company = isYes ? mergeConfig.companyPositions.yes : mergeConfig.companyPositions.no;
-            const quote = await getUniswapV3QuoteWithPriceImpact({
-                tokenIn: (isBuy ? currency : company).wrap.wrappedCollateralTokenAddress,
-                tokenOut: (isBuy ? company : currency).wrap.wrappedCollateralTokenAddress,
-                amountIn: amount,
-                fee: 500,
-                provider: await getBestRpcProvider(1),
-                chainId: 1
-            });
-            return { amountOutRaw: quote.amountOut, partialFill: false };
-        }
-
-        return null;
+    // A fresh quote for the confirmed amount from Seer's Lens quoter. It is
+    // the trade that gets sent: its calldata carries the minimum output.
+    const fetchFreshQuote = async (amountInWei, slippageBps) => {
+        if (transactionData.action !== 'Buy' && transactionData.action !== 'Sell') return null;
+        const { tokenIn, tokenOut } = swapTokens();
+        return quoteSeerSwap({
+            chainId: swapChainId,
+            account,
+            tokenIn,
+            tokenOut,
+            amountInRaw: amountInWei.toString(),
+            slippageBps
+        });
     };
 
     // Shows a re-quoted output in place of the one on screen.
     const applyRefreshedQuote = (amountOutRaw) => {
         refreshedQuoteRef.current = { buyAmount: amountOutRaw.toString() };
-        const update = (prev) => (prev?.data
+        setSwapRouteData((prev) => (prev?.data
             ? { ...prev, data: { ...prev.data, buyAmount: amountOutRaw.toString() } }
-            : prev);
-        setSwapRouteData(update);
-        if (selectedSwapMethod === 'algebra') setSushiSwapQuoteData(update);
+            : prev));
     };
 
-    // Re-quotes right before sending. The transaction's minimum output stays
-    // the Min. Receive the user confirmed; if the fresh quote is below it the
-    // swap would revert, so the dialog shows the new quote and stops.
-    // Returns false when the swap must not be sent.
-    const requoteBeforeSend = async (amountInWei, amount) => {
+    // Re-quotes right before sending and returns the trade to send, or null
+    // to stop. The transaction's minimum output is never below the Min.
+    // Receive the user confirmed: if the fresh quote's minimum at the user's
+    // tolerance is lower, it is re-quoted with just enough slippage to keep
+    // that minimum. If the fresh quote itself is below it, the swap would
+    // revert, so the dialog shows the new quote and stops.
+    const requoteBeforeSend = async (amountInWei) => {
         const confirmedAmountOutRaw = swapRouteData.data?.buyAmount;
-        if (!confirmedAmountOutRaw) return true;
-
-        let fresh;
-        try {
-            fresh = await fetchFreshQuote(amountInWei, amount);
-        } catch (quoteError) {
-            const { kind, message } = describeQuoteError(quoteError);
-            if (kind === 'network') {
-                // The confirmed Min. Receive still protects the swap
-                console.warn('[ConfirmSwapModal] Could not refresh the quote, sending with the confirmed minimum:', quoteError);
-                return true;
-            }
-            setError(message);
-            return false;
+        if (!confirmedAmountOutRaw) {
+            setError('A current on-chain pool quote is required before this swap can be submitted.');
+            return null;
         }
-        if (!fresh) return true;
-
-        if (fresh.partialFill) {
-            setError('The pool can no longer fill this amount. Reduce the amount and try again.');
-            return false;
-        }
-
         const tolerance = getSafeSlippageTolerance();
+        const toleranceBps = slippagePctToBps(tolerance);
+        const confirmedMin = BigInt(minimumFromQuote(confirmedAmountOutRaw).toString());
+
+        const quote = async (bps) => {
+            try {
+                return await fetchFreshQuote(amountInWei, bps);
+            } catch (quoteError) {
+                setError(describeQuoteError(quoteError).message);
+                return null;
+            }
+        };
+
+        const fresh = await quote(toleranceBps);
+        if (!fresh) return null;
+
         const { movedPct, exceedsTolerance } = compareQuotes({
             confirmedAmountOutRaw,
-            freshAmountOutRaw: fresh.amountOutRaw,
+            freshAmountOutRaw: fresh.amountOut.toString(),
             slippagePct: tolerance
         });
 
         if (exceedsTolerance) {
-            applyRefreshedQuote(fresh.amountOutRaw);
+            applyRefreshedQuote(fresh.amountOut);
             setPriceMoveNotice(`The price moved ${movedPct.toFixed(2)}% since the quote, beyond your ${tolerance}% slippage tolerance. The quote has been updated: review Min. Receive and confirm again.`);
-            return false;
+            return null;
         }
         if (Math.abs(movedPct) >= 0.01) {
             setPriceMoveNotice(`The quote changed by ${movedPct > 0 ? '-' : '+'}${Math.abs(movedPct).toFixed(2)}% since it was shown, within your ${tolerance}% tolerance. Min. Receive is unchanged.`);
         }
-        return true;
+        if (fresh.minimumAmountOut() >= confirmedMin) return fresh;
+
+        const tightened = await quote(slippageBpsForMinimum(fresh.amountOut, confirmedMin, toleranceBps));
+        if (!tightened) return null;
+        if (tightened.minimumAmountOut() < confirmedMin) {
+            applyRefreshedQuote(tightened.amountOut);
+            setPriceMoveNotice(`The price moved again while re-quoting. The quote has been updated: review Min. Receive and confirm again.`);
+            return null;
+        }
+        return tightened;
     };
 
     // Refactor handleConfirmSwap
@@ -1530,7 +1448,8 @@ const ConfirmSwapModal = memo(({
             });
 
             // Re-quote before any transaction (including the collateral split)
-            if (requiresPoolQuote && !(await requoteBeforeSend(amountInWei, amount))) {
+            const quotedTrade = await requoteBeforeSend(amountInWei);
+            if (!quotedTrade) {
                 setIsProcessing(false);
                 setOrderStatus(null);
                 setProcessingStep(null);
@@ -1563,95 +1482,26 @@ const ConfirmSwapModal = memo(({
                 setExpandedSteps(prev => ({ ...prev, 1: false, 2: true })); // Expand step 2
             }
 
-            // --- Step 2: Approval & Execution (Conditional based on selectedSwapMethod) ---
-            console.log(`[ConfirmSwapCow Debug - Toggle] Entering Step 2 for ${selectedSwapMethod}`);
-            setCurrentSubstep({ step: 2, substep: 1 }); // Ensure focus is on approval substep
-
-            // Determine tokens for swap (same logic as before)
-            let tokenIn, tokenOut;
-            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG;
-            const baseTokenConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG;
-
-            // --> ADD Definition for eventHappens <--
-            const eventHappens = transactionData.outcome === 'Event Will Occur';
-            console.log(`[ConfirmSwapCow Debug - Toggle] eventHappens determined as: ${eventHappens}`);
-
-            // Log the config being used
-            console.log('[DEBUG] Using token configurations:', {
-                mergeConfig,
-                baseTokenConfig,
-                eventHappens,
-                action: transactionData.action
+            // --- Step 2: Approval & swap, one executor for both chains (@seer-pm/sdk) ---
+            setCurrentSubstep({ step: 2, substep: 1 });
+            const swapHash = await executeSeerSwap({
+                trade: quotedTrade,
+                account,
+                walletClient,
+                connector,
+                useUnlimitedApproval,
+                onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
+                onApprovalComplete: () => {
+                    markSubstepCompleted(2, 1);
+                    setCurrentSubstep({ step: 2, substep: 2 });
+                }
             });
+            setTransactionResultHash(swapHash);
 
-            if (transactionData.action === 'Buy') {
-                // Buy: Currency position -> Company position (same outcome)
-                tokenIn = transactionData.outcome === 'Event Will Occur'
-                    ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                tokenOut = transactionData.outcome === 'Event Will Occur'
-                    ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-            } else { // Sell
-                // Sell: Company position -> Currency position (same outcome)
-                tokenIn = transactionData.outcome === 'Event Will Occur'
-                    ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-                tokenOut = transactionData.outcome === 'Event Will Occur'
-                    ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-            }
-
-            console.log('[DEBUG] Token swap configuration:', {
-                tokenIn,
-                tokenOut,
-                action: transactionData.action,
-                outcome: transactionData.outcome
-            });
-            // --- Buy/Sell Path ---
-            console.log(`[ConfirmSwapCow Debug - Toggle] Handling ${transactionData.action} via ${selectedSwapMethod}`);
-            let swapTx;
-
-            if (selectedSwapMethod === 'cowswap') {
-                // --- CoW Swap Approval ---
-                const eventHappens = transactionData.outcome === 'Event Will Occur';
-                console.log('[DEBUG] CoW Buy/Sell - Using signer for approval:', {
-                    signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                    connectorName: walletClient?.connector?.name
-                });
-
-                const needsApprovalCow = await checkAndApproveTokenForV3Swap({
-                    walletClient,
-                    connector,
-                    signer: signer,
-                    tokenAddress: tokenIn,
-                    amount: amountInWei,
-                    eventHappens, // Keep for V3 helper context if needed
-                    onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                    onApprovalComplete: () => markSubstepCompleted(2, 1),
-                    publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                    useUnlimitedApproval
-                });
-                if (!needsApprovalCow) markSubstepCompleted(2, 1);
-                setCurrentSubstep({ step: 2, substep: 2 });
-
-                // --- CoW Swap Execution ---
-                swapTx = await executeV3Swap({ // executeV3Swap handles CoW swap logic
-                    signer,
-                    tokenIn,
-                    tokenOut,
-                    amount: amountInWei,
-                    eventHappens,
-                    options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                });
-
-                if (!swapTx || !swapTx.hash) throw new Error("Failed to get Order ID from CoW Swap submission.");
-                console.log(`[ConfirmSwapCow Debug - Toggle] CoW Swap submitted. Order ID: ${swapTx.hash}`);
-                setTransactionResultHash(swapTx.hash);
-
-                // Check for Safe wallet
-                if (isSafeConnection(walletClient) && !useBlockExplorer) {
-                    console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
+            let receipt;
+            if (isSafeConnection(walletClient)) {
+                // The hash is a safeTxHash: the Safe executes the swap later
+                if (!useBlockExplorer) {
                     setOrderStatus('fulfilled');
                     setProcessingStep('completed');
                     setIsProcessing(false);
@@ -1660,258 +1510,28 @@ const ConfirmSwapModal = memo(({
                     onClose(); // Auto-close for Safe
                     return;
                 }
-
-                setOrderStatus('submitted'); // Trigger polling
-
-            } else if (selectedSwapMethod === 'algebra') {
-                // --- Algebra (Swapr) Approval ---
-                console.log('[ConfirmSwapCow Debug - Toggle] Approving for Algebra (Swapr)');
-                console.log('[DEBUG] Algebra Buy/Sell - Using signer for approval:', {
-                    signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                    connectorName: walletClient?.connector?.name
+                receipt = await waitForSafeTxReceipt({
+                    chainId: await walletClient.getChainId(),
+                    safeTxHash: swapHash,
+                    publicClient
                 });
+            } else {
+                receipt = await getSeerPublicClient(quotedTrade.chainId).waitForTransactionReceipt({ hash: swapHash });
+            }
 
-                const needsApprovalAlgebra = await checkAndApproveTokenForV3Swap({
-                    walletClient,
-                    connector,
-                    signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
-                    spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
-                    onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                    onApprovalComplete: () => markSubstepCompleted(2, 1),
-                    publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                    useUnlimitedApproval
-                });
-                if (!needsApprovalAlgebra) markSubstepCompleted(2, 1);
-                setCurrentSubstep({ step: 2, substep: 2 });
-
-                // --- Algebra (Swapr) Execution ---
-                console.log('[ConfirmSwapCow Debug - Toggle] Executing via Algebra (Swapr) Router (executeAlgebraExactSingle)');
-
-                const minOutputAmount = minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw);
-
-                swapTx = await executeAlgebraExactSingle({ // Calls helper configured for Algebra (Swapr)
-                    signer,
-                    tokenIn,
-                    tokenOut,
-                    amount: amountInWei,
-                    slippageBps: Math.round(getSafeSlippageTolerance() * 100),
-                    minOutputAmount, // Pass pre-calculated if available
-                    options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                });
-
-                if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Algebra (Swapr) execution.");
-
-                console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx submitted: ${swapTx.hash}`);
-                console.log(`[ConfirmSwapCow Debug - Toggle] Transaction object:`, {
-                    hash: swapTx.hash,
-                    hasWaitMethod: typeof swapTx.wait === 'function',
-                    confirmations: swapTx.confirmations,
-                    blockNumber: swapTx.blockNumber
-                });
-                setTransactionResultHash(swapTx.hash); // Store Tx Hash
-
-                let receipt;
-                // Check for Safe wallet
-                if (isSafeConnection(walletClient)) {
-                    if (!useBlockExplorer) {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onSafeTransaction?.(); // Trigger toast
-                        onTransactionComplete?.();
-                        onClose(); // Auto-close for Safe
-                        return;
-                    } else {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                        const chainId = await walletClient.getChainId();
-                        receipt = await waitForSafeTxReceipt({
-                            chainId,
-                            safeTxHash: swapTx.hash,
-                            publicClient
-                        });
-                    }
-                } else {
-                    // Wait for V3 confirmation *here*
-                    console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Algebra (Swapr) Tx confirmation...');
-                    receipt = await swapTx.wait();
-                }
-
-                try {
-                    if (receipt.status === 0) {
-                        const revertReason = parseRevertReason(receipt, null);
-                        const errorMessage = revertReason
-                            ? `Transaction failed: ${revertReason}`
-                            : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                        console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx reverted:', { receipt, revertReason });
-                        throw new Error(errorMessage);
-                    }
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx Confirmed! Hash: ${swapTx.hash}`, {
-                        status: receipt.status,
-                        blockNumber: receipt.blockNumber,
-                        confirmations: receipt.confirmations,
-                        gasUsed: receipt.gasUsed?.toString()
-                    });
-                    setOrderStatus('fulfilled'); // Mark as fulfilled immediately
-                    setProcessingStep('completed'); // Mark process complete
-                    setIsProcessing(false); // Unlock UI
-                    onTransactionComplete?.(); // Refresh balances; the modal stays open
-                    // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
-                } catch (waitError) {
-                    console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
-                    // Enhanced error with receipt details for debugging
-                    if (waitError.receipt) {
-                        console.error('Transaction receipt details:', waitError.receipt);
-                    }
-                    throw waitError; // Re-throw to be caught by main catch block
-                }
-
-            } else if (selectedSwapMethod === 'uniswapSdk') {
-                // --- Uniswap SDK Cartridge Flow ---
-                console.log('[ConfirmSwapCow Debug - Toggle] Using Uniswap SDK flow for Buy/Sell');
-
-                // Use the SDK approval flow with step callbacks
-                await checkAndApproveForUniswapSDK(
-                    tokenIn,
-                    null, // spender not needed, SDK handles Permit2 flow
-                    amountInWei,
-                    signer,
-                    (stepNum, isComplete) => {
-                        if (stepNum === 1) {
-                            if (!isComplete) {
-                                setCurrentSubstep({ step: 2, substep: 1 });
-                            } else {
-                                markSubstepCompleted(2, 1);
-                            }
-                        } else if (stepNum === 2) {
-                            if (!isComplete) {
-                                setCurrentSubstep({ step: 2, substep: 2 });
-                            } else {
-                                markSubstepCompleted(2, 2);
-                            }
-                        }
-                    },
-                    useUnlimitedApproval,
-                    walletClient,
-                    publicClient,
-                    account,
-                    connector
-                );
-
-                // Mark substep 2 as completed if not already done
-                markSubstepCompleted(2, 2);
-
-                // Move to swap execution step
-                setCurrentSubstep({ step: 2, substep: 3 });
-
-                // Execute swap using SDK flow
-                console.log('[ConfirmSwapCow Debug - Toggle] Executing Uniswap SDK swap');
-
-                const quotedAmountOutRaw = swapRouteData.data?.buyAmount || transactionData.amountOutRaw;
-                if (!quotedAmountOutRaw || ethers.BigNumber.from(quotedAmountOutRaw).isZero()) {
-                    throw new Error('A non-zero on-chain quote is required for minOut');
-                }
-
-                swapTx = await executeSwapForUniswapSDK(
-                    tokenIn,
-                    tokenOut,
-                    amount, // Use the original string amount
-                    quotedAmountOutRaw,
-                    account,
-                    signer,
-                    getSafeSlippageTolerance() / 100,
-                    walletClient,
-                    publicClient,
-                    account,
-                    transactionData.outputDecimals || 18,
-                    connector
-                );
-
-                if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
-
-                console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx submitted: ${swapTx.hash}`);
-                setTransactionResultHash(swapTx.hash);
-
-                // Mark swap execution as completed
-                markSubstepCompleted(2, 3);
-
-                let receipt;
-                try {
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            setOrderStatus('fulfilled');
-                            setProcessingStep('completed');
-                            setIsProcessing(false);
-                            onSafeTransaction?.(); // Trigger toast
-                            onTransactionComplete?.();
-                            onClose(); // Auto-close for Safe
-                            return;
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: swapTx.hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        // Wait for transaction confirmation
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap SDK Tx confirmation...');
-                        // Check if tx has .wait() method (ethers) or just { hash } (viem)
-                        if (typeof swapTx.wait === 'function') {
-                            // Ethers tx
-                            receipt = await swapTx.wait();
-                        } else {
-                            // Viem tx - use publicClient to wait
-                            receipt = await publicClient.waitForTransactionReceipt({ hash: swapTx.hash });
-                        }
-                    }
-
-                    if (receipt.status === 0 || receipt.status === 'reverted') {
-                        const revertReason = parseRevertReason(receipt);
-                        const errorMessage = revertReason
-                            ? `Transaction failed: ${revertReason}`
-                            : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx reverted:', { receipt, revertReason });
-                        throw new Error(errorMessage);
-                    }
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed! Hash: ${swapTx.hash}`);
-                    setOrderStatus('fulfilled');
-                    setProcessingStep('completed');
-                    setIsProcessing(false);
-                    onTransactionComplete?.();
-                } catch (waitError) {
-                    console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
-
-                    // Check if transaction actually succeeded despite wait() error
-                    if (swapTx.hash) {
-                        try {
-                            const txReceipt = await provider.getTransactionReceipt(swapTx.hash);
-                            if (txReceipt && txReceipt.status === 1) {
-                                console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed despite wait() error! Hash: ${swapTx.hash}`);
-                                setOrderStatus('fulfilled');
-                                setProcessingStep('completed');
-                                setIsProcessing(false);
-                                onTransactionComplete?.();
-                                return; // Exit successfully
-                            }
-                        } catch (receiptError) {
-                            console.error('[ConfirmSwapCow Debug - Toggle] Failed to fetch receipt:', receiptError);
-                        }
-                    }
-
-                    throw waitError;
-                }
-
-                } else {
-                    throw new Error(`Unsupported swap method: ${selectedSwapMethod}`);
-                }
-
-            // Note: CoW Swap path does not set isProcessing=false or processingStep=completed here.
-            // That happens within the polling useEffect when a final status is reached.
+            if (receipt.status === 0 || receipt.status === 'reverted') {
+                const revertReason = parseRevertReason(receipt);
+                const revertError = new Error(revertReason
+                    ? `Transaction failed: ${revertReason}`
+                    : 'Transaction reverted - likely due to slippage or insufficient output amount');
+                revertError.receipt = receipt;
+                throw revertError;
+            }
+            markSubstepCompleted(2, 2);
+            setOrderStatus('fulfilled');
+            setProcessingStep('completed');
+            setIsProcessing(false);
+            onTransactionComplete?.(); // Refresh balances; the modal stays open
 
         } catch (error) {
             // Handle Safe transaction signal
@@ -1962,101 +1582,6 @@ const ConfirmSwapModal = memo(({
         }
     };
 
-    // Modify useEffect for Polling Order Status - check selectedSwapMethod
-    useEffect(() => {
-        // Only poll if we have an order ID, CoW was SELECTED, and status is trackable
-        if (!transactionResultHash || selectedSwapMethod !== 'cowswap' || ['fulfilled', 'expired', 'cancelled', 'failed'].includes(orderStatus)) {
-            // Log why polling isn't starting/continuing
-            if (selectedSwapMethod !== 'cowswap') console.log('[ConfirmSwapCow Debug - Polling] Skipping poll: CoW Swap was not the selected method.');
-            else if (!transactionResultHash) console.log('[ConfirmSwapCow Debug - Polling] Skipping poll: No Order ID.');
-            else console.log(`[ConfirmSwapCow Debug - Polling] Skipping poll: Final status reached (${orderStatus}).`);
-            return;
-        }
-
-        // If orderStatus is 'submitted', it means we are initiating polling for a new CoW order.
-        // Set to 'tracking' and reset retry count for this specific transactionResultHash.
-        if (orderStatus === 'submitted') {
-            console.log(`[ConfirmSwapCow Debug - Polling] Initializing CoW order tracking for: ${transactionResultHash}. Setting status to tracking.`);
-            setOrderStatus('tracking');
-            pollingRetryCountRef.current = 0; // Reset retries for a new order being tracked
-        } else {
-            console.log(`[ConfirmSwapCow Debug - Polling] Continuing CoW order polling for: ${transactionResultHash}. Current status: ${orderStatus}`);
-        }
-
-        const POLLING_INTERVAL = 10000; // Poll every 10 seconds
-        let intervalId = null;
-
-        const checkStatus = async () => {
-            try {
-                // Assume chainId 100 (Gnosis) based on previous context
-                // TODO: Make chainId dynamic if needed
-                const chainId = 100;
-                const cowSdk = new CowSdk(chainId); // SDK instance for API call
-                console.log(`[ConfirmSwapCow Debug - Polling] Checking status for ${transactionResultHash} (Attempt: ${pollingRetryCountRef.current + 1})...`);
-                const orderDetails = await cowSdk.cowApi.getOrder(transactionResultHash);
-
-                // Reset retry count on successful API communication
-                pollingRetryCountRef.current = 0;
-
-                console.log(`[ConfirmSwapCow Debug - Polling] Received status: ${orderDetails.status}`, orderDetails);
-
-                // Update state based on fetched status
-                setOrderStatus(orderDetails.status);
-
-                // Stop polling if order reached a final state
-                if (['fulfilled', 'expired', 'cancelled'].includes(orderDetails.status)) {
-                    console.log(`[ConfirmSwapCow Debug - Polling] Order reached final state: ${orderDetails.status}. Stopping polling.`);
-                    if (intervalId) clearInterval(intervalId);
-                    setIsProcessing(false); // Unlock UI now
-                    setProcessingStep('completed'); // Mark overall process complete
-
-                    // ---> If fulfilled, store the executed amount <---
-                    if (orderDetails.status === 'fulfilled' && orderDetails.executedBuyAmount) {
-                        console.log(`[ConfirmSwapCow Debug - Polling] Order fulfilled! Storing executed amount: ${orderDetails.executedBuyAmount}`);
-                        setFinalExecutedAmount(orderDetails.executedBuyAmount);
-                    }
-                    // --- End store executed amount ---
-
-                    if (orderDetails.status === 'fulfilled') {
-                        onTransactionComplete?.(); // Notify parent only on fulfillment
-                    }
-                }
-            } catch (error) {
-                console.error(`[ConfirmSwapCow Debug - Polling] Error checking order status for ${transactionResultHash}:`, error);
-                pollingRetryCountRef.current += 1;
-
-                if (error.response?.status === 404) {
-                    console.warn(`[ConfirmSwapCow Debug - Polling] Order ${transactionResultHash} not found (404). Stopping polling and marking as failed.`);
-                    if (intervalId) clearInterval(intervalId);
-                    setOrderStatus('failed');
-                    setIsProcessing(false);
-                    setProcessingStep('completed');
-                    pollingRetryCountRef.current = 0; // Reset for next potential distinct order
-                } else if (pollingRetryCountRef.current >= MAX_POLLING_ATTEMPTS) {
-                    console.warn(`[ConfirmSwapCow Debug - Polling] Max polling attempts (${MAX_POLLING_ATTEMPTS}) reached for ${transactionResultHash}. Stopping polling and marking as failed.`);
-                    if (intervalId) clearInterval(intervalId);
-                    setOrderStatus('failed');
-                    setIsProcessing(false);
-                    setProcessingStep('completed');
-                    pollingRetryCountRef.current = 0; // Reset for next potential distinct order
-                }
-                // If not a 404 and not max retries, polling will continue on the next interval
-            }
-        };
-
-        // Initial check immediately
-        checkStatus();
-        // Set up interval for subsequent checks
-        intervalId = setInterval(checkStatus, POLLING_INTERVAL);
-
-        // Cleanup function to clear interval when component unmounts or dependencies change
-        return () => {
-            console.log(`[ConfirmSwapCow Debug - Polling] Clearing interval for ${transactionResultHash}`);
-            if (intervalId) clearInterval(intervalId);
-        };
-
-    }, [transactionResultHash, selectedSwapMethod, orderStatus, onTransactionComplete]); // Add orderStatus and onTransactionComplete
-
     const toggleStepExpansion = (step) => {
         setExpandedSteps(prev => ({
             ...prev,
@@ -2064,590 +1589,73 @@ const ConfirmSwapModal = memo(({
         }));
     };
 
-    // Modify fetchRoute in useEffect to fetch BOTH quotes
+    // The dialog's quote. The trade panel already quoted this swap through
+    // @seer-pm/sdk and passes the result; without it, quote here the same way.
+    // A pre-send re-quote (requoteBeforeSend) replaces the output shown.
     useEffect(() => {
-        const fetchQuotes = async () => {
-            console.log('[ConfirmSwapCow Debug - Toggle] Entering fetchQuotes');
-
-            // ---> Prevent re-fetching if already processing or completed <---
-            if (isProcessing || transactionResultHash || finalExecutedAmount) {
-                console.log('[ConfirmSwapCow Debug - Toggle] Skipping fetchQuotes: Already processing, submitted, or fulfilled.');
-                return;
-            }
-            // --- End Prevent re-fetching ---
-
-            if (!account || !transactionData.amount || !provider || !config) {
-                console.log('[ConfirmSwapCow Debug - Toggle] Exiting fetchQuotes early: Missing dependencies (waiting for initialization).');
-                // Don't set error state - just keep loading state while waiting for dependencies
-                // This prevents showing "Missing dependencies" error before modal fully initializes
-                return;
-            }
-
-            // Reset states based on selected method
-            console.log('[ConfirmSwapCow Debug - Toggle] Resetting quote states to loading.')
-
-            // Only reset relevant quote data based on selected method
-            if (selectedSwapMethod === 'cowswap') {
-                setCowSwapQuoteData({ isLoading: true, error: null, data: null });
-            } else if (selectedSwapMethod === 'uniswap' || selectedSwapMethod === 'uniswapSdk') {
-                // For Uniswap, we'll fetch a quote differently
-                setSwapRouteData({ isLoading: true, error: null, data: null });
-            } else {
-                // For Algebra and SushiSwap
-                setSushiSwapQuoteData({ isLoading: true, error: null, data: null });
-            }
-            // Reset the main display data
-            setSwapRouteData({ isLoading: true, error: null, data: null });
-
-            try {
-                const amount = transactionData.amount.split(' ')[0];
-                // Prefer raw wei value to avoid precision loss (same fix as handleConfirmSwapToggle)
-                const amountInWei = transactionData.amountInRaw
-                    ? ethers.BigNumber.from(transactionData.amountInRaw)
-                    : safeParseToWei(amount);
-                if (amountInWei.isZero()) throw new Error("Invalid amount");
-
-                let tokenIn, tokenOut;
-                const mergeConfig = MERGE_CONFIG;
-
-                if (transactionData.action === 'Buy') {
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-                } else { // Sell action
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                }
-                console.log('[ConfirmSwapCow Debug - Toggle] Determined Tokens:', { tokenIn, tokenOut });
-
-
-                // --- Handle Uniswap Quote Separately ---
-                if (selectedSwapMethod === 'uniswap' || selectedSwapMethod === 'uniswapSdk') {
-                    // Check if we have pre-calculated data from ShowcaseSwapComponent
-                    // Note: 'amountOutRaw' and 'priceAfter' would be available if passed correctly
-                    // Uniswap optimization: use 'executionPrice' and 'amountOutRaw' from transactionData if available
-                    if (transactionData.amountOutRaw && transactionData.priceAfter && transactionData.executionPrice) {
-                        console.log('[QUOTER CONFIRMSWAP] Using pre-calculated Uniswap quote from Showcase', transactionData);
-
-                        const uniswapPrecalc = {
-                            buyAmount: transactionData.amountOutRaw, // Use raw amount for precision
-                            sellAmount: amountInWei.toString(),
-                            swapPrice: transactionData.executionPrice.toString(),
-                            estimatedGas: '350000',
-                            feeAmount: '0',
-                            priceImpact: parseFloat(transactionData.priceImpact || 0),
-                            protocol: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
-                            protocolName: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
-                            currentPrice: parseFloat(transactionData.currentPrice || 0),
-                            executionPrice: parseFloat(transactionData.executionPrice || 0),
-                            poolPriceAfter: parseFloat(transactionData.priceAfter || 0),
-                            displayPrice: transactionData.executionPrice,
-                            // a pre-send re-quote replaces the panel's output
-                            ...(refreshedQuoteRef.current || {})
-                        };
-
-                        setSwapRouteData({
-                            isLoading: false,
-                            error: null,
-                            data: uniswapPrecalc
-                        });
-                        return; // Exit early
-                    }
-
-                    console.log('[QUOTER CONFIRMSWAP] Fetching Uniswap quote using QuoterV2');
-                    console.log('[QUOTER CONFIRMSWAP] Input data:', {
-                        tokenIn,
-                        tokenOut,
-                        amount,
-                        amountInWei: amountInWei.toString()
-                    });
-
-                    try {
-                        // For Uniswap SDK, use QuoterV2 to get accurate quote with price impact
-                        let chainId;
-                        try {
-                            chainId = await publicClient.getChainId();
-                        } catch (e) {
-                            // Fallback to checking window.ethereum
-                            if (typeof window !== 'undefined' && window.ethereum) {
-                                const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-                                chainId = parseInt(chainIdHex, 16);
-                            } else {
-                                chainId = 100; // Default to Gnosis
-                            }
-                        }
-                        console.log('[QUOTER CONFIRMSWAP] Chain ID:', chainId);
-                        console.log('[QUOTER CONFIRMSWAP] Network check:', {
-                            publicClientChain: publicClient?.chain,
-                            windowEthereumChainId: typeof window !== 'undefined' && window.ethereum ? window.ethereum.chainId : 'N/A'
-                        });
-
-                        let quoteResult = null;
-                        let poolData = null;
-                        let ethereumProvider = null;
-
-                        // Retry loop for RPC robustness (3 attempts)
-                        for (let attempt = 1; attempt <= 3; attempt++) {
-                            try {
-                                if (attempt > 1) console.log(`[QUOTER CONFIRMSWAP] Retry attempt ${attempt}/3...`);
-
-                                // Get real quote from QuoterV2 - use best available RPC for any chain
-                                ethereumProvider = await getBestRpcProvider(chainId);
-
-                                quoteResult = await getUniswapV3QuoteWithPriceImpact({
-                                    tokenIn,
-                                    tokenOut,
-                                    amountIn: amount,
-                                    fee: 500, // 0.05% fee tier for conditional tokens
-                                    provider: ethereumProvider,
-                                    chainId
-                                });
-
-                                console.log('[QUOTER CONFIRMSWAP] Quote result from QuoterV2:', quoteResult);
-
-                                // Get current pool sqrt price for price impact calculation
-                                poolData = await getPoolSqrtPrice(
-                                    tokenIn,
-                                    tokenOut,
-                                    quoteResult.feeTier,
-                                    ethereumProvider,
-                                    chainId
-                                );
-
-                                console.log('[QUOTER CONFIRMSWAP] Pool data:', poolData);
-
-                                // If we get here, both calls succeeded
-                                break;
-                            } catch (retryError) {
-                                console.warn(`[QUOTER CONFIRMSWAP] Attempt ${attempt} failed:`, retryError);
-                                if (attempt < 3) {
-                                    console.log('[QUOTER CONFIRMSWAP] Clearing RPC cache and retrying...');
-                                    clearRpcCache();
-                                    // Small delay
-                                    await new Promise(r => setTimeout(r, 1000));
-                                } else {
-                                    // Last attempt failed, throw to outer catch
-                                    throw retryError;
-                                }
-                            }
-                        }
-
-                        // Calculate price impact from sqrt prices
-                        const priceImpact = quoteResult.priceImpactPct;
-
-                        // Calculate raw prices from sqrtPriceX96
-                        const rawCurrentPrice = sqrtPriceX96ToPrice(poolData.sqrtPriceX96);
-                        const rawPoolPriceAfter = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
-
-                        // Execution price = average price you got (amountOut / amountIn)
-                        const amountOutFormatted = parseFloat(quoteResult.amountOutFormatted);
-                        const amountInFormatted = parseFloat(amount);
-                        const rawExecutionPrice = amountOutFormatted / amountInFormatted;
-
-                        // GOAL: Always show prices as "currency per company" (e.g., USDS per TSLAon)
-                        // Simple approach: We know action (Buy/Sell) and we know token addresses
-
-                        // Determine which tokens are token0 and token1 in the pool (lower address is token0)
-                        const token0Address = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenIn.toLowerCase() : tokenOut.toLowerCase();
-                        const token1Address = tokenIn.toLowerCase() < tokenOut.toLowerCase() ? tokenOut.toLowerCase() : tokenIn.toLowerCase();
-
-                        // Pool prices from sqrtPriceX96 are ALWAYS token1/token0
-                        // For Buy: input=currency, output=company → rawExecutionPrice = company/currency
-                        // For Sell: input=company, output=currency → rawExecutionPrice = currency/company
-
-                        const isBuy = transactionData.action === 'Buy';
-                        const isSell = transactionData.action === 'Sell';
-
-                        // Determine if pool price needs inversion
-                        // If token0 = currency and token1 = company: pool price = company/currency → INVERT
-                        // If token0 = company and token1 = currency: pool price = currency/company → DON'T INVERT
-                        let shouldInvertPoolPrices = false;
-                        if (isBuy) {
-                            // Buy: tokenIn=currency, tokenOut=company
-                            // If tokenIn < tokenOut: token0=currency, token1=company → pool=company/currency → INVERT
-                            // If tokenOut < tokenIn: token0=company, token1=currency → pool=currency/company → DON'T INVERT
-                            shouldInvertPoolPrices = (tokenIn.toLowerCase() < tokenOut.toLowerCase());
-                        } else if (isSell) {
-                            // Sell: tokenIn=company, tokenOut=currency
-                            // If tokenOut < tokenIn: token0=currency, token1=company → pool=company/currency → INVERT
-                            // If tokenIn < tokenOut: token0=company, token1=currency → pool=currency/company → DON'T INVERT
-                            shouldInvertPoolPrices = (tokenOut.toLowerCase() < tokenIn.toLowerCase());
-                        }
-
-                        const currentPrice = shouldInvertPoolPrices ? (1 / rawCurrentPrice) : rawCurrentPrice;
-                        const poolPriceAfter = shouldInvertPoolPrices ? (1 / rawPoolPriceAfter) : rawPoolPriceAfter;
-
-                        // Execution price: rawExecutionPrice = output/input
-                        // For Buy: output=company, input=currency → rawExecutionPrice = company/currency → INVERT
-                        // For Sell: output=currency, input=company → rawExecutionPrice = currency/company → DON'T INVERT
-                        const executionPrice = isBuy ? (1 / rawExecutionPrice) : rawExecutionPrice;
-
-                        // Calculate slippage (executionPrice vs currentPrice)
-                        const slippage = ((currentPrice - executionPrice) / currentPrice) * 100;
-
-                        console.log('[QUOTER CONFIRMSWAP] Price impact data:', {
-                            action: transactionData.action,
-                            outcome: transactionData.outcome,
-                            tokenIn,
-                            tokenOut,
-                            token0Address,
-                            token1Address,
-                            isBuy,
-                            isSell,
-                            shouldInvertPoolPrices,
-                            rawCurrentPrice,
-                            currentPrice,
-                            rawPoolPriceAfter,
-                            poolPriceAfter,
-                            rawExecutionPrice,
-                            executionPrice,
-                            priceImpact: priceImpact?.toFixed(4) + '%',
-                            slippage: slippage?.toFixed(4) + '%',
-                            amountOut: quoteResult.amountOutFormatted,
-                            amountIn: amount,
-                            note: 'Simplified logic: Buy → invert exec price, Sell → keep as-is. Prices always shown as currency per company'
-                        });
-
-                        const uniswapData = {
-                            buyAmount: quoteResult.amountOut, // Real output from QuoterV2
-                            sellAmount: amountInWei.toString(),
-                            swapPrice: quoteResult.effectivePrice.toString(),
-                            estimatedGas: quoteResult.gasEstimate || '350000',
-                            feeAmount: '0',
-                            priceImpact: priceImpact, // Real price impact from pool (poolPriceAfter - poolPriceBefore)
-                            slippage: slippage, // Slippage (currentPrice - executionPrice)
-                            protocol: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
-                            protocolName: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
-                            sqrtPriceX96After: quoteResult.sqrtPriceX96After,
-                            initializedTicksCrossed: quoteResult.initializedTicksCrossed,
-                            currentPrice: currentPrice, // Pool price before trade
-                            executionPrice: executionPrice, // Average execution price (amountOut/amountIn)
-                            poolPriceAfter: poolPriceAfter, // Pool price after trade
-                            poolAddress: poolData.poolAddress,
-                            decimalsOut: quoteResult.decimalsOut
-                        };
-
-                        console.log('[QUOTER CONFIRMSWAP] Final uniswapData:', uniswapData);
-
-                        setSwapRouteData({
-                            isLoading: false,
-                            error: null,
-                            data: uniswapData
-                        });
-
-                        console.log('[QUOTER CONFIRMSWAP] Uniswap quote set with QuoterV2:', uniswapData);
-                    } catch (error) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap QuoterV2 error:', error);
-                        setSwapRouteData({
-                            isLoading: false,
-                            error: error.message || 'On-chain pool quote unavailable',
-                            data: null
-                        });
-                    }
-                    return; // Exit early for Uniswap - don't fetch SushiSwap quote
-                }
-
-                // --- Fetch CoW Swap Quote --- (Run in parallel conceptually)
-                let cowPromise = (async () => {
-                    let cowError = null;
-                    let cowData = null;
-                    try {
-                        console.log('[ConfirmSwapCow Debug - Toggle] Attempting CoW Swap Quote (direct fetch)');
-                        const chainId = 100; // Or dynamic
-                        const quoteUrl = `https://api.cow.fi/xdai/api/v1/quote`;
-                        const quoteParams = { // Ensure this matches current needs
-                            kind: OrderKind.SELL,
-                            sellToken: tokenIn,
-                            buyToken: tokenOut,
-                            sellAmountBeforeFee: amountInWei.toString(),
-                            from: account,
-                            receiver: account,
-                            appData: JSON.stringify({
-                                appCode: 'Futarchy',
-                                environment: 'production',
-                                metadata: { orderClass: { orderClass: 'market' } }
-                            }),
-                            partiallyFillable: false,
-                            sellTokenBalance: 'erc20',
-                            buyTokenBalance: 'erc20',
-                            signingScheme: 'eip712',
-                            onchainOrder: false,
-                            priceQuality: 'verified',
-                            validTo: Math.floor(Date.now() / 1000) + 3600
-                        };
-                        const response = await fetch(quoteUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                            body: JSON.stringify(quoteParams)
-                        });
-                        const responseText = await response.text();
-                        if (!response.ok) throw new Error(`HTTP ${response.status} | ${responseText.substring(0, 200)}`);
-                        const quoteResponse = JSON.parse(responseText);
-                        const { quote } = quoteResponse;
-                        if (!quote || !quote.buyAmount || !quote.sellAmount || !quote.feeAmount) throw new Error('Incomplete CoW quote');
-
-                        const buyAmountBN = ethers.BigNumber.from(quote.buyAmount);
-                        const sellAmountBeforeFeeBN = amountInWei;
-                        let swapPrice = '0';
-                        if (!sellAmountBeforeFeeBN.isZero()) {
-                            const priceRatio = buyAmountBN.mul(ethers.constants.WeiPerEther).div(sellAmountBeforeFeeBN);
-                            swapPrice = ethers.utils.formatUnits(priceRatio, 18);
-                        }
-                        cowData = {
-                            assumedAmountOut: quote.buyAmount,
-                            swapPrice: swapPrice,
-                            feeAmount: quote.feeAmount,
-                            priceImpact: null, gasSpent: null,
-                        };
-                        console.log('[ConfirmSwapCow Debug - Toggle] CoW Quote Fetch SUCCESS');
-                        return { data: cowData, error: null }; // Return result
-                    } catch (error) {
-                        console.warn('[ConfirmSwapCow Debug - Toggle] CoW Quote Fetch FAILED:', error.message);
-                        return { data: null, error: error.message || "Failed to get CoW Swap quote" }; // Return error
-                    }
-                })(); // Immediately invoke async function
-
-                // --- Fetch SushiSwap V2 Quote --- (Run in parallel conceptually)
-                let sushiPromise;
-                // --- Algebra Quote Path with Direct Quoter ---
-                if (selectedSwapMethod === 'algebra') {
-                    console.log('[QUOTER CONFIRMSWAP] Data received:', {
-                        priceAfter: transactionData.priceAfter,
-                        minRec: transactionData.minimumReceived,
-                        amountRaw: transactionData.amountOutRaw,
-                        expected: transactionData.expectedReceiveAmount
-                    });
-
-                    // Check if we have pre-calculated data from ShowcaseSwapComponent (via FutarchyQuoteHelper)
-                    if (transactionData.priceAfter && transactionData.minimumReceived) {
-                        console.log('[QUOTER CONFIRMSWAP] Using pre-calculated Algebra quote from Showcase', transactionData);
-
-                        // Construct the data object from transactionData
-                        // transactionData.expectedReceiveAmount is FORMATTED (e.g. "1.5")
-                        // transactionData.amountOutRaw is WEI (e.g. "1500000000000000000")
-
-                        // We must use raw value for buyAmount because formatUnits expects Wei
-                        let buyAmountRaw = transactionData.amountOutRaw;
-
-                        if (!buyAmountRaw && transactionData.expectedReceiveAmount) {
-                            // Fallback only if raw is missing (should not happen with new code)
-                            // Attempt to parse back if we know decimals (assuming 18 for now)
-                            try {
-                                buyAmountRaw = ethers.utils.parseUnits(transactionData.expectedReceiveAmount, 18).toString();
-                            } catch (e) {
-                                console.warn("Could not parse expectedReceiveAmount", e);
-                                buyAmountRaw = "0";
-                            }
-                        }
-
-                        const precalcData = {
-                            buyAmount: buyAmountRaw || "0",
-                            sellAmount: amountInWei.toString(),
-                            swapPrice: transactionData.executionPrice,
-                            estimatedGas: '400000', // Default estimate
-                            feeAmount: '0',
-                            priceImpact: parseFloat(transactionData.priceImpact || 0), // Price impact, already in the quoted output
-                            protocol: 'Algebra (Direct Quoter)',
-                            protocolName: 'Algebra (Direct Quoter)',
-                            currentPrice: parseFloat(transactionData.currentPrice || 0),
-                            executionPrice: parseFloat(transactionData.executionPrice || 0),
-                            displayPrice: transactionData.executionPrice,
-                            poolPriceAfter: parseFloat(transactionData.priceAfter || 0),
-                            // a pre-send re-quote replaces the panel's output
-                            ...(refreshedQuoteRef.current || {})
-                        };
-
-                        sushiPromise = Promise.resolve({ data: precalcData, error: null });
-                    } else {
-                        // Fallback to fetching if data is missing (e.g. feature flag off or first load)
-                        console.log('[QUOTER CONFIRMSWAP] Fetching Algebra quote using direct Quoter');
-
-                        sushiPromise = (async () => {
-                            let algebraData = null, algebraError = null;
-
-                            // Retry loop for Algebra quote
-                            for (let attempt = 1; attempt <= 3; attempt++) {
-                                try {
-                                    if (attempt > 1) console.log(`[QUOTER CONFIRMSWAP] Algebra Retry attempt ${attempt}/3...`);
-
-                                    // Determine which pool config to use based on outcome
-                                    const eventHappens = transactionData.outcome === 'Event Will Occur';
-                                    const poolConfig = eventHappens ?
-                                        (config?.POOL_CONFIG_YES || POOL_CONFIG_YES) :
-                                        (config?.POOL_CONFIG_NO || POOL_CONFIG_NO);
-
-                                    const poolAddress = poolConfig.address;
-
-                                    if (!poolAddress) {
-                                        throw new Error('Pool address not found in config');
-                                    }
-
-                                    console.log('[QUOTER CONFIRMSWAP] Algebra Quoter input data:', {
-                                        tokenIn,
-                                        tokenOut,
-                                        amount,
-                                        amountInWei: amountInWei.toString(),
-                                        poolAddress
-                                    });
-
-                                    // Use slippage from state (updated when user changes it)
-                                    const slipBps = Math.round(slippageTolerance * 100); // Convert percentage to basis points
-
-                                    // Get RPC URL for Gnosis
-                                    const rpcUrl = await getBestRpc(100); // Gnosis Chain
-
-                                    // Build merge config from metadata for proper token classification
-                                    const metadataMergeConfig = config?.metadata ? {
-                                        companyPositions: {
-                                            yes: { wrap: { wrappedCollateralTokenAddress: config.metadata.companyTokens?.yes?.wrappedCollateralTokenAddress } },
-                                            no: { wrap: { wrappedCollateralTokenAddress: config.metadata.companyTokens?.no?.wrappedCollateralTokenAddress } }
-                                        },
-                                        currencyPositions: {
-                                            yes: { wrap: { wrappedCollateralTokenAddress: config.metadata.currencyTokens?.yes?.wrappedCollateralTokenAddress } },
-                                            no: { wrap: { wrappedCollateralTokenAddress: config.metadata.currencyTokens?.no?.wrappedCollateralTokenAddress } }
-                                        }
-                                    } : MERGE_CONFIG;
-
-                                    const metadataBaseTokenConfig = config?.metadata ? {
-                                        currency: { address: config.metadata.currencyTokens?.base?.wrappedCollateralTokenAddress },
-                                        company: { address: config.metadata.companyTokens?.base?.wrappedCollateralTokenAddress }
-                                    } : BASE_TOKENS_CONFIG;
-
-                                    // Get quote from direct Algebra Quoter (no more 420+ RPC calls!)
-                                    const quoteResult = await getAlgebraQuoteWithSlippage({
-                                        tokenIn,
-                                        tokenOut,
-                                        amountIn: amount,
-                                        poolAddress,
-                                        provider,
-                                        slippageBps: slipBps,
-                                        mergeConfig: metadataMergeConfig,
-                                        baseTokenConfig: metadataBaseTokenConfig
-                                    });
-
-                                    console.log('[QUOTER CONFIRMSWAP] Algebra direct quote result:', quoteResult);
-
-                                    // Format data similar to Uniswap quoter for consistency
-                                    algebraData = {
-                                        buyAmount: quoteResult.amountOut, // Real output from Algebra Quoter
-                                        sellAmount: amountInWei.toString(),
-                                        swapPrice: quoteResult.executionPrice,
-                                        estimatedGas: quoteResult.gasEstimate || '400000',
-                                        feeAmount: '0',
-                                        slippage: quoteResult.slippage, // NOTE: This is slippage, NOT price impact
-                                        priceImpact: quoteResult.priceImpact, // Same as slippage
-                                        protocol: 'Algebra (Direct Quoter)',
-                                        protocolName: 'Algebra (Direct Quoter)',
-                                        currentPrice: quoteResult.currentPrice,
-                                        executionPrice: parseFloat(quoteResult.displayPrice || quoteResult.invertedPrice || quoteResult.executionPrice), // Use displayPrice for correct direction
-                                        displayPrice: quoteResult.displayPrice, // Keep displayPrice
-                                        invertedPrice: quoteResult.invertedPrice, // Keep invertedPrice
-                                        minimumReceived: quoteResult.minimumReceived,
-                                        minimumReceivedFormatted: quoteResult.minimumReceivedFormatted,
-                                        poolAddress: quoteResult.poolAddress,
-                                        liquidity: quoteResult.liquidity,
-                                        route: quoteResult.route,
-                                        tokenIn: quoteResult.tokenIn, // Token symbols for display
-                                        tokenOut: quoteResult.tokenOut,
-                                        // Keep minOutAmount for backward compatibility
-                                        minOutAmount: quoteResult.minimumReceived
-                                    };
-
-                                    console.log('[QUOTER CONFIRMSWAP] Algebra Quoter final data:', algebraData);
-                                    algebraError = null; // Clear error if success
-                                    break; // Success
-                                } catch (e) {
-                                    console.error(`[QUOTER CONFIRMSWAP] Algebra Quoter error (Attempt ${attempt}):`, e);
-                                    algebraError = e.message || 'Failed to get Algebra quote';
-
-                                    if (attempt < 3) {
-                                        console.log('[QUOTER CONFIRMSWAP] Clearing RPC cache and retrying...');
-                                        clearRpcCache();
-                                        await new Promise(r => setTimeout(r, 1000));
-                                    }
-                                }
-                            }
-                            return { data: algebraData, error: algebraError };
-                        })();
-                    }
-                } else {
-                    sushiPromise = (async () => {
-                        let sushiError = null;
-                        let sushiData = null;
-                        try {
-                            console.log('[ConfirmSwapCow Debug - Toggle] Attempting SushiSwap V2 Quote');
-                            const sushiV2RouteData = await fetchSushiSwapRoute({
-                                tokenIn,
-                                tokenOut,
-                                amount: amountInWei,
-                                userAddress: account,
-                                // Ensure all needed params are passed
-                                chainId: 100, // Example: assuming Gnosis
-                                sushiswapRouterAddress: SUSHISWAP_V2_ROUTER || DEFAULT_SUSHISWAP_V2_ROUTER,
-                            });
-                            if (!sushiV2RouteData || !sushiV2RouteData.swapPrice || !sushiV2RouteData.routerAddress) {
-                                throw new Error("Incomplete Sushi V2 quote or missing routerAddress from helper");
-                            }
-                            sushiData = {
-                                assumedAmountOut: sushiV2RouteData.assumedAmountOut,
-                                swapPrice: sushiV2RouteData.swapPrice,
-                                priceImpact: sushiV2RouteData.priceImpact,
-                                gasSpent: sushiV2RouteData.gasSpent,
-                                feeAmount: null,
-                                routeProcessorAddr: sushiV2RouteData.routerAddress
-                            };
-                            console.log('[ConfirmSwapCow Debug - Toggle] SushiSwap V2 Quote Fetch SUCCESS');
-                            return { data: sushiData, error: null };
-                        } catch (error) {
-                            console.warn('[ConfirmSwapCow Debug - Toggle] SushiSwap V2 Quote Fetch FAILED:', error.message);
-                            return { data: null, error: error.message || "Failed to get SushiSwap quote" };
-                        }
-                    })();
-                }
-
-                // Wait for both promises and update state
-                const [cowResult, sushiResult] = await Promise.all([cowPromise, sushiPromise]);
-
-                console.log('[ConfirmSwapCow Debug - Toggle] Updating CoW state:', cowResult);
-                setCowSwapQuoteData({ isLoading: false, error: cowResult.error, data: cowResult.data });
-
-                console.log('[ConfirmSwapCow Debug - Toggle] Updating Sushi state:', sushiResult);
-                setSushiSwapQuoteData({ isLoading: false, error: sushiResult.error, data: sushiResult.data });
-
-            } catch (error) {
-                // Catch errors from initial setup (amount parsing, token determination)
-                console.error('[ConfirmSwapCow Debug - Toggle] Outer error during quote fetching setup:', error);
-                setCowSwapQuoteData({ isLoading: false, error: error.message, data: null });
-                setSushiSwapQuoteData({ isLoading: false, error: error.message, data: null });
-                setSwapRouteData({ isLoading: false, error: error.message, data: null }); // Update display state too
-            }
+        if (isProcessing || transactionResultHash || finalExecutedAmount) return;
+        if (!account || !transactionData?.amount || !config || !swapChainId) return;
+
+        const amount = transactionData.amount.split(' ')[0];
+        const amountInWei = transactionData.amountInRaw
+            ? ethers.BigNumber.from(transactionData.amountInRaw)
+            : safeParseToWei(amount);
+        const panelData = {
+            sellAmount: amountInWei.toString(),
+            feeAmount: '0',
+            priceImpact: parseFloat(transactionData.priceImpact || 0),
+            protocol: SEER_ROUTE_NAMES[swapChainId],
+            protocolName: SEER_ROUTE_NAMES[swapChainId],
+            currentPrice: parseFloat(transactionData.currentPrice || 0),
+            poolPriceAfter: parseFloat(transactionData.priceAfter || 0)
         };
 
-        fetchQuotes();
-    }, [account, transactionData, provider, config, isProcessing, transactionResultHash, finalExecutedAmount, selectedSwapMethod, slippageTolerance]);
-
-    // --> ADD useEffect to update displayed data based on selection <--
-    useEffect(() => {
-        console.log(`[ConfirmSwapCow Debug - Toggle] Selected method changed to: ${selectedSwapMethod}. Updating display data.`);
-        if (selectedSwapMethod === 'cowswap') {
-            console.log('[ConfirmSwapCow Debug - Toggle] Setting display data to CoW Quote:', cowSwapQuoteData);
-            setSwapRouteData(cowSwapQuoteData);
-        } else if (selectedSwapMethod === 'sushiswap') {
-            console.log('[ConfirmSwapCow Debug - Toggle] Setting display data to Sushi Quote:', sushiSwapQuoteData);
-            setSwapRouteData(sushiSwapQuoteData);
-        } else if (selectedSwapMethod === 'algebra') {
-            console.log('[ConfirmSwapCow Debug - Toggle] Setting display data to Algebra Quote:', sushiSwapQuoteData);
-            setSwapRouteData(sushiSwapQuoteData);
+        if (transactionData.amountOutRaw) {
+            setSwapRouteData({
+                isLoading: false,
+                error: null,
+                data: {
+                    ...panelData,
+                    buyAmount: transactionData.amountOutRaw,
+                    swapPrice: transactionData.executionPrice,
+                    executionPrice: parseFloat(transactionData.executionPrice || 0),
+                    displayPrice: transactionData.executionPrice,
+                    ...(refreshedQuoteRef.current || {})
+                }
+            });
+            return;
         }
-        // Note: This effect handles setting isLoading/error for the main display
-    }, [selectedSwapMethod, cowSwapQuoteData, sushiSwapQuoteData]);
+
+        let cancelled = false;
+        setSwapRouteData({ isLoading: true, error: null, data: null });
+        fetchFreshQuote(amountInWei, slippagePctToBps(getSafeSlippageTolerance()))
+            .then((trade) => {
+                if (cancelled) return;
+                if (!trade) throw new Error('No quote for this swap');
+                const executionPrice = executionPriceFor({
+                    amountIn: amount,
+                    amountOut: ethers.utils.formatUnits(trade.amountOut.toString(), trade.tokenOut.decimals),
+                    isBuy: transactionData.action === 'Buy'
+                });
+                setSwapRouteData({
+                    isLoading: false,
+                    error: null,
+                    data: {
+                        ...panelData,
+                        buyAmount: trade.amountOut.toString(),
+                        decimalsOut: trade.tokenOut.decimals,
+                        swapPrice: String(executionPrice),
+                        executionPrice,
+                        displayPrice: String(executionPrice),
+                        ...(refreshedQuoteRef.current || {})
+                    }
+                });
+            })
+            .catch((quoteError) => {
+                if (!cancelled) setSwapRouteData({ isLoading: false, error: describeQuoteError(quoteError).message, data: null });
+            });
+        return () => { cancelled = true; };
+    }, [account, transactionData, config, swapChainId, isProcessing, transactionResultHash, finalExecutedAmount, slippageTolerance]);
 
     // Add useEffect for auto-expanding current step
     useEffect(() => {
@@ -2680,9 +1688,6 @@ const ConfirmSwapModal = memo(({
     // Monitor transaction hash and verify its status
     useEffect(() => {
         if (!transactionResultHash || !provider) return;
-
-        // Skip for CoW Swap as it has its own polling mechanism
-        if (selectedSwapMethod === 'cowswap') return;
 
         const checkTransactionStatus = async () => {
             try {
@@ -2738,21 +1743,7 @@ const ConfirmSwapModal = memo(({
         };
 
     // Determine if the transaction is in a final state for the main button behavior
-    const isFinalStateForCloseButton =
-        (selectedSwapMethod === 'cowswap' && ['fulfilled', 'expired', 'cancelled', 'failed'].includes(orderStatus)) ||
-        (selectedSwapMethod === 'sushiswap' && ['fulfilled', 'failed'].includes(orderStatus)) ||
-        (selectedSwapMethod === 'algebra' && ['fulfilled', 'failed'].includes(orderStatus)) ||
-        (selectedSwapMethod === 'uniswap' && ['fulfilled', 'failed'].includes(orderStatus)) ||
-        (selectedSwapMethod === 'uniswapSdk' && ['fulfilled', 'failed'].includes(orderStatus)) ||
-        (processingStep === 'completed' && orderStatus === 'fulfilled');
-
-    // Calculate CoW Explorer base URL once
-    let cowExplorerBase = 'https://explorer.cow.fi/orders/'; // Default for Ethereum Mainnet
-    if (config?.chainId === 100) {
-        cowExplorerBase = 'https://explorer.cow.fi/gc/orders/'; // Gnosis Chain
-    } else if (config?.chainId === 11155111) {
-        cowExplorerBase = 'https://explorer.cow.fi/sepolia/orders/'; // Sepolia
-    }
+    const isFinalStateForCloseButton = ['fulfilled', 'failed'].includes(orderStatus);
 
     // Create portal container if it doesn't exist
     useEffect(() => {
@@ -2768,8 +1759,7 @@ const ConfirmSwapModal = memo(({
 
     const activePriceImpact = Math.abs(parseFloat(swapRouteData.data?.priceImpact ?? transactionData?.priceImpact ?? 0));
     const priceImpactTooHigh = Number.isFinite(activePriceImpact) && activePriceImpact > 15;
-    const requiresPoolQuote = ['uniswap', 'uniswapSdk', 'algebra'].includes(selectedSwapMethod);
-    const quoteUnavailableForExecution = requiresPoolQuote && (
+    const quoteUnavailableForExecution = (
         swapRouteData.isLoading ||
         Boolean(swapRouteData.error) ||
         !swapRouteData.data?.buyAmount ||
@@ -2820,71 +1810,13 @@ const ConfirmSwapModal = memo(({
                             </button>
                         </div>
 
-                        {/* SWAP METHOD TOGGLE */}
+                        {/* SWAP ROUTE */}
                         <div className="p-4">
-                            <label className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">Swap Method:</label>
-                            <div className="flex items-center space-x-4">
-                                {/* Only show UniswapSDK on Ethereum mainnet (chain 1) */}
-                                {chain?.id === 1 ? (
-                                    <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="swapMethod"
-                                            value="uniswapSdk"
-                                            checked={true} // Always checked on Ethereum
-                                            onChange={() => { }} // No-op, always UniswapSDK on Ethereum
-                                            className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                            disabled={true} // Disabled since it's the only option
-                                        />
-                                        <span className="text-sm text-futarchyGray12 dark:text-futarchyGray112 font-medium">
-                                            Uniswap V3
-                                            <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Ethereum Mainnet)</span>
-                                        </span>
-                                    </label>
-                                ) : (
-                                    <>
-                                        {/* Algebra (Swapr) Radio - Only on non-Ethereum chains */}
-                                        <label className="flex items-center space-x-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="swapMethod"
-                                                value="algebra"
-                                                checked={selectedSwapMethod === 'algebra'}
-                                                onChange={() => { setSelectedSwapMethod('algebra'); setShowExplorerConfigUi(false); }}
-                                                className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                                disabled={isProcessing || transactionResultHash}
-                                            />
-                                            <span className={`text-sm ${selectedSwapMethod === 'algebra' ? 'text-futarchyGray12 dark:text-futarchyGray112 font-medium' : 'text-futarchyGray11 dark:text-futarchyGray112'
-                                                }`}>
-                                                Algebra (Swapr)
-                                                <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Direct Algebra Pool)</span>
-                                            </span>
-                                        </label>
-                                        {/* CoW Swap Radio - Only on non-Ethereum chains */}
-                                        {!toggleHideCowSwap && (
-                                            <label className="flex items-center space-x-2 cursor-pointer">
-                                                <input
-                                                    type="radio"
-                                                    name="swapMethod"
-                                                    value="cowswap"
-                                                    checked={selectedSwapMethod === 'cowswap'}
-                                                    onChange={() => {
-                                                        setSelectedSwapMethod('cowswap');
-                                                        setShowExplorerConfigUi(false);
-                                                    }}
-                                                    className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                                    disabled={isProcessing || transactionResultHash}
-                                                />
-                                                <span className={`text-sm ${selectedSwapMethod === 'cowswap' ? 'text-futarchyGray12 dark:text-futarchyGray112 font-medium' : 'text-futarchyGray11 dark:text-futarchyGray112'
-                                                    }`}>
-                                                    CoW Swap
-                                                    <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Gasless, MEV Protect)</span>
-                                                </span>
-                                            </label>
-                                        )}
-                                    </>
-                                )}
-                            </div>
+                            <span className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-1">Swap Route:</span>
+                            <span className="text-sm text-futarchyGray12 dark:text-futarchyGray112 font-medium">
+                                {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
+                                <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Best route from the Seer Lens quoter)</span>
+                            </span>
                         </div>
 
                         {/* Slippage Settings */}
@@ -3001,11 +1933,7 @@ const ConfirmSwapModal = memo(({
                                 <div className="flex justify-between">
                                     <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Protocol</span>
                                     <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
-                                        {selectedSwapMethod === 'cowswap' ? 'CoW Swap' :
-                                            selectedSwapMethod === 'algebra' ? 'Algebra (Swapr)' :
-                                                selectedSwapMethod === 'uniswap' ? 'Uniswap V3' :
-                                                    selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' :
-                                                        'SushiSwap V3'}
+                                        {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
                                     </span>
                                 </div>
                                 {/* For Uniswap SDK (Chain 1 - Ethereum), show QuoterV2-based fields */}
@@ -3491,125 +2419,6 @@ const ConfirmSwapModal = memo(({
                             </div>
                         )}
 
-                        {/* Transaction Result / Status Display - NOW MOSTLY FOR SUSHISWAP */}
-                        {transactionResultHash &&
-                            selectedSwapMethod === 'sushiswap' && (
-                                // (selectedSwapMethod === 'cowswap' && isProcessing && ['submitting', 'submitted', 'tracking', 'open'].includes(orderStatus)) ||
-                                // Sushi can show processing or final state here
-                                <div className="mt-4 mb-4 p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray5 rounded-lg text-center text-sm space-y-1">
-                                    {isProcessing
-                                        ? (
-                                            selectedSwapMethod === 'sushiswap' // Only SushiSwap processing message here now
-                                                ? 'Processing SushiSwap V3...'
-                                                : null // CoW and Algebra not handled here
-                                        )
-                                        : selectedSwapMethod === 'sushiswap' && orderStatus === 'fulfilled' // Only SushiSwap final state here
-                                            ? 'SushiSwap V3 Confirmed!'
-                                            : null
-                                    }
-                                </div>
-                            )}
-
-                        {/* Combined Link/Status for CoW Swap (Processing & Final) */}
-                        {selectedSwapMethod === 'cowswap' && transactionResultHash && (
-                            <div className="text-center text-sm mb-3 text-futarchyGray11 dark:text-futarchyGray112">
-                                {isProcessing ? (
-                                    // Processing states for CoW Swap
-                                    orderStatus === 'submitting' ? 'Submitting CoW Order...' :
-                                        ['submitted', 'tracking', 'open'].includes(orderStatus) ? (
-                                            <>
-                                                <div className="flex flex-row gap-1 items-center justify-center">
-                                                    {'Tracking: '}
-                                                    <a
-                                                        href={`${cowExplorerBase}${transactionResultHash}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-futarchyBlue9 hover:underline dark:text-futarchyBlueDark9 dark:hover:text-futarchyBlueDark10"
-                                                    >
-                                                        {transactionResultHash.substring(0, 10)}...{transactionResultHash.substring(transactionResultHash.length - 8)}
-                                                    </a>
-                                                    <svg
-                                                        className="w-4 h-4 text-black dark:text-futarchyGray112 hover:text-futarchyGray11 dark:hover:text-futarchyGray5 transition-colors"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        strokeWidth="2"
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                    >
-                                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                                        <polyline points="15 3 21 3 21 9" />
-                                                        <line x1="10" y1="14" x2="21" y2="3" />
-                                                    </svg>
-                                                </div>
-                                            </>
-                                        ) :
-                                            'Processing CoW Swap...' // Fallback processing message
-                                ) : (
-                                    // Final states for CoW Swap
-                                    <>
-                                        <div className="flex flex-row gap-1 items-center justify-center">
-                                            {orderStatus === 'fulfilled' && 'Fulfilled: '}
-                                            {orderStatus === 'expired' && 'Expired: '}
-                                            {orderStatus === 'cancelled' && 'Cancelled: '}
-                                            {orderStatus === 'failed' && 'Failed: '}
-                                            <a
-                                                href={`${cowExplorerBase}${transactionResultHash}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-futarchyBlue9 hover:underline dark:text-futarchyBlueDark9 dark:hover:text-futarchyBlueDark10"
-                                            >
-                                                {transactionResultHash.substring(0, 10)}...{transactionResultHash.substring(transactionResultHash.length - 8)}
-                                            </a>
-                                            <svg
-                                                className="w-4 h-4 text-black dark:text-futarchyGray112 hover:text-futarchyGray11 dark:hover:text-futarchyGray5 transition-colors"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                                <polyline points="15 3 21 3 21 9" />
-                                                <line x1="10" y1="14" x2="21" y2="3" />
-                                            </svg>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Explorer Config UI */}
-                        {selectedSwapMethod === 'sushiswap' && showExplorerConfigUi && (
-                            <div className="mt-4 mb-4 p-3 border border-futarchyGray6 dark:border-futarchyDarkGray6 rounded-lg space-y-2">
-                                {/* ... explorer config inputs ... */}
-                                <h4 className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-1">Dev: Explorer Config</h4>
-                                <div>
-                                    <label className="block text-xs text-futarchyGray11 dark:text-futarchyGray112 mb-0.5" htmlFor="explorerUrlInput">Explorer URL:</label>
-                                    <input
-                                        id="explorerUrlInput"
-                                        type="text"
-                                        value={uiExplorerUrl}
-                                        onChange={(e) => setUiExplorerUrl(e.target.value)}
-                                        className="w-full p-1 border border-futarchyGray7 dark:border-futarchyDarkGray7 rounded text-xs bg-white dark:bg-futarchyDarkGray1 text-futarchyGray12 dark:text-futarchyGray112 focus:ring-1 focus:ring-futarchyBlue9 dark:focus:ring-offset-futarchyDarkGray3 focus:border-futarchyBlue9 dark:focus:border-futarchyBlueDark9"
-                                        placeholder="e.g., https://gnosisscan.io/tx/"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-futarchyGray11 dark:text-futarchyGray112 mb-0.5" htmlFor="explorerNameInput">Explorer Name:</label>
-                                    <input
-                                        id="explorerNameInput"
-                                        type="text"
-                                        value={uiExplorerName}
-                                        onChange={(e) => setUiExplorerName(e.target.value)}
-                                        className="w-full p-1 border border-futarchyGray7 dark:border-futarchyDarkGray7 rounded text-xs bg-white dark:bg-futarchyDarkGray1 text-futarchyGray12 dark:text-futarchyGray112 focus:ring-1 focus:ring-futarchyBlue9 dark:focus:ring-offset-futarchyDarkGray3 focus:border-futarchyBlue9 dark:focus:border-futarchyBlueDark9"
-                                        placeholder="e.g., GnosisScan"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
                         {/* Post-Trade Summary Panel — Success */}
                         {isFinalStateForCloseButton && orderStatus === 'fulfilled' && (
                             <div className="mx-4 mb-4 p-4 bg-futarchyGreen3 dark:bg-futarchyGreenDark3 border border-futarchyGreen7 dark:border-futarchyGreenDark7 rounded-lg space-y-2">
@@ -3643,24 +2452,18 @@ const ConfirmSwapModal = memo(({
                                 <div className="flex justify-between text-sm">
                                     <span className="text-futarchyGreen11/70 dark:text-futarchyGreenDark11/70">Protocol</span>
                                     <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">
-                                        {selectedSwapMethod === 'cowswap' ? 'CoW Swap' :
-                                            selectedSwapMethod === 'algebra' ? 'Algebra (Swapr)' :
-                                                selectedSwapMethod === 'uniswap' ? 'Uniswap V3' :
-                                                    selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' :
-                                                        'SushiSwap V3'}
+                                        {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
                                     </span>
                                 </div>
                                 {transactionResultHash && (
                                     <div className="pt-1 border-t border-futarchyGreen7/40 dark:border-futarchyGreenDark7/40">
                                         <a
-                                            href={selectedSwapMethod === 'cowswap'
-                                                ? `${cowExplorerBase}${transactionResultHash}`
-                                                : `${explorerConfig.url}${transactionResultHash}`}
+                                            href={`${explorerConfig.url}${transactionResultHash}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="flex items-center gap-1 text-sm text-futarchyGreen11 dark:text-futarchyGreenDark11 hover:underline"
                                         >
-                                            View on {selectedSwapMethod === 'cowswap' ? 'CoW Explorer' : explorerConfig.name}
+                                            View on {explorerConfig.name}
                                             <span className="font-mono">({transactionResultHash.substring(0, 10)}…{transactionResultHash.substring(transactionResultHash.length - 8)})</span>
                                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -3687,14 +2490,12 @@ const ConfirmSwapModal = memo(({
                                 </div>
                                 {transactionResultHash && (
                                     <a
-                                        href={selectedSwapMethod === 'cowswap'
-                                            ? `${cowExplorerBase}${transactionResultHash}`
-                                            : `${explorerConfig.url}${transactionResultHash}`}
+                                        href={`${explorerConfig.url}${transactionResultHash}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-1 text-sm text-futarchyCrimson11 dark:text-futarchyCrimsonDark11 hover:underline"
                                     >
-                                        View on {selectedSwapMethod === 'cowswap' ? 'CoW Explorer' : explorerConfig.name}
+                                        View on {explorerConfig.name}
                                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                                             <polyline points="15 3 21 3 21 9" />
@@ -3794,13 +2595,7 @@ const ConfirmSwapModal = memo(({
                                     {isFinalStateForCloseButton
                                         ? "Transaction Finished"
                                         : isProcessing
-                                            ? (
-                                                selectedSwapMethod === 'cowswap'
-                                                    ? (orderStatus === 'submitting' ? 'Submitting CoW Order...' : 'Processing CoW Swap...')
-                                                    : selectedSwapMethod === 'sushiswap'
-                                                        ? 'Processing SushiSwap V3...'
-                                                        : 'Processing Swap'
-                                            )
+                                            ? 'Processing Swap'
                                             : transactionData.insufficientLiquidity || quoteUnavailableForExecution
                                                 ? 'Quote Unavailable'
                                                 : priceImpactTooHigh && !tradeAnywayAcknowledged

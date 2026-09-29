@@ -36,6 +36,8 @@ import { getUniswapV3QuoteWithPriceImpact, getPoolSqrtPrice, sqrtPriceX96ToPrice
 import { usePublicClient, useChainId } from 'wagmi';
 import { describeQuoteError } from '../../../utils/txErrors';
 import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMath';
+import { quoteSeerSwap } from '../../../utils/seerSwap';
+import { formatUnits } from 'viem';
 
 // Opens only from the native-swap action — load it on demand.
 const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
@@ -253,6 +255,21 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       try {
         console.log('[QUOTER SHOWCASE] Fetching quote for amount:', amount);
 
+        // The swap executes through @seer-pm/sdk, so its quote supplies the
+        // amounts; the pool quote below still supplies current price, price
+        // after and impact. Both run in parallel.
+        const seerQuote = (chainId === 1 || chainId === 100)
+          ? quoteSeerSwap({
+            chainId,
+            account,
+            tokenIn,
+            tokenOut,
+            amountInRaw: amountRawWei || undefined,
+            amount,
+            slippageBps: 50
+          }).then((trade) => ({ trade }), (error) => ({ error }))
+          : null;
+
         // Use best available RPC for the current chain
         const { getBestRpcProvider, getBestRpc } = await import('../../../utils/getBestRpc');
         const ethersProvider = await getBestRpcProvider(chainId);
@@ -450,6 +467,22 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
 
+        if (seerQuote) {
+          const { trade, error: seerError } = await seerQuote;
+          if (seerError) throw seerError;
+          const amountOutFormatted = formatUnits(trade.amountOut, trade.tokenOut.decimals);
+          quoteResult = {
+            ...quoteResult,
+            amountOut: amountOutFormatted,
+            amountOutFormatted,
+            amountOutRaw: trade.amountOut.toString(),
+            minimumReceived: formatUnits(trade.minimumAmountOut(), trade.tokenOut.decimals),
+            decimalsOut: trade.tokenOut.decimals,
+            swapSpender: trade.approveAddress
+          };
+          executionPrice = executionPriceFor({ amountIn: amount, amountOut: amountOutFormatted, isBuy: selectedAction === 'Buy' });
+        }
+
         if (isCurrent()) {
           const afterPrice = quoteResult.priceAfter ?? executionPrice;
           const priceImpactPct = Number.isFinite(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
@@ -471,6 +504,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             minimumReceived: quoteResult.minimumReceived,
             amountOutRaw: quoteResult.amountOutRaw,
             decimalsOut: quoteResult.decimalsOut || 18,
+            swapSpender: quoteResult.swapSpender,
             chainId: chainId,
             insufficientLiquidity: false,
             error: null
@@ -760,6 +794,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
         isApproximate: !(USING_FUTARCHY_QUOTER && quoterPreview?.amountOut && !quoterPreview.error),
         insufficientLiquidity: quoterPreview?.insufficientLiquidity || false,
         outputDecimals: quoterPreview?.decimalsOut || 18,
+        swapSpender: quoterPreview?.swapSpender,
         tradeAnywayAcknowledged,
       };
       console.log("Opening ConfirmSwapModal directly with data:", directConfirmData);

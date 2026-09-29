@@ -28,6 +28,7 @@
     "@marcreichel/apple-tv-card": "^1.0.2",
     "@rainbow-me/rainbowkit": "^2.2.1",
     "@safe-global/api-kit": "^4.0.1",
+    "@seer-pm/sdk": "0.0.18",
     "@tanstack/react-query": "^5.62.16",
     "@uniswap/universal-router-sdk": "^4.32.0",
     "@uniswap/v4-sdk": "^1.28.0",

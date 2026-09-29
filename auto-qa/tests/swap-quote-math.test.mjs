@@ -87,12 +87,10 @@ test('modal — displayed Min. Receive is computed by minimumFromQuote from the 
     assert.doesNotMatch(MODAL, /minimumReceivedFormatted: transactionData\.minimumReceived/);
 });
 
-test('modal — Uniswap SDK execution gets the same (clamped) tolerance as the display', () => {
+test('modal — the re-quote uses the same (clamped) tolerance as the display', () => {
     assert.doesNotMatch(MODAL, /\n\s*slippageTolerance \/ 100,/);
-    // Every executeSwapForUniswapSDK call passes the clamped tolerance.
-    const sdkCalls = (MODAL.match(/executeSwapForUniswapSDK\(/g) || []).length;
-    assert.ok(sdkCalls >= 1);
-    assert.equal((MODAL.match(/getSafeSlippageTolerance\(\) \/ 100,\s*\n\s*walletClient,/g) || []).length, sdkCalls);
+    assert.match(MODAL, /const toleranceBps = slippagePctToBps\(tolerance\);/);
+    assert.match(MODAL, /const tolerance = getSafeSlippageTolerance\(\);/);
     assert.match(UNISWAP_SDK, /minReceiveFromQuote\(quotedAmountOut\.toString\(\), slippageTolerance \* 100\)/);
 });
 
@@ -193,11 +191,49 @@ test('compareQuotes — exactly at Min. Receive still passes (the tx accepts >= 
 });
 
 test('modal — re-quotes before any transaction and keeps the confirmed minimum', () => {
-    assert.match(MODAL, /if \(requiresPoolQuote && !\(await requoteBeforeSend\(amountInWei, amount\)\)\)/);
+    assert.match(MODAL, /const quotedTrade = await requoteBeforeSend\(amountInWei\);\s*if \(!quotedTrade\) \{/);
     // the re-quote runs before the collateral (split) step
     assert.ok(MODAL.indexOf('await requoteBeforeSend(') < MODAL.indexOf('const needsCollateral ='));
     assert.match(MODAL, /compareQuotes\(\{\s*confirmedAmountOutRaw,/);
-    assert.match(MODAL, /if \(exceedsTolerance\) \{\s*applyRefreshedQuote\(fresh\.amountOutRaw\);/);
+    assert.match(MODAL, /if \(exceedsTolerance\) \{\s*applyRefreshedQuote\(fresh\.amountOut\);/);
+    // the sent trade's minimum is never below the confirmed Min. Receive
+    assert.match(MODAL, /if \(fresh\.minimumAmountOut\(\) >= confirmedMin\) return fresh;/);
+    assert.match(MODAL, /slippageBpsForMinimum\(fresh\.amountOut, confirmedMin, toleranceBps\)/);
+    assert.match(MODAL, /if \(tightened\.minimumAmountOut\(\) < confirmedMin\) \{/);
+    // and the swap that is sent is that trade
+    assert.match(MODAL, /executeSeerSwap\(\{\s*trade: quotedTrade,/);
+});
+
+// ---------------------------------------------------------------------------
+// slippageBpsForMinimum (R3: Seer SDK trades keep the confirmed minimum)
+// ---------------------------------------------------------------------------
+
+test('slippageBpsForMinimum — the rebuilt minimum is never below the confirmed one', () => {
+    const cases = [
+        [1000000n, 970000n, 300], [1000000n, 999999n, 300], [987654321n, 950000000n, 300],
+        [10n ** 18n, 97n * 10n ** 16n, 300], [123456789012345678n, 120000000000000000n, 500],
+    ];
+    for (const [fresh, min, maxBps] of cases) {
+        const bps = math.slippageBpsForMinimum(fresh, min, maxBps);
+        assert.ok(bps !== null && bps >= 0 && bps <= maxBps);
+        assert.ok((fresh * BigInt(10000 - bps)) / 10000n >= min, `${fresh} ${min} -> ${bps}`);
+    }
+});
+
+test('slippageBpsForMinimum — capped at the tolerance, null when the fresh quote is below the minimum', () => {
+    assert.equal(math.slippageBpsForMinimum(2000000n, 970000n, 300), 300);
+    assert.equal(math.slippageBpsForMinimum(1000000n, 1000000n, 300), 0);
+    assert.equal(math.slippageBpsForMinimum(960000n, 970000n, 300), null);
+    assert.equal(math.slippageBpsForMinimum(0n, 0n, 300), null);
+});
+
+test('seerSwap — approves the quoted router, then sends the quoted trade', () => {
+    const SEER = read('src/utils/seerSwap.js');
+    assert.match(SEER, /fetchNeededApprovals\(client, \[trade\.tokenIn\.address\], account, trade\.approveAddress, \[amountIn\]\)/);
+    assert.match(SEER, /args: \[trade\.approveAddress, approvalAmountFor\(amountIn\.toString\(\), useUnlimitedApproval\)\.toBigInt\(\)\]/);
+    assert.match(SEER, /if \(isSafeWallet\(walletClient, connector\)\) throw new Error\(SAFE_TRANSACTION_SENT\);/);
+    assert.match(SEER, /return tradeTokens\(\{ trade, account, isTradingCredits: false \}, \{ client: walletClient \}\);/);
+    assert.match(SEER, /tradeType: TradeType\.EXACT_INPUT/);
 });
 
 // ---------------------------------------------------------------------------
