@@ -254,17 +254,6 @@ const EventHighlightCard = ({
 
   console.log('[EventHighlight Open]', { eventId, resolutionStatus });
 
-  if (currentStatus === 'pending_review' && !debugMode) {
-    return null;
-  }
-
-  // Extract display titles from metadata (similar to MarketPageShowcase)
-  const displayTitle0 = metadata?.display_title_0 || null;
-  const displayTitle1 = metadata?.display_title_1 || null;
-
-  // If we have both display titles, use them; otherwise fall back to proposalTitle
-  const shouldUseSplitTitles = displayTitle0 && displayTitle1;
-
   // Use the simplified hook instead of complex price fetching
   // Pass prefetchedPrices to hook - if available, it will skip Supabase fetch
   const { prices, loading: isLoadingPrices } = useLatestPoolPrices(poolAddresses, eventId, metadata, prefetchedPrices);
@@ -289,6 +278,19 @@ const EventHighlightCard = ({
       setCalculatedImpact("N/A");
     }
   }, [prices.yes, prices.no]);
+
+  // Hidden until approved; the early return must come after every hook call
+  // so the hook order stays stable when status or debugMode changes.
+  if (currentStatus === 'pending_review' && !debugMode) {
+    return null;
+  }
+
+  // Extract display titles from metadata (similar to MarketPageShowcase)
+  const displayTitle0 = metadata?.display_title_0 || null;
+  const displayTitle1 = metadata?.display_title_1 || null;
+
+  // If we have both display titles, use them; otherwise fall back to proposalTitle
+  const shouldUseSplitTitles = displayTitle0 && displayTitle1;
 
   // Extract base token symbol from metadata
   const baseTokenSymbol = metadata?.currencyTokens?.base?.tokenSymbol ||
