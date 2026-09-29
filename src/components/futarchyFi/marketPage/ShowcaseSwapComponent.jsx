@@ -201,6 +201,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
   // Debounced QuoterV2/Swapr SDK preview - for Ethereum (chainId === 1) and Gnosis (chainId === 100)
   useEffect(() => {
+    // Wait for the market config: before it loads chainId is the wallet's
+    // (mainnet by default), which sent Gnosis markets to Uniswap lookups.
+    if (!config?.chainId) return;
+
     // Only run on Ethereum mainnet or Gnosis Chain
     if (chainId !== 1 && chainId !== 100) {
       setQuoterPreview({ isLoading: false, amountOut: null, error: null });
