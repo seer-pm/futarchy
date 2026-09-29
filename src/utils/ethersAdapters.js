@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { assertReceiptSucceeded } from './txErrors.js';
 
 export const getEthersProvider = (publicClient) => {
     if (!publicClient) return null;
@@ -71,6 +72,16 @@ export const getEthersProvider = (publicClient) => {
     };
 };
 
+// ethers v5 shape for a viem receipt, as returned by the custom signer's wait().
+const toEthersReceipt = (receipt, confirmations) => ({
+    status: receipt.status === 'success' ? 1 : 0,
+    transactionHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    gasUsed: receipt.gasUsed,
+    confirmations,
+    logs: receipt.logs
+});
+
 export const getEthersSigner = (walletClient, publicClient) => {
     console.log('[DEBUG] getEthersSigner called with:', {
         walletClient: !!walletClient,
@@ -125,15 +136,11 @@ export const getEthersSigner = (walletClient, publicClient) => {
                         });
 
                         console.log('Transaction confirmed:', receipt);
-                        return {
-                            status: receipt.status === 'success' ? 1 : 0,
-                            transactionHash: receipt.transactionHash,
-                            blockNumber: receipt.blockNumber,
-                            gasUsed: receipt.gasUsed,
-                            confirmations: confirmations,
-                            logs: receipt.logs
-                        };
+                        // Like ethers v5, a reverted transaction rejects wait()
+                        // instead of resolving with status 0.
+                        return assertReceiptSucceeded(toEthersReceipt(receipt, confirmations), hash);
                     } catch (error) {
+                        if (error?.code === 'CALL_EXCEPTION') throw error;
                         console.error('Transaction confirmation error:', error);
 
                         // If it's a timeout, we might want to check if the transaction exists
@@ -143,16 +150,10 @@ export const getEthersSigner = (walletClient, publicClient) => {
                             try {
                                 const receipt = await publicClient.getTransactionReceipt({ hash });
                                 if (receipt) {
-                                    return {
-                                        status: receipt.status === 'success' ? 1 : 0,
-                                        transactionHash: receipt.transactionHash,
-                                        blockNumber: receipt.blockNumber,
-                                        gasUsed: receipt.gasUsed,
-                                        confirmations: confirmations,
-                                        logs: receipt.logs
-                                    };
+                                    return assertReceiptSucceeded(toEthersReceipt(receipt, confirmations), hash);
                                 }
                             } catch (retryError) {
+                                if (retryError?.code === 'CALL_EXCEPTION') throw retryError;
                                 console.warn('Retry fetch receipt failed:', retryError);
                             }
                         }
