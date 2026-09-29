@@ -3741,7 +3741,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             </div>
                           )}
                           {activeTab === 'redeem-tokens' && (
-                            <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} />
+                            <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} balanceError={balanceError} onRetryBalances={refetchBalances} />
                           )}
                         </div>
                       </div>
