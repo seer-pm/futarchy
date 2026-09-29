@@ -202,13 +202,10 @@ const EventTimestamp = ({ countdownFinish, timestamp, endTime, resolutionStatus 
           setRemainingTime(`Open until: ${timeString}`);
         }
       } else {
-        // Fallback to start date if no end time
-        const startDate = new Date(timestamp * 1000).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        });
-        setRemainingTime(`Started: ${startDate}`);
+        // No close time in the registry: the market has no deadline to count
+        // down to, and the registry has no creation time either, so say only
+        // that it is open rather than inventing a date.
+        setRemainingTime('Open');
       }
     };
 

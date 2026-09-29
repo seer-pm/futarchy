@@ -93,3 +93,25 @@ export function isClosedProposal(proposal = {}, nowSeconds = Math.floor(Date.now
     const endTime = getProposalEndTime(proposal);
     return endTime !== null && endTime <= nowSeconds;
 }
+
+/**
+ * Fold an on-chain resolution (utils/onChainResolution.js) into a proposal
+ * built from registry metadata, which can lag the chain indefinitely.
+ * Mutates and returns the proposal; an unresolved result changes nothing.
+ */
+export function applyOnChainResolution(proposal, result) {
+    if (!proposal || !result?.resolved) return proposal;
+
+    const outcome = result.outcome ?? null;
+    proposal.status = 'resolved';
+    proposal.resolutionStatus = 'resolved';
+    proposal.resolution_status = 'resolved';
+    if (!hasResolutionOutcome(proposal) && outcome) {
+        proposal.resolutionOutcome = outcome;
+        proposal.resolution_outcome = outcome;
+        proposal.finalOutcome = outcome;
+    }
+    proposal.isClosed = true;
+    proposal.resolvedOnChain = true;
+    return proposal;
+}

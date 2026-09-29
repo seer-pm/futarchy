@@ -13,8 +13,11 @@ import { useState, useEffect } from 'react';
 import { getSubgraphEndpoint } from '../config/subgraphEndpoints';
 import { fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
 import { cachedOnce } from '../services/requestCache';
+import { fetchOnChainResolutions, resolutionKey } from '../utils/onChainResolution';
 import {
+    applyOnChainResolution,
     getProposalCloseTimestamp,
+    hasResolutionOutcome,
     isProposalArchived,
     isProposalClosed,
     isProposalResolved,
@@ -75,9 +78,11 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     // Start time - no createdAt in subgraph, use current time as placeholder
     const startTimeSeconds = Math.floor(Date.now() / 1000);
 
-    // End time: prioritize closeTimestamp from metadata JSON.
+    // End time: closeTimestamp from metadata JSON, or null when there is none.
+    // Don't invent one — a "now + 7 days" default moved with every render and
+    // showed a perpetual countdown on markets that had long since settled.
     const closeTimestamp = getProposalCloseTimestamp(proposalMeta);
-    let endTimeSeconds = closeTimestamp || startTimeSeconds + 7 * 24 * 60 * 60; // Default 7 days
+    const endTimeSeconds = closeTimestamp || null;
     if (closeTimestamp) {
         console.log(`[🔗 CLOSE-TIME] Proposal "${proposal.displayNameEvent?.slice(0, 30)}..." closeTimestamp:`, {
             raw: proposalMeta.closeTimestamp,
@@ -127,7 +132,7 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
 
         // Time info (seconds, not milliseconds)
         startTime: startTimeSeconds,
-        endTime: endTimeSeconds,  // Uses closeTimestamp from metadata if available
+        endTime: endTimeSeconds,  // closeTimestamp from metadata, null if none
         closeTimestamp,
         isClosed: closed,
         timeProgress: 0,
@@ -249,6 +254,36 @@ async function fetchPoolsByIds(ids, chainId) {
 
     console.log(`[🔗 REGISTRY-POOLS] Got CONDITIONAL pools for ${Object.keys(poolMap).length} proposals`);
     return poolMap;
+}
+
+async function applyOnChainResolutions(proposals) {
+    const unsettled = proposals.filter(p =>
+        p.proposalAddress && !(p.status === 'resolved' && hasResolutionOutcome(p))
+    );
+    if (unsettled.length === 0) return;
+
+    const targets = unsettled.map(p => ({
+        proposalAddress: p.proposalAddress,
+        chainId: p.chainId,
+        conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
+    }));
+    const cacheKey = `resolutions:${targets.map(t => resolutionKey(t.chainId, t.proposalAddress)).sort().join(',')}`;
+
+    let resolutions;
+    try {
+        resolutions = await cachedOnce(cacheKey, () => fetchOnChainResolutions(targets));
+    } catch (e) {
+        console.warn('[🔗 ON-CHAIN-RESOLUTION] check failed:', e.message);
+        return;
+    }
+
+    for (const proposal of unsettled) {
+        const result = resolutions.get(resolutionKey(proposal.chainId, proposal.proposalAddress));
+        if (result?.resolved) {
+            applyOnChainResolution(proposal, result);
+            console.log(`[🔗 ON-CHAIN-RESOLUTION] "${proposal.eventTitle}" resolved on-chain: ${result.outcome}`);
+        }
+    }
 }
 
 /**
@@ -381,6 +416,11 @@ export async function fetchProposalsFromAggregator(aggregatorAddress, connectedW
             }
         }
     }
+
+    // Step 4: Registry resolution metadata lags the chain, so read the
+    // ConditionalTokens payout state for every proposal the metadata doesn't
+    // already settle. Batched: two RPC POSTs per chain for the whole list.
+    await applyOnChainResolutions(allProposals);
 
     return {
         proposals: allProposals.sort((a, b) => b.startTime - a.startTime),

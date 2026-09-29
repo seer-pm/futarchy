@@ -18,6 +18,8 @@ import { useOrganization } from "../../../../../hooks/useOrganization";
 import { useChainId } from "wagmi";
 import OrganizationManagerModal from "../../../../debug/OrganizationManagerModal";
 import { SHOW_DATA_DEBUG } from "../../../../../config/featureFlags";
+import { fetchOnChainResolutions, resolutionKey } from "../../../../../utils/onChainResolution";
+import { applyOnChainResolution } from "../../../../../utils/proposalLifecycle";
 
 const PROPOSAL_IMAGES = {
   "ethereum-budget": "/assets/ethereum-budget-picture.webp",
@@ -210,6 +212,24 @@ const ProposalsPage = ({
             };
           })
         );
+
+        // Registry resolution metadata lags the chain (KIP-90 stayed "Ongoing"
+        // after it resolved), so read the ConditionalTokens payout state for
+        // whatever it still calls ongoing — batched, two RPC POSTs per chain.
+        const ongoing = transformedProposals.filter((p) => p.approvalStatus === 'ongoing');
+        if (ongoing.length > 0) {
+          const resolutions = await fetchOnChainResolutions(ongoing.map((p) => ({
+            proposalAddress: p.proposalID,
+            chainId: p.chainId,
+            conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
+          })));
+          for (const p of ongoing) {
+            const result = resolutions.get(resolutionKey(p.chainId, p.proposalID));
+            if (!result?.resolved) continue;
+            applyOnChainResolution(p, result);
+            p.approvalStatus = p.resolution_outcome === 'yes' ? 'approved' : 'refused';
+          }
+        }
 
         // Sort by total volume (highest first), fallback to timestamp
         transformedProposals.sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0));
