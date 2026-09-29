@@ -37,7 +37,6 @@ import {
   FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS,
   MARKET_ADDRESS as DEFAULT_MARKET_ADDRESS,
   FUTARCHY_ROUTER_ABI,
-  SDAI_CONTRACT_RATE,
   VAULT_RELAYER_ADDRESS,
   WRAPPER_SERVICE_ADDRESS,
   ERC20_ABI
@@ -56,8 +55,6 @@ import { createSubgraphPoolFetcher } from "../../../utils/SubgraphPoolFetcher";
 import { getRpcProvider } from "../../../utils/getBestRpc";
 // POOL_CONFIG_THIRD is now available in useContractConfig
 
-//lets import from contract.js 
-import { UNISWAP_V3_POOL_ABI } from "./constants/contracts";
 // Swap Configuration
 
 // Subgraph pool fetcher instance for latest prices
@@ -94,23 +91,6 @@ const DEFAULT_BASE_COMPANY_TOKEN_ADDRESS = DEFAULT_BASE_TOKENS_CONFIG.company.ad
 
 // CoW Swap Settlement Contract
 const COW_SETTLEMENT_ADDRESS = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41";
-
-// SDAI Rate Provider ABI
-const SDAI_RATE_PROVIDER_ABI = [
-  {
-    "inputs": [],
-    "name": "getRate",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-];
 
 // ConditionalTokens Contract
 const CONDITIONAL_TOKENS_ADDRESS = "0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce";
@@ -2373,6 +2353,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const [newThirdPrice, setNewThirdPrice] = useState(null); // Added state for the third price
   const [thirdCandles, setThirdCandles] = useState([]); // Event probability historical candles
   const [newBasePrice, setNewBasePrice] = useState(null); // Added state for base/spot price from pool_candles
+  // Set when the latest-price fetch fails, so price stats stop spinning.
+  const [livePriceError, setLivePriceError] = useState(null);
 
 
   const { address: connectedAddress, isConnected: walletConnected } = useAccount();
@@ -2662,7 +2644,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const POOL_CONFIG_YES = config?.POOL_CONFIG_YES; // This comes from Supabase metadata
   const POOL_CONFIG_NO = config?.POOL_CONFIG_NO; // This comes from Supabase metadata
   const POOL_CONFIG_THIRD = config?.POOL_CONFIG_THIRD; // This comes from Supabase metadata
-  const PREDICTION_POOLS = config?.PREDICTION_POOLS; // This comes from Supabase metadata
   // Check if spot pool is explicitly disabled in metadata (via spotPool: "0x00")
   // otherwise fallback to checking if a base pool config exists (which might come from defaults)
   const hasSpot = !!config?.BASE_POOL_CONFIG?.address && config?.BASE_POOL_CONFIG?.address !== "0x00";
@@ -2805,6 +2786,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           setNewNoPrice(noPrice);
           setNewThirdPrice(thirdPrice);
           setNewBasePrice(basePrice);
+          setLivePriceError(yesPrice === null && noPrice === null ? 'Price data unavailable' : null);
         }
       } catch (e) {
         console.error('[MarketPageShowcase] Failed to fetch prices from Supabase:', e);
@@ -2814,6 +2796,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           setNewThirdPrice(null);
           setNewBasePrice(null);
           setThirdCandles([]);
+          setLivePriceError(e?.message || 'Price data unavailable');
         }
       }
     }
@@ -2845,6 +2828,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       setNewNoPrice(poolData.noPool.price);
     }
   }, [newYesPrice, newNoPrice, poolData?.yesPool?.price, poolData?.noPool?.price]);
+
+  // Prices are unavailable (not loading) once every source has failed: the
+  // latest-price fetch, or — for markets without pool addresses — pool data.
+  const pricesUnavailable = (newYesPrice === null || newNoPrice === null) && (
+    !!livePriceError ||
+    (!config?.POOL_CONFIG_YES?.address && !configLoading && !poolDataLoading && !!poolDataError)
+  );
 
   // Connection state for tracking wallet connection changes
   const [previousConnectionState, setPreviousConnectionState] = useState(isConnected);
@@ -2912,16 +2902,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   // State for Recent Trades filter controls
   const [showMyTrades, setShowMyTrades] = useState(false);
   const [tradesLimit, setTradesLimit] = useState(30);
-
-  const [prices, setPrices] = useState({
-    yesPrice: null,
-    noPrice: null,
-    yesLegacyPrice: null,
-    noLegacyPrice: null,
-    lastUpdate: null,
-    isLoading: false,
-    error: null
-  });
 
   // Dynamic market data state. Starts empty (the hero shows a skeleton while
   // isLoading) — never another market's copy.
@@ -3643,375 +3623,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const handleWrapperApproval = async (tokenAddress, amount) => {
     await handleTokenApproval(tokenAddress, WRAPPER_SERVICE_ADDRESS, amount, 'Token for WrapperService');
   };
-
-  // Add price fetching function
-  const fetchSushiswapPrices = async () => {
-    try {
-      setPrices(prev => ({ ...prev, isLoading: true, error: null }));
-
-      const GRAPH_API_URL = 'https://gateway.thegraph.com/api/ad33346033d83cabeefde10fbf8b482c/subgraphs/id/9LC6MvaFHXyY3dmxM7VCwGNA9dvM6g2AuZxEGCyfvck3';
-
-      // Query for YES pool
-      const yesPoolQuery = {
-        query: `{
-          swaps(
-            where: {pool: "0xf513225d744464C95Df69f8cB5068CDAEB3278Db"}
-            first: 1
-            orderBy: timestamp
-            orderDirection: desc
-          ) {
-            amountIn
-            amountOut
-            tokenIn {
-              name
-            }
-            tokenOut {
-              name
-            }
-          }
-        }`
-      };
-
-      // Query for NO pool
-      const noPoolQuery = {
-        query: `{
-          swaps(
-            where: {pool: "0x963afAaAa665ABc1C2F89DB6448c42d0f694ea65b50796ed90ccad465a9f70a"}
-            first: 1
-            orderBy: timestamp
-            orderDirection: desc
-          ) {
-            amountIn
-            amountOut
-            tokenIn {
-              name
-            }
-            tokenOut {
-              name
-            }
-          }
-        }`
-      };
-
-      // Fetch both pools data in parallel
-      const [yesResponse, noResponse] = await Promise.all([
-        fetch(GRAPH_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(yesPoolQuery)
-        }),
-        fetch(GRAPH_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(noPoolQuery)
-        })
-      ]);
-
-      const yesData = await yesResponse.json();
-      const noData = await noResponse.json();
-
-      let yesPrice = null;
-      let noPrice = null;
-
-      // Calculate YES price if swap data exists
-      if (yesData.data?.swaps?.[0]) {
-        const yesSwap = yesData.data.swaps[0];
-        // Extract base token name without YES_ prefix and convert to lowercase
-        const baseTokenInName = yesSwap.tokenIn.name.replace(/^YES_/, '').toLowerCase();
-        const baseTokenOutName = yesSwap.tokenOut.name.replace(/^YES_/, '').toLowerCase();
-        // Check if tokenIn is currency token (case-insensitive)
-        const tokenInCurrency = baseTokenInName === 'sdai';
-        if (tokenInCurrency) {
-          yesPrice = Number(yesSwap.amountIn) / Number(yesSwap.amountOut);
-        } else {
-          yesPrice = Number(yesSwap.amountOut) / Number(yesSwap.amountIn);
-        }
-      }
-
-      // Calculate NO price if swap data exists
-      if (noData.data?.swaps?.[0]) {
-        const noSwap = noData.data.swaps[0];
-        // Extract base token name without NO_ prefix and convert to lowercase
-        const noBaseTokenInName = noSwap.tokenIn.name.replace(/^NO_/, '').toLowerCase();
-        const noBaseTokenOutName = noSwap.tokenOut.name.replace(/^NO_/, '').toLowerCase();
-        // Check if tokenIn is currency token (case-insensitive)
-        console.log('noBaseTokenInName', noBaseTokenInName);
-        const noTokenInCurrency = noBaseTokenInName === 'sdai';
-        console.log('isNoTokenInCurrency', noTokenInCurrency);
-        if (noTokenInCurrency) {
-          noPrice = Number(noSwap.amountIn) / Number(noSwap.amountOut);
-        } else {
-          noPrice = Number(noSwap.amountOut) / Number(noSwap.amountIn);
-        }
-      }
-
-      setPrices(prev => ({
-        ...prev,
-        yesPrice,
-        noPrice,
-        lastUpdate: new Date(),
-        isLoading: false,
-        error: null
-      }));
-
-    } catch (error) {
-      console.error('Failed to fetch prices from The Graph:', error);
-      setPrices(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error.message
-      }));
-    }
-  };
-
-  const fetchLegacySushiswapPrices = async (setPrices) => {
-    // Set initial loading state
-    setPrices(prev => ({
-      ...prev,
-      isLoading: true,
-      error: null
-    }));
-
-    // Initialize provider with better fallback handling
-    let provider = null;
-    try {
-      if (typeof window !== 'undefined') {
-        // Check for MetaMask/Web3 provider first
-        if (window.ethereum) {
-          console.log("MarketPage: MetaMask detected, using Web3Provider");
-          try {
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            console.log("MarketPage: Successfully initialized Web3Provider");
-          } catch (web3Error) {
-            console.error("MarketPage: Failed to initialize Web3Provider:", web3Error);
-          }
-        }
-
-        // If no MetaMask or Web3Provider initialization failed, fall back to
-        // the shared RPC provider. It already carries its own endpoint
-        // fallback, so there is nothing to verify with a probe read here.
-        if (!provider) {
-          try {
-            provider = getRpcProvider(100);
-          } catch (rpcError) {
-            console.error("MarketPage: Shared RPC provider unavailable:", rpcError);
-            provider = null;
-          }
-
-          // Final fallback to hardcoded URL if still no provider
-          if (!provider) {
-            console.log("MarketPage: Trying hardcoded fallback RPC URL");
-            try {
-              // Use a known public RPC URL for Gnosis Chain as final fallback
-              provider = new ethers.providers.JsonRpcProvider({
-                url: "https://rpc.gnosischain.com",
-                timeout: 10000, // 10 second timeout
-              });
-
-              // Verify the connection works
-              const blockNumber = await provider.getBlockNumber();
-              console.log(`MarketPage: Successfully connected to fallback RPC with block number: ${blockNumber}`);
-            } catch (fallbackError) {
-              console.error("MarketPage: Fallback RPC connection failed:", fallbackError);
-              provider = null;
-            }
-          }
-        }
-      } else {
-        console.log("MarketPage: Running in server-side environment - cannot connect to blockchain");
-      }
-    } catch (providerError) {
-      console.error("MarketPage: Critical error initializing provider:", providerError);
-      provider = null;
-    }
-
-    // Check if we have a provider after all attempts
-    if (!provider) {
-      console.error('MarketPage: No Ethereum provider available after all fallback attempts');
-      setPrices(prev => ({
-        ...prev,
-        isLoading: false,
-        error: 'No Ethereum provider available. Please connect MetaMask or check your internet connection.'
-      }));
-      return;
-    }
-
-    console.log("MarketPage: Provider successfully initialized");
-
-    // Rest of the function with SDAI rate fetching
-    const currencyDecimals = 18; // Assuming 18 decimals for currency
-    let sdaiRateRaw = ethers.utils.parseUnits("1.02", currencyDecimals); // Default fallback value
-    try {
-      if (SDAI_CONTRACT_RATE && SDAI_CONTRACT_RATE !== "0x") {
-        console.log(`MarketPage: Attempting to fetch SDAI rate from contract: ${SDAI_CONTRACT_RATE}`);
-        try {
-          const sdaiRateContract = new ethers.Contract(SDAI_CONTRACT_RATE, SDAI_RATE_PROVIDER_ABI, provider);
-
-          // Add timeout protection
-          const getRate = async () => {
-            return await Promise.race([
-              sdaiRateContract.getRate(),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("getRate timeout after 15 seconds")), 15000)
-              )
-            ]);
-          };
-
-          sdaiRateRaw = await getRate();
-          console.log('MarketPage: SDAI rate successfully fetched:', sdaiRateRaw.toString());
-        } catch (contractError) {
-          console.error("MarketPage: Error creating or calling SDAI contract:", contractError);
-          console.warn("MarketPage: Using default SDAI rate due to contract error");
-        }
-      } else {
-        console.warn("MarketPage: Invalid SDAI contract address, using default rate");
-      }
-    } catch (rateError) {
-      console.warn("MarketPage: Error fetching SDAI rate, using default:", rateError);
-    }
-
-    // Format the SDAI rate using the correct token decimals
-    const sdaiRateFormatted = Number(ethers.utils.formatUnits(sdaiRateRaw, currencyDecimals));
-    console.log('MarketPage: sdaiRateFormatted', sdaiRateFormatted);
-
-    try {
-      // Helper function to calculate price based on tokenBaseSlot
-      const calculatePrice = (priceBN, tokenBaseSlot) => {
-        const priceStr = ethers.utils.formatUnits(priceBN, 18); // Both tokens have 18 decimals
-        const priceFloat = parseFloat(priceStr);
-        if (priceFloat === 0) return null; // Avoid division by zero or invalid price
-
-        // Business rule: Always return "SDAI per prediction token" regardless of token ordering
-        // If tokenBaseSlot is 0, SDAI is token0 and prediction token is token1
-        // If tokenBaseSlot is 1, SDAI is token1 and prediction token is token0
-        return tokenBaseSlot === 1 ? priceFloat : 1 / priceFloat;
-      };
-
-      // Variables to store prices
-      let yesLegacyPrice = null;
-      let noLegacyPrice = null;
-      console.log('MarketPage: Initial yesLegacyPrice', yesLegacyPrice);
-
-      // Fetch YES pool price (YES_SDAI/SDAI)
-      try {
-        const yesPoolContract = new ethers.Contract(
-          PREDICTION_POOLS.yes.address,
-          UNISWAP_V3_POOL_ABI,
-          provider
-        );
-
-        const slot0Result = await Promise.race([
-          yesPoolContract.slot0(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("YES pool slot0 timeout after 15 seconds")), 15000)
-          )
-        ]);
-
-        const sqrtPriceX96Yes = slot0Result[0]; // Get sqrtPriceX96
-        console.log('MarketPage: sqrtPriceX96Yes', sqrtPriceX96Yes);
-
-        // Calculate price using the approach from futarchy.js
-        // Convert to decimal string and use JavaScript math
-        const sqrtPriceStr = ethers.utils.formatUnits(sqrtPriceX96Yes, 0);
-        const sqrtPrice = parseFloat(sqrtPriceStr);
-        const priceYesBN = ethers.BigNumber.from(
-          Math.floor((sqrtPrice * sqrtPrice) / 2 ** 192 * 10 ** 18).toString()
-        );
-
-        console.log('MarketPage: priceYesBN', priceYesBN);
-        yesLegacyPrice = calculatePrice(priceYesBN, PREDICTION_POOLS.yes.tokenBaseSlot);
-        console.log('MarketPage: Final yesLegacyPrice', yesLegacyPrice);
-      } catch (error) {
-        console.error('MarketPage: Error fetching YES pool price:', error);
-      }
-
-      // Fetch NO pool price (NO_SDAI/SDAI)
-      try {
-        const noPoolContract = new ethers.Contract(
-          PREDICTION_POOLS.no.address,
-          UNISWAP_V3_POOL_ABI,
-          provider
-        );
-
-        const slot0Result = await Promise.race([
-          noPoolContract.slot0(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("NO pool slot0 timeout after 15 seconds")), 15000)
-          )
-        ]);
-
-        const sqrtPriceX96No = slot0Result[0]; // Get sqrtPriceX96
-        console.log('MarketPage: sqrtPriceX96No', sqrtPriceX96No);
-
-        // Calculate price using the approach from futarchy.js
-        // Convert to decimal string and use JavaScript math
-        const sqrtPriceStr = ethers.utils.formatUnits(sqrtPriceX96No, 0);
-        const sqrtPrice = parseFloat(sqrtPriceStr);
-        const priceNoBN = ethers.BigNumber.from(
-          Math.floor((sqrtPrice * sqrtPrice) / 2 ** 192 * 10 ** 18).toString()
-        );
-
-        console.log('MarketPage: priceNoBN', priceNoBN);
-        noLegacyPrice = calculatePrice(priceNoBN, PREDICTION_POOLS.no.tokenBaseSlot);
-        console.log('MarketPage: Final noLegacyPrice', noLegacyPrice);
-      } catch (error) {
-        console.error('MarketPage: Error fetching NO pool price:', error);
-      }
-
-      console.log('MarketPage: Final yesLegacyPrice', yesLegacyPrice);
-
-      // Update state with fetched prices
-      setPrices(prev => ({
-        ...prev,
-        yesLegacyPrice, // SDAI per YES_SDAI
-        noLegacyPrice,  // SDAI per NO_SDAI,
-        sdaiRateRaw,
-        sdaiRate: sdaiRateFormatted,
-        lastUpdate: new Date(),
-        isLoading: false,
-        error: null
-      }));
-    } catch (error) {
-      console.error('MarketPage: Error in fetchSushiswapLegacyPrices:', error);
-      setPrices(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || 'Failed to fetch prediction pool prices'
-      }));
-    }
-  };
-
-  // Fetch both current and legacy prices
-  useEffect(() => {
-    const fetchAllPrices = async () => {
-      await Promise.all([
-        fetchSushiswapPrices(),
-        fetchLegacySushiswapPrices(setPrices)
-      ]);
-    };
-
-    fetchAllPrices();
-    const interval = setInterval(fetchAllPrices, 30000); // Refresh every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Add Coinbase price fetching function
-  // const fetchCoinbaseSpotPrice = async () => { ... }
-
-  // Update the price update intervals to be longer for daily data
-  useEffect(() => {
-    // Initial fetch
-    fetchSushiswapPrices();
-
-    // Set up intervals - only Sushiswap now since spot price is handled by useLatestPrices
-    const sushiswapInterval = setInterval(fetchSushiswapPrices, 3600000); // Every hour
-
-    // Cleanup
-    return () => {
-      clearInterval(sushiswapInterval);
-    };
-  }, []);
 
   // Add new SushiSwapEstimateButton component
   const SushiSwapEstimateButton = () => {
@@ -4821,10 +4432,10 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               }`}>
               <StatDisplay
                 label="Impact (spot)"
-                value={formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice))}
+                value={formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
                 valueClassName={(computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11'}
                 Icon={ImpactIcon}
-                isLoading={newYesPrice === null || newNoPrice === null}
+                isLoading={!pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
               />
 
               <StatDisplay
@@ -5376,13 +4987,11 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             <ShowcaseSwapComponent
                               positions={positions}
                               prices={{
-                                yesPrice: newYesPrice !== null ? newYesPrice : prices.yesPrice,
-                                noPrice: newNoPrice !== null ? newNoPrice : prices.noPrice,
-                                yesLegacyPrice: prices.yesLegacyPrice,
-                                noLegacyPrice: prices.noLegacyPrice,
+                                yesPrice: newYesPrice,
+                                noPrice: newNoPrice,
                                 spotPrice: newBasePrice !== null ? newBasePrice : latestPrices.spotPriceSDAI, // Pass the actual spot price
-                                isLoading: prices.isLoading,
-                                error: prices.error
+                                isLoading: !pricesUnavailable && (newYesPrice === null || newNoPrice === null),
+                                error: pricesUnavailable ? (livePriceError || 'Price data unavailable') : null
                               }}
                               walletBalances={{
                                 sdaiBalance: rawBalances.currency,
@@ -5711,7 +5320,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
           {SHOW_DATA_DEBUG && isDebugMode && (
             <div className="hidden md:block">
               <MarketStatsDebugToast
-                prices={prices}
+                prices={{ yesPrice: newYesPrice, noPrice: newNoPrice, isLoading: false, error: livePriceError }}
                 positions={positions}
                 newYesPrice={newYesPrice}
                 newNoPrice={newNoPrice}
