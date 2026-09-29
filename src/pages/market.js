@@ -14,8 +14,10 @@ const MarketPageShowcase = dynamic(
   { ssr: false }
 );
 
-const CONFIGURED_MARKETS = new Set(
-  STATIC_MARKET_ADDRESSES.map((address) => (address || '').toLowerCase())
+// Lowercased address -> the exact key its static page was exported under
+// (static hosts match paths case-sensitively).
+const CONFIGURED_MARKETS = new Map(
+  STATIC_MARKET_ADDRESSES.map((address) => [(address || '').toLowerCase(), address])
 );
 
 const SUPERSEDED_MARKETS = {
@@ -93,9 +95,10 @@ const MarketPage = () => {
     // when the market exists in the generated static market configuration.
     if (canonicalProposalId && isConfiguredMarket(canonicalProposalId)) {
       const normalizedQuery = stripQueryAliases(router.query, ['proposalId', 'marketId', 'address', 'proposal', 'market']);
+      const staticAddress = CONFIGURED_MARKETS.get(canonicalProposalId.toLowerCase());
       router.replace(
         {
-          pathname: `/markets/${canonicalProposalId}`,
+          pathname: `/markets/${staticAddress}`,
           query: normalizedQuery
         },
         undefined,
