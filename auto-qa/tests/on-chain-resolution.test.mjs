@@ -26,12 +26,15 @@ const RESOLVED_NO = '0x0000000000000000000000000000000000000a02';
 const OPEN = '0x0000000000000000000000000000000000000a03';
 const MAINNET = '0x0000000000000000000000000000000000000b01';
 const BROKEN = '0x0000000000000000000000000000000000000c01';
+const INVALID = '0x0000000000000000000000000000000000000a04';
 
-// Chain state: proposal -> conditionId, conditionId -> [denominator, yesNumerator]
+// Chain state: proposal -> conditionId, conditionId -> [denominator, yesNumerator, noNumerator]
 const conditionIds = {
-    [RESOLVED_YES]: word(1), [RESOLVED_NO]: word(2), [OPEN]: word(3), [MAINNET]: word(4),
+    [RESOLVED_YES]: word(1), [RESOLVED_NO]: word(2), [OPEN]: word(3), [MAINNET]: word(4), [INVALID]: word(5),
 };
-const payouts = { [word(1)]: [1, 1], [word(2)]: [1, 0], [word(3)]: [0, 0], [word(4)]: [1, 1] };
+const payouts = {
+    [word(1)]: [1, 1, 0], [word(2)]: [1, 0, 1], [word(3)]: [0, 0, 0], [word(4)]: [1, 1, 0], [word(5)]: [2, 1, 1],
+};
 
 function fakeProvider(chainId, log) {
     const iface = new ethers.utils.Interface([
@@ -47,8 +50,9 @@ function fakeProvider(chainId, log) {
             }
             const fn = iface.getFunction(data.slice(0, 10));
             const args = iface.decodeFunctionData(fn, data);
-            const [denominator, numerator] = payouts[args[0]];
-            return word(fn.name === 'payoutDenominator' ? denominator : numerator);
+            const [denominator, yes, no] = payouts[args[0]];
+            if (fn.name === 'payoutDenominator') return word(denominator);
+            return word(Number(args[1]) === 0 ? yes : no);
         },
     };
 }
@@ -105,7 +109,7 @@ test('issues every read of a round in the same tick so the batch provider shares
         await Promise.resolve();
     }
     const rounds = new Set(ticks);
-    assert.equal(ticks.length, 9, '3 conditionId + 3 x (denominator, numerator)');
+    assert.equal(ticks.length, 12, '3 conditionId + 3 x (denominator, YES numerator, NO numerator)');
     assert.equal(rounds.size, 2, `expected two rounds of calls, got ticks ${ticks.join(',')}`);
 });
 
@@ -123,4 +127,12 @@ test('dedupes, skips zero/invalid addresses, and survives a missing provider', a
         getProvider: () => { throw new Error('no endpoints'); },
     });
     assert.equal(empty.size, 0);
+});
+
+test('both payout slots paying out reads as invalid, never as YES', async () => {
+    const results = await fetchOnChainResolutions(
+        [{ proposalAddress: INVALID, chainId: 100 }],
+        { getProvider: (chainId) => fakeProvider(chainId, []) }
+    );
+    assert.deepEqual(results.get(resolutionKey(100, INVALID)), { resolved: true, outcome: 'invalid' });
 });

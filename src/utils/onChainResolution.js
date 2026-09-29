@@ -28,6 +28,7 @@ const PAYOUT_DENOMINATOR = '0xdd34de67';  // payoutDenominator(bytes32)
 const PAYOUT_NUMERATORS = '0x0504c814';   // payoutNumerators(bytes32,uint256)
 
 const ZERO_WORD = '0'.repeat(64);
+const SLOT_ONE_WORD = '0'.repeat(63) + '1';
 
 function normalizeChainId(chainId) {
     return Number(chainId) === 1 ? 1 : 100;
@@ -98,16 +99,21 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
         const word = conditionId.slice(2).toLowerCase();
         const provider = providers.get(t.chainId);
         try {
-            const [denominator, yesNumerator] = await Promise.all([
+            const [denominator, yesNumerator, noNumerator] = await Promise.all([
                 ethCall(provider, t.conditionalTokens, `${PAYOUT_DENOMINATOR}${word}`),
                 ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${ZERO_WORD}`),
+                ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${SLOT_ONE_WORD}`),
             ]);
-            if (!isWord(denominator) || !isWord(yesNumerator)) return;
+            if (!isWord(denominator) || !isWord(yesNumerator) || !isWord(noNumerator)) return;
             if (BigInt(denominator) === 0n) {
                 results.set(t.key, { resolved: false, outcome: null });
                 return;
             }
-            results.set(t.key, { resolved: true, outcome: BigInt(yesNumerator) > 0n ? 'yes' : 'no' });
+            // Both slots paying out means the question resolved invalid.
+            const yesPays = BigInt(yesNumerator) > 0n;
+            const noPays = BigInt(noNumerator) > 0n;
+            const outcome = yesPays && noPays ? 'invalid' : (yesPays ? 'yes' : (noPays ? 'no' : null));
+            results.set(t.key, { resolved: true, outcome });
         } catch (_) {
             // Leave this proposal out; metadata stays authoritative for it.
         }
@@ -122,7 +128,7 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
  * @param {string} proposalAddress - FutarchyProposal contract address
  * @param {string} conditionalTokensAddress - ConditionalTokens contract address
  * @param {number|string} chainId - Chain the proposal lives on
- * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|null}|null>} null when the check fails
+ * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|'Invalid'|null}|null>} null when the check fails
  */
 export async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress, chainId) {
     const results = await fetchOnChainResolutions([
@@ -135,6 +141,6 @@ export async function fetchOnChainResolution(proposalAddress, conditionalTokensA
     }
     return {
         resolved: result.resolved,
-        outcome: result.outcome === 'yes' ? 'Yes' : (result.outcome === 'no' ? 'No' : null),
+        outcome: { yes: 'Yes', no: 'No', invalid: 'Invalid' }[result.outcome] || null,
     };
 }

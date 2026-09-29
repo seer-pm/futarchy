@@ -71,7 +71,9 @@ function setup() {
             if (data === '0x2ddc7de7') return conditions[to];
             const conditionId = `0x${data.slice(10, 74)}`;
             if (data.startsWith('0xdd34de67')) return word(denominators[conditionId]);
-            return word(denominators[conditionId]); // YES numerator = 1 when resolved
+            // payoutNumerators(conditionId, slot): YES (slot 0) pays 1 when resolved, NO (slot 1) pays 0
+            const slot = BigInt(`0x${data.slice(74, 138)}`);
+            return word(slot === 0n ? denominators[conditionId] : 0);
         },
     });
 
@@ -118,9 +120,9 @@ test('proposals resolved on-chain are marked resolved despite stale metadata', a
     assert.equal(p[GNOSIS_OPEN].status, 'ongoing');
     assert.equal(p[MAINNET_OPEN].status, 'ongoing');
 
-    // conditionId + denominator + numerator per proposal, on its own chain.
-    assert.equal(rpcCalls.length, 9);
-    assert.equal(rpcCalls.filter((c) => c.chainId === 1).length, 3);
+    // conditionId + denominator + YES and NO numerators per proposal, on its own chain.
+    assert.equal(rpcCalls.length, 12);
+    assert.equal(rpcCalls.filter((c) => c.chainId === 1).length, 4);
 });
 
 test('a proposal without a close time gets no invented deadline', async () => {
