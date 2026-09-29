@@ -124,12 +124,16 @@ export const useChainValidation = (config, configLoading = false) => {
  *
  * @param {number} requiredChainId - Chain the market lives on (config.chainId)
  */
-export const useRequiredChain = (requiredChainId = 100) => {
+// requiredChainId is undefined while the market config loads; isWrongChain
+// then reports false, so modals don't offer a switch to a guessed chain.
+export const useRequiredChain = (requiredChainId) => {
   const { chainId: walletChainId, isConnected } = useAccount();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   return {
     isWrongChain: isWrongChain({ isConnected, walletChainId, requiredChainId }),
+    // Market config not loaded yet: submit handlers wait rather than guess the chain
+    isChainUnknown: !requiredChainId,
     walletChainName: walletChainId ? getChainName(walletChainId) : null,
     requiredChainName: getChainName(requiredChainId),
     isSwitching,

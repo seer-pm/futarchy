@@ -113,7 +113,11 @@ const fetchBalancerSpotPrice = async () => {
       return addrs.includes(companyAddr) && addrs.includes(currencyAddr);
     });
 
-    if (!matchingPool) throw new Error('No Balancer pool found containing both tokens');
+    // Most markets have no Balancer pool for this pair. That is expected, not a failure.
+    if (!matchingPool) {
+      console.log('[SPOT] No Balancer pool contains both tokens; no Balancer spot price');
+      return null;
+    }
 
     const companyToken = matchingPool.poolTokens.find(t => t.address.toLowerCase() === companyAddr);
     const currencyToken = matchingPool.poolTokens.find(t => t.address.toLowerCase() === currencyAddr);
@@ -145,7 +149,6 @@ const fetchBalancerSpotPrice = async () => {
 
   } catch (error) {
     clearTimeout(timeout);
-    console.error('[SPOT] Balancer V3 API fetch failed:', error.message);
     throw error;
   }
 };
@@ -195,13 +198,13 @@ const useLatestPrices = (pollingInterval = 30000, config = null) => {
             balancerSpotPrice = await fetchBalancerSpotPrice();
           }
         } catch (error) {
-          console.error('[SPOT] Primary spot price fetch failed:', error.message);
+          console.warn('[SPOT] Primary spot price fetch failed:', error.message);
           // If custom failed, try Balancer as fallback
           if (fetchSpotPriceUrl) {
             try {
               balancerSpotPrice = await fetchBalancerSpotPrice();
             } catch (balancerError) {
-              console.error('[SPOT] Balancer fallback also failed:', balancerError.message);
+              console.warn('[SPOT] Balancer fallback also failed:', balancerError.message);
               balancerSpotPrice = null;
             }
           } else {

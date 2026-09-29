@@ -345,7 +345,7 @@ const CollateralModal = ({
   const { address: account, isConnected } = useAccount();
   // const { config, isLoading: configLoading } = useContractConfig();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
-  const requiredChain = useRequiredChain(config?.chainId || 100);
+  const requiredChain = useRequiredChain(config?.chainId);
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -1142,6 +1142,10 @@ const CollateralModal = ({
     // Check if wallet is properly connected before proceeding
     if (!isConnected || !account || !signer) {
       setLocalError("Please connect your wallet first");
+      return;
+    }
+    if (requiredChain.isChainUnknown) {
+      setLocalError('Market details are still loading. Try again in a moment.');
       return;
     }
     if (requiredChain.isWrongChain) {

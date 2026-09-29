@@ -706,7 +706,7 @@ const ConfirmSwapModal = memo(({
     const selectedSwapMethod = swapChainId === 1 ? 'uniswapSdk' : 'algebra';
     const stepsData = useMemo(() => getStepsData(), []);
     // The swap route, quotes and token addresses all come from this market's chain
-    const requiredChain = useRequiredChain(config?.chainId || 100);
+    const requiredChain = useRequiredChain(config?.chainId);
 
     // Get currency symbol from config (no hardcoded chain-based logic)
     const currencySymbol = config?.BASE_TOKENS_CONFIG?.currency?.symbol || 'sDAI';
@@ -1372,6 +1372,10 @@ const ConfirmSwapModal = memo(({
         }
         if (!isConnected || !account || !walletClient) {
             alert('Please connect your wallet first!');
+            return;
+        }
+        if (requiredChain.isChainUnknown) {
+            setError('Market details are still loading. Try again in a moment.');
             return;
         }
         if (requiredChain.isWrongChain) {
@@ -2621,5 +2625,7 @@ const ConfirmSwapModal = memo(({
 
     return ReactDOM.createPortal(modalContent, portalRoot);
 });
+
+ConfirmSwapModal.displayName = 'ConfirmSwapModal';
 
 export default ConfirmSwapModal;
