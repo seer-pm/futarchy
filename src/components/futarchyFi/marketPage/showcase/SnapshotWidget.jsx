@@ -391,4 +391,4 @@ const SnapshotWidget = ({
   );
 };
 
-export { ResultsBreakdown, SnapshotWidget };
+export { SnapshotWidget };

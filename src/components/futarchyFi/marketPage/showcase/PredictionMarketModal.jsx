@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 
-// Add this new component before the MarketPageShowcase component
 const PredictionMarketModal = ({ isOpen, onClose, config }) => {
   if (!isOpen || !config) return null;
 

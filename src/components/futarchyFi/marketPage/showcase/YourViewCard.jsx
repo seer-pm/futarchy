@@ -1,6 +1,5 @@
 
 
-// PriceHeader component for mobile price display
 const YourViewCard = ({ subject }) => (
   <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
     <div className="px-4 py-3 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70">

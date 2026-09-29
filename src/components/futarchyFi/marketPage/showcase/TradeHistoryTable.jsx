@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { SHOW_DATA_DEBUG } from '../../../../config/featureFlags';
 import { useAccount } from 'wagmi';
 import dayjs from 'dayjs';
-import { openTransactionInExplorer } from '../MarketHistoryViewModel';
-import { useTradeHistory } from '../MarketHistoryViewModel';
-import { Spinner } from './MarketTiming';
+import { openTransactionInExplorer, useTradeHistory } from '../MarketHistoryViewModel';
 
-// Move TradeHistoryTable outside of MarketPageShowcase
-// Update TradeHistoryTable to use TRADE_HISTORY_DATA
+const Spinner = () => (
+  <div className="flex justify-center items-center py-8">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyBlue9"></div>
+  </div>
+);
+
 const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency: null }, config }) => {
   const [trades, setTrades] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

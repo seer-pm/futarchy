@@ -1,6 +1,5 @@
 
 
-// Add PendingOrderToast component
 const PendingOrderToast = ({ count, userAddress }) => {
   // ---> Accept count and userAddress, return null if count is 0 <---
   if (!count || count === 0 || !userAddress) return null;
@@ -34,26 +33,6 @@ const PendingOrderToast = ({ count, userAddress }) => {
   );
 };
 
-// Add new function for detailed balance checking
-
-
-// Modify handleCowSwapTrade to use swapConfig
-
-
-// Modify WxdaiSwapButton to include both implementations
-
-
-
-
-// Modify SplitWrapButton to handle both YES and NO positions
-
-
-// Add new SplitWrapWxdai component after WrapButton component
-
-
-
-
-// Add ProcessingToast component
 const ProcessingToast = ({ step, onToastClick }) => {
   const steps = {
     'split': 'Splitting Position...',
@@ -90,7 +69,6 @@ const ProcessingToast = ({ step, onToastClick }) => {
   );
 };
 
-// Add SafeTransactionToast component
 const SafeTransactionToast = ({ onClose }) => {
   return (
     <div
