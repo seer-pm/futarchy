@@ -8,6 +8,7 @@
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 import { fetchConditionalPools } from '../services/conditionalPools';
 import { formatTokenAmount } from './precisionFormatter';
+import { computeExecutionPrice } from './marketPageUtils.mjs';
 
 const ENDPOINTS = SUBGRAPH_ENDPOINTS;
 
@@ -237,7 +238,10 @@ export function convertSwapToTradeFormat(swap, chainId) {
                 address: swap.tokenIn?.id
             }
         },
-        price: formatPrice(swap.price, poolType),
+        // Execution price (amounts actually exchanged), not swap.price, which
+        // is the pool price *after* the trade. Falls back to the pool price
+        // when the company side can't be identified (e.g. prediction pools).
+        price: formatPrice(computeExecutionPrice(swap) ?? swap.price, poolType),
         date: timestamp,
         transactionLink: `${explorerBase}${swap.transactionHash}`,
         poolAddress: swap.pool?.id,
