@@ -302,8 +302,9 @@ const EventHighlightCard = ({
     (prices.yes !== null && prices.yes < 1);
   const precision = shouldUseHighPrecision ? 4 : 2;
 
-  const formattedYesPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.yes !== null ? `${prices.yes.toFixed(precision)} ${baseTokenSymbol}` : `0.00 ${baseTokenSymbol}`);
-  const formattedNoPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.no !== null ? `${prices.no.toFixed(precision)} ${baseTokenSymbol}` : `0.00 ${baseTokenSymbol}`);
+  // A missing price (indexer down or no trades yet) is unknown, not zero.
+  const formattedYesPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.yes !== null ? `${prices.yes.toFixed(precision)} ${baseTokenSymbol}` : '—');
+  const formattedNoPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.no !== null ? `${prices.no.toFixed(precision)} ${baseTokenSymbol}` : '—');
   const impactDisplay = isLoadingPrices ? <LoadingSpinner /> : calculatedImpact;
 
   // Determine the link URL based on feature flag

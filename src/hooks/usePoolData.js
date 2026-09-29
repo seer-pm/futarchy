@@ -4,6 +4,7 @@ import { getSubgraphEndpoint, FUTARCHY_API_BASE } from '../config/subgraphEndpoi
 import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS } from '../config/featureFlags';
 import { getBestRpcProvider } from '../utils/getBestRpc';
 import { fetchProposalMarketData } from '../services/proposalMarketData';
+import { readGraphqlData } from '../utils/graphqlResponse';
 
 const ERC20_BALANCE_ABI = ['function balanceOf(address account) view returns (uint256)'];
 
@@ -149,6 +150,9 @@ const formatSubgraphPoolData = async (pool, proposalCurrencySymbol, provider) =>
  * Fetch best YES and NO pools for a proposal from the chain-specific subgraph
  * @param {string} proposalId - The proposal address
  * @param {number} chainId - The chain ID (1 for Mainnet, 100 for Gnosis)
+ * @returns {Promise<Object|null>} null when the proposal or its pools are not
+ *   indexed; rejects when the indexer request fails, so an outage is not
+ *   shown as a market with zero volume
  */
 const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
   try {
@@ -212,7 +216,8 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: `{\n          ${selection}\n        }` })
         });
-        const res = await resp.json();
+        // On failure the tick-derived price from the proposal query stands.
+        const res = { data: await readGraphqlData(resp, 'Latest candle prices') };
         const prices = {};
         wanted.forEach((id, i) => {
           const close = res.data?.[`p${i}`]?.[0]?.close;
@@ -254,7 +259,7 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
 
   } catch (e) {
     console.error('Error fetching pools for proposal:', e);
-    return null;
+    throw e;
   }
 };
 
@@ -264,40 +269,29 @@ const fetchBestPoolsForProposal = async (proposalId, chainId = 100) => {
  * @param {number} chainId - The chain ID (1 for Mainnet, 100 for Gnosis)
  */
 const fetchSubgraphPoolData = async (poolId, chainId = 100) => {
-  try {
-    const endpoint = getSubgraphEndpoint(chainId);
-    if (!endpoint) {
-      console.warn(`No subgraph endpoint for chain ${chainId}`);
-      return null;
-    }
-
-    // Use native fetch instead of graphql-request
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: buildPoolQuery(poolId.toLowerCase()) })
-    });
-
-    const result = await response.json();
-
-    if (result.errors) {
-      console.error(`Subgraph query errors for chain ${chainId}:`, result.errors);
-      return null;
-    }
-
-    const pool = result.data?.pool?.[0];
-    if (!pool) return null;
-
-    // token0/token1 come back as full entities, so the second round-trip
-    // that used to resolve symbol/decimals/role is no longer needed.
-    const provider = await getBestRpcProvider(chainId);
-    return formatSubgraphPoolData(pool, null, provider);
-
-
-  } catch (error) {
-    console.error('Subgraph fetch error for pool', poolId, error);
+  const endpoint = getSubgraphEndpoint(chainId);
+  if (!endpoint) {
+    console.warn(`No subgraph endpoint for chain ${chainId}`);
     return null;
   }
+
+  // Use native fetch instead of graphql-request
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: buildPoolQuery(poolId.toLowerCase()) })
+  });
+
+  // Throws on HTTP/GraphQL errors: an outage is not "pool not found".
+  const data = await readGraphqlData(response, `Pool ${poolId}`);
+
+  const pool = data.pool?.[0];
+  if (!pool) return null;
+
+  // token0/token1 come back as full entities, so the second round-trip
+  // that used to resolve symbol/decimals/role is no longer needed.
+  const provider = await getBestRpcProvider(chainId);
+  return formatSubgraphPoolData(pool, null, provider);
 };
 
 /**
@@ -524,6 +518,13 @@ export const useYesNoPoolData = (config) => {
 
       } catch (err) {
         console.error('Error fetching YES/NO pool data:', err);
+        // Unknown, not zero: clear any previous market's numbers so the
+        // stats render as unavailable.
+        setData({
+          yesPool: { volume: null, liquidity: null },
+          noPool: { volume: null, liquidity: null },
+          source: 'error'
+        });
         setError(err);
       } finally {
         setLoading(false);

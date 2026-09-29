@@ -4865,6 +4865,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                 formatFunction={formatVolume}
                 tooltipLabels={{ yes: 'YES Volume', no: 'NO Volume' }}
                 normalize={poolData?.source !== 'subgraph'}
+                unavailable={!!poolDataError}
               />
 
               <AggregatedStatDisplay
@@ -4877,6 +4878,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                 tooltipLabels={{ yes: 'YES Liquidity', no: 'NO Liquidity' }}
                 tooltipBreakdown={liquiditySummary.breakdown}
                 normalize={poolData?.source !== 'subgraph'}
+                unavailable={!!poolDataError}
               />
 
               <StatDisplay

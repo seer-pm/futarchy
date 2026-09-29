@@ -37,7 +37,12 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
 
   // Fetch organizations for table view
   const effectiveAggregator = ENABLE_V2_SUBGRAPH ? DEFAULT_AGGREGATOR : aggregatorAddress;
-  const { companies: organizations, loading: orgsLoading } = useAggregatorCompanies(effectiveAggregator);
+  const {
+    companies: organizations,
+    loading: orgsLoading,
+    error: orgsError,
+    refetch: refetchOrgs,
+  } = useAggregatorCompanies(effectiveAggregator);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -112,6 +117,8 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
             organizations={organizations}
             connectedWallet={connectedWallet}
             loading={orgsLoading}
+            error={orgsError}
+            onRetry={refetchOrgs}
             onOrgClick={(org) => {
               // Navigate to milestones page
               const url = `/milestones?company_id=${org.companyID}`;

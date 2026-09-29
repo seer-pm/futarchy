@@ -204,7 +204,8 @@ export const AggregatedStatDisplay = ({
     formatFunction,
     tooltipLabels = { yes: 'YES', no: 'NO' },
     tooltipBreakdown = null,
-    normalize = true
+    normalize = true,
+    unavailable = false
 }) => {
     const formatValue = formatFunction || formatNumber;
     // Distinguish "no data" (RPC/indexer failure -> null on both sides) from a
@@ -238,6 +239,11 @@ export const AggregatedStatDisplay = ({
                             <span className="text-white/60">Loading...</span>
                             <div className="w-3 h-3 border-2 border-white/40 border-t-transparent rounded-full animate-spin" />
                         </div>
+                    ) : unavailable ? (
+                        // The data source failed: say so rather than show 0.
+                        <span className="text-white/60" title="The market data service did not respond">
+                            Data unavailable
+                        </span>
                     ) : (
                         <span className="inline-flex items-center gap-1">
                             <span>{formattedTotal}</span>
@@ -249,7 +255,7 @@ export const AggregatedStatDisplay = ({
                 </span>
                 <span className="text-xs text-white/70">{label}</span>
 
-                {!isLoading && (
+                {!isLoading && !unavailable && (
                     <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-xs flex-col gap-1 rounded-md border border-white/10 bg-futarchyDarkGray42/95 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur-sm transition group-hover:flex">
                         <span className="font-semibold text-white/90">Breakdown</span>
                         {breakdownItems.map((item, index) => (

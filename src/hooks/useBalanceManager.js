@@ -1,5 +1,25 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { fetchAllBalancesAndPositions } from '../utils/unifiedBalanceFetcher';
+import { mergeWithLastKnown, describeFailedReads } from '../utils/balanceReadState';
+
+// null = "not loaded yet", never '0' (which means "zero balance")
+const EMPTY_BALANCES = {
+  currency: null,
+  company: null,
+  native: null,
+  currencyYes: null,
+  currencyNo: null,
+  companyYes: null,
+  companyNo: null,
+  wrappedCurrencyYes: null,
+  wrappedCurrencyNo: null,
+  wrappedCompanyYes: null,
+  wrappedCompanyNo: null,
+  totalCurrencyYes: null,
+  totalCurrencyNo: null,
+  totalCompanyYes: null,
+  totalCompanyNo: null,
+};
 
 const useBalanceManager = (config, address, isConnected) => {
   // Read balances on the market's chain, not the wallet's: the token addresses
@@ -37,35 +57,17 @@ const useBalanceManager = (config, address, isConnected) => {
   // IMPORTANT: Use null for initial state, NOT '0'
   // null = "not loaded yet" -> shows loading spinner
   // '0' = "user has zero balance" -> shows 0.00 (SCARY!)
-  const [balances, setBalances] = useState({
-    // Base tokens
-    currency: null, // null means not loaded yet
-    company: null,
-    native: null,
-
-    // Position tokens (ERC1155)
-    currencyYes: null,
-    currencyNo: null,
-    companyYes: null,
-    companyNo: null,
-
-    // Wrapped position tokens (ERC20)
-    wrappedCurrencyYes: null,
-    wrappedCurrencyNo: null,
-    wrappedCompanyYes: null,
-    wrappedCompanyNo: null,
-
-    // Calculated totals
-    totalCurrencyYes: null,
-    totalCurrencyNo: null,
-    totalCompanyYes: null,
-    totalCompanyNo: null,
-  });
+  const [balances, setBalances] = useState(EMPTY_BALANCES);
   
   // Start with loading true if we have a wallet connected
   const [isLoading, setIsLoading] = useState(true); // Internal loading state - starts true
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false); // Track if we've loaded at least once
   const [error, setError] = useState(null);
+
+  // Each fetch takes a ticket; a response whose ticket is no longer the
+  // latest (the account or chain changed, or a newer fetch started) is
+  // dropped so it cannot overwrite the current account's balances.
+  const requestIdRef = useRef(0);
 
   // UI loading state - true during initial load (before first successful fetch)
   const isLoadingForUI = !hasInitiallyLoaded && isConnected && !!address && !!stableConfig;
@@ -99,67 +101,53 @@ const useBalanceManager = (config, address, isConnected) => {
     }
 
     console.log('[BALANCE] ✅ All requirements met, starting balance fetch with unified fetcher...');
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
-    setError(null);
 
     try {
       // Use the unified fetcher with getBestRpc system
-      const formattedBalances = await fetchAllBalancesAndPositions(
+      const { failedReads, totalReads, ...formattedBalances } = await fetchAllBalancesAndPositions(
         stableConfig,
         address,
         chainId
       );
 
+      if (requestId !== requestIdRef.current) {
+        console.log('[BALANCE] ⏭️ Dropping stale balance response');
+        return;
+      }
+
       console.log('[BALANCE] ✅ Balances fetched via unified system:', formattedBalances);
-      setBalances(formattedBalances);
+      // Reads that failed come back null: keep the last value we read for
+      // them rather than showing the user a zero balance.
+      setBalances(prev => mergeWithLastKnown(prev, formattedBalances));
+      setError(describeFailedReads(failedReads, totalReads));
 
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       console.error('[BALANCE] ❌ Error fetching balances:', error);
-      setError(error.message);
+      // Keep the last known balances; the error tells the UI they may be stale.
+      setError(error.message || "Couldn't load balances");
     } finally {
-      console.log('[BALANCE] 🏁 Balance fetch completed');
-      setIsLoading(false);
-      if (!hasInitiallyLoaded) {
+      if (requestId === requestIdRef.current) {
+        console.log('[BALANCE] 🏁 Balance fetch completed');
+        setIsLoading(false);
         setHasInitiallyLoaded(true);
-        console.log('[BALANCE] 🎯 Initial load completed - future refreshes will be silent');
       }
     }
-  }, [isConnected, address, stableConfig, chainId, hasInitiallyLoaded]);
+  }, [isConnected, address, stableConfig, chainId]);
 
-  // Reset balances when disconnected or prepare loading when connected
+  // Start from a clean slate whenever the account, chain or connection
+  // changes, so the previous account's balances are never shown for the new
+  // one, and drop any response still in flight for the old one.
   useEffect(() => {
-    console.log('[BALANCE] 🔗 Connection state changed:', { isConnected });
-    if (!isConnected) {
-      console.log('[BALANCE] 🔌 Wallet disconnected, resetting balances and load state');
-      // Use null to indicate "not loaded", NOT '0' (which means "zero balance")
-      setBalances({
-        currency: null,
-        company: null,
-        native: null,
-        currencyYes: null,
-        currencyNo: null,
-        companyYes: null,
-        companyNo: null,
-        wrappedCurrencyYes: null,
-        wrappedCurrencyNo: null,
-        wrappedCompanyYes: null,
-        wrappedCompanyNo: null,
-        totalCurrencyYes: null,
-        totalCurrencyNo: null,
-        totalCompanyYes: null,
-        totalCompanyNo: null,
-      });
-      setIsLoading(false);
-      setError(null);
-      setHasInitiallyLoaded(false); // Reset load state for next connection
-    } else {
-      // When connecting, reset loading flags to show loading state
-      console.log('[BALANCE] 🔗 Wallet connected, preparing to fetch balances');
-      setIsLoading(true);
-      setHasInitiallyLoaded(false);
-      setError(null);
-    }
-  }, [isConnected]);
+    console.log('[BALANCE] 🔗 Account or chain changed, resetting balances:', { isConnected, chainId });
+    requestIdRef.current += 1;
+    setBalances(EMPTY_BALANCES);
+    setError(null);
+    setHasInitiallyLoaded(false);
+    setIsLoading(!!isConnected);
+  }, [isConnected, address, chainId]);
 
   // Fetch balances when dependencies change
   useEffect(() => {
