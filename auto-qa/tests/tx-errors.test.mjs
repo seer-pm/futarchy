@@ -109,6 +109,29 @@ test('getEthersSigner — wait() resolves with status 1 on success', async () =>
     assert.equal(receipt.transactionHash, HASH);
 });
 
+test('getEthersProvider — reads through the public client, not window.ethereum', async () => {
+    const calls = [];
+    const publicClient = {
+        chain: { id: 100, name: 'Gnosis' },
+        request: async ({ method }) => {
+            calls.push(method);
+            if (method === 'eth_chainId') return '0x64';
+            if (method === 'eth_blockNumber') return '0x10';
+            throw new Error(`unexpected ${method}`);
+        },
+    };
+    const original = globalThis.window;
+    globalThis.window = { ethereum: { request: async () => { throw new Error('window.ethereum must not be used'); } } };
+    try {
+        const provider = adapters.getEthersProvider(publicClient);
+        assert.equal((await provider.getNetwork()).chainId, 100);
+        assert.equal(await provider.getBlockNumber(), 16);
+        assert.ok(calls.includes('eth_blockNumber'));
+    } finally {
+        globalThis.window = original;
+    }
+});
+
 // ---------------------------------------------------------------------------
 // Safe execution result
 // ---------------------------------------------------------------------------
