@@ -672,6 +672,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       console.error("Invalid amount entered");
       return;
     }
+    if (insufficientBalance) {
+      console.error('Amount exceeds the available balance');
+      return;
+    }
     if ((chainId === 1 || chainId === 100) && (quoterPreview.isLoading || quoterPreview.quotedAmountIn !== amount || !quoterPreview.amountOut)) {
       console.error('A current on-chain pool quote is required');
       return;
@@ -828,6 +832,105 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     }
   };
 
+  // "Available" in the panel: wallet collateral plus the conditional tokens
+  // already held for the selected side. value is the exact decimal string
+  // (null while unknown) — the Confirm button compares the amount with it.
+  const computeAvailableBalance = () => {
+    if (!account) return { display: '-', value: null };
+    if (!positions || isLoadingBalances) return { display: 'Loading...', value: null }; // Show loading when positions or balances are loading
+
+    // Calculate available balance based on selected outcome and action
+    let calculatedValueStr, symbol;
+
+    if (selectedAction === 'Buy') {
+      // For Buy action, determine balance based on selected currency mode
+      if (selectedCurrency === getCurrencySymbol()) {
+        // Currency mode: Sum position tokens + currency balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = balances?.sdaiBalance || '0';
+        symbol = getCurrencySymbol();
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating currency balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      } else if (selectedCurrency === 'WXDAI') {
+        if (redirectToCOW) {
+          // When redirectToCOW is true: Show currency + position tokens (like currency mode)
+          const outcomeBalance = selectedOutcome === 'approved'
+            ? (positions?.currencyYes?.total || '0')
+            : (positions?.currencyNo?.total || '0');
+          const baseBalance = balances?.sdaiBalance || '0';
+          symbol = getCurrencySymbol();
+
+          try {
+            const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+            const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+            const totalBN = outcomeBN.add(baseBN);
+            calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+          } catch (calcError) {
+            console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
+            calculatedValueStr = outcomeBalance || '-';
+          }
+        } else {
+          // Original behavior: Show ONLY native xDAI balance (no position tokens)
+          calculatedValueStr = balances?.nativeBalance || '0';
+          symbol = 'xDAI';
+        }
+      } else {
+        // Fallback mode: Sum position tokens + WXDAI balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = positions?.wxdai || '0';
+        symbol = 'WXDAI';
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating fallback balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      }
+    } else { // Sell
+      // For Sell action: Always sum position tokens + base token balance
+      const outcomeBalance = selectedOutcome === 'approved'
+        ? (positions?.companyYes?.total || '0')
+        : (positions?.companyNo?.total || '0');
+      const baseBalance = positions?.faot || '0'; // Company token balance from positions
+      symbol = getCompanySymbol();
+
+      try {
+        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+        const totalBN = outcomeBN.add(baseBN);
+        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+      } catch (calcError) {
+        console.error('Error calculating sell balance:', calcError);
+        calculatedValueStr = outcomeBalance || '-';
+      }
+    }
+
+    // If we don't have a valid calculated value, show dash
+    if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
+      return { display: '-', value: calculatedValueStr === '-' ? null : '0' };
+    }
+
+    return { display: `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`, value: calculatedValueStr };
+  };
+  const availableBalance = computeAvailableBalance();
+  const insufficientBalance = Boolean(account) && availableBalance.value !== null && exceedsAvailable(amount, availableBalance.value);
+
   const displayedPriceImpact = Number(quoterPreview.priceImpactPct);
   const hasPriceImpact = Number.isFinite(displayedPriceImpact);
   const priceImpactTooHigh = hasPriceImpact && displayedPriceImpact > 15;
@@ -970,99 +1073,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
               onClick={account ? handleMaxClick : undefined}
               className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
             >
-              {(() => {
-                if (!account) return '-';
-                if (!positions || isLoadingBalances) return 'Loading...'; // Show loading when positions or balances are loading
-
-                // Calculate available balance based on selected outcome and action
-                let calculatedValueStr, symbol;
-
-                if (selectedAction === 'Buy') {
-                  // For Buy action, determine balance based on selected currency mode
-                  if (selectedCurrency === getCurrencySymbol()) {
-                    // Currency mode: Sum position tokens + currency balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = balances?.sdaiBalance || '0';
-                    symbol = getCurrencySymbol();
-
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating currency balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  } else if (selectedCurrency === 'WXDAI') {
-                    if (redirectToCOW) {
-                      // When redirectToCOW is true: Show currency + position tokens (like currency mode)
-                      const outcomeBalance = selectedOutcome === 'approved'
-                        ? (positions?.currencyYes?.total || '0')
-                        : (positions?.currencyNo?.total || '0');
-                      const baseBalance = balances?.sdaiBalance || '0';
-                      symbol = getCurrencySymbol();
-
-                      try {
-                        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                        const totalBN = outcomeBN.add(baseBN);
-                        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                      } catch (calcError) {
-                        console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
-                        calculatedValueStr = outcomeBalance || '-';
-                      }
-                    } else {
-                      // Original behavior: Show ONLY native xDAI balance (no position tokens)
-                      calculatedValueStr = balances?.nativeBalance || '0';
-                      symbol = 'xDAI';
-                    }
-                  } else {
-                    // Fallback mode: Sum position tokens + WXDAI balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = positions?.wxdai || '0';
-                    symbol = 'WXDAI';
-
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating fallback balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  }
-                } else { // Sell
-                  // For Sell action: Always sum position tokens + base token balance
-                  const outcomeBalance = selectedOutcome === 'approved'
-                    ? (positions?.companyYes?.total || '0')
-                    : (positions?.companyNo?.total || '0');
-                  const baseBalance = positions?.faot || '0'; // Company token balance from positions
-                  symbol = getCompanySymbol();
-
-                  try {
-                    const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                    const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                    const totalBN = outcomeBN.add(baseBN);
-                    calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                  } catch (calcError) {
-                    console.error('Error calculating sell balance:', calcError);
-                    calculatedValueStr = outcomeBalance || '-';
-                  }
-                }
-
-                // If we don't have a valid calculated value, show dash
-                if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
-                  return '-';
-                }
-
-                return `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`;
-              })()}
+              {availableBalance.display}
             </span>
           </div>
 
@@ -1342,9 +1353,9 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             <button
               onClick={handleConfirmClick}
               className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors text-sm bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
+              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || insufficientBalance || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
             >
-              <span className="relative z-10">{quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
+              <span className="relative z-10">{insufficientBalance ? 'Insufficient balance' : quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
               {(amount && parseFloat(amount) > 0 && !marketHasClosed) && (
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
               )}
