@@ -15,14 +15,12 @@ const { ethers } = require('ethers');
 const RPC_LISTS = {
     1: [ // Ethereum Mainnet
         'https://ethereum-rpc.publicnode.com',
-        'https://1rpc.io/eth',
-        'https://rpc.ankr.com/eth'
+        'https://1rpc.io/eth'
     ],
     100: [ // Gnosis Chain
         'https://rpc.gnosischain.com',
         'https://gnosis-rpc.publicnode.com',
-        'https://1rpc.io/gnosis',
-        'https://rpc.ankr.com/gnosis'
+        'https://1rpc.io/gnosis'
     ]
 };
 

@@ -57,6 +57,12 @@ export function useExternalSpotPrice(spotConfig, closeTimestamp = null) {
         } catch (err) {
             console.error('[useExternalSpotPrice] Error:', err);
             setError(err.message);
+            // Drop the old series on a user-visible fetch: a stale or
+            // unscaled spot price is worse than none.
+            if (!silent) {
+                setSpotData(null);
+                setSpotPrice(null);
+            }
         } finally {
             if (!silent) setLoading(false);
         }

@@ -2431,7 +2431,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     spotData: configSpotData,
     spotPrice: configSpotPrice,
     refetch: refetchConfigSpot,
-    loading: configSpotLoading
+    loading: configSpotLoading,
+    error: configSpotError
   } = useExternalSpotPrice(effectiveSpotPriceParam, config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp);
 
   // Nullify spot data for closed markets
@@ -4839,7 +4840,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             candleLimit={500}
                             config={config}
                             // External spot price from CoinGecko (via ?useSpotPrice=... or config.marketInfo.coingecko_ticker)
-                            showSpot={!!effectiveSpotPriceParam}
+                            // Hidden when the spot fetch or its rate read failed
+                            showSpot={!!effectiveSpotPriceParam && !configSpotError}
                             spotData={stableSpotData}
                             spotPrice={finalSpotPrice}
                             onSpotRefresh={refetchConfigSpot}
