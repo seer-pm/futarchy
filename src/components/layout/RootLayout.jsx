@@ -125,8 +125,12 @@ const RootLayout = ({
           toggleDarkMode={toggleDarkMode} // Pass the toggle function
         />
         {secondaryHeader}
+        {/* Sticky only on lg+, where the hero collapses to a compact bar on
+            scroll. On phones and tablets the full hero (~500px) would pin
+            over most of the viewport, so it scrolls away with the page;
+            mt-20 clears the fixed header that top-20 cleared before. */}
         {heroContent && (
-          <div className="sticky top-20 z-30">
+          <div className="relative z-30 mt-20 lg:mt-0 lg:sticky lg:top-20">
             {heroContent}
           </div>
         )}
