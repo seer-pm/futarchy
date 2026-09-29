@@ -98,7 +98,8 @@ export const describeTxError = (error, fallback = 'Transaction failed. Please tr
 export const SWAP_REVERT_HINT = 'The price may have moved beyond your slippage tolerance. Review the quote and try again.';
 
 const QUOTE_NETWORK_PATTERN = /network|timeout|timed out|failed to fetch|could not detect|missing response|rate limit|too many requests|\b429\b|\b50[234]\b|bad response|ECONN/i;
-const QUOTE_REVERT_PATTERN = /revert|call exception|CALL_EXCEPTION/i;
+// "No route found": @seer-pm/sdk when the Lens quoter finds no pool that can fill the swap
+const QUOTE_REVERT_PATTERN = /revert|call exception|CALL_EXCEPTION|no route found/i;
 
 // ethers v5 appends "[ See: https://links.ethers.org/... ]" and
 // "(method=..., data=..., code=..., version=...)" to its messages

@@ -36,6 +36,21 @@ export const minReceiveFromQuote = (quotedAmountOutRaw, slippagePct) => {
 };
 
 /**
+ * Slippage (basis points) to build a fresh quote with, so that the
+ * transaction's minimum output is never below the Min. Receive the user
+ * confirmed: the largest bps with freshOut * (10000 - bps) / 10000 >=
+ * confirmedMin, capped at the user's tolerance. Returns null when the fresh
+ * quote is already below the confirmed minimum (the swap would revert).
+ */
+export const slippageBpsForMinimum = (freshAmountOutRaw, confirmedMinRaw, maxBps) => {
+    const fresh = toBigInt(freshAmountOutRaw);
+    const min = toBigInt(confirmedMinRaw);
+    if (fresh <= 0n || fresh < min) return null;
+    const bps = Number(((fresh - min) * 10000n) / fresh);
+    return Math.max(0, Math.min(bps, Math.floor(maxBps)));
+};
+
+/**
  * Picks input and output from a pool swap's (amount0Delta, amount1Delta).
  *
  * Pool-side sign convention (Uniswap V3 / Algebra, and the
