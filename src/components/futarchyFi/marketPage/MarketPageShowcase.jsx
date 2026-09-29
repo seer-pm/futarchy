@@ -15,6 +15,7 @@ import ArrowDownIcon from '../../common/icons/ArrowDownIcon';
 import PageLayout from '../../layout/PageLayout';
 import ShowcaseSwapComponent from "./ShowcaseSwapComponent";
 import { useAccount } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { ethers } from "ethers";
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -2948,50 +2949,11 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     }
   }, [configLoading, configError]);
 
-  const handleConnectWallet = async () => {
-    try {
-      if (!window.ethereum) {
-        alert("Please install MetaMask!");
-        return;
-      }
-
-      // Request account access
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      setAddress(accounts[0]);
-
-      // Check if we're on Gnosis Chain (100)
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      if (chainId !== '0x64') { // 100 in hex
-        try {
-          // Try to switch to Gnosis Chain
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x64' }],
-          });
-        } catch (switchError) {
-          // If chain hasn't been added to MetaMask
-          if (switchError.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x64',
-                chainName: 'Gnosis Chain',
-                nativeCurrency: {
-                  name: 'xDAI',
-                  symbol: 'xDAI',
-                  decimals: 18
-                },
-                rpcUrls: ['https://rpc.gnosischain.com'],
-                blockExplorerUrls: ['https://gnosisscan.io']
-              }],
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-    }
-  };
+  // Open the RainbowKit wallet picker; the chain guard switches networks once
+  // connected. (This used to call window.ethereum directly, which reaches
+  // whichever extension won the injection race, and set an undefined state.)
+  const { openConnectModal } = useConnectModal();
+  const handleConnectWallet = () => openConnectModal?.();
 
   // Listen for account changes
   useEffect(() => {
