@@ -249,16 +249,26 @@ test('hazard pin — module is currently DEAD CODE (zero importers in src/)', as
     // module having no importers. If it ever gets imported, the hazard
     // becomes real.
     //
-    // Reverse-engineered grep: scan src/ for any non-self reference.
-    const { execSync } = await import('node:child_process');
-    const cmd = `grep -r "proposalDocumentationStore\\|setProposalDocumentationData\\|getProposalDocumentationData" --include="*.js" --include="*.jsx" ${REPO_ROOT}/src/ 2>/dev/null || true`;
-    const out = execSync(cmd, { encoding: 'utf8' });
-    const refs = out.split('\n').filter(line => {
-        if (!line.trim()) return false;
-        // Exclude self (the module itself defining these names).
-        if (line.includes('src/utils/proposalDocumentationStore.js')) return false;
-        return true;
-    });
+    // Scan src/ for any non-self reference. Done in-process rather than by
+    // shelling out to grep, which cmd.exe does not have.
+    const { readdirSync } = await import('node:fs');
+    const { relative, sep } = await import('node:path');
+    const NAMES = /proposalDocumentationStore|setProposalDocumentationData|getProposalDocumentationData/;
+    const refs = [];
+    const walk = (dir) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const full = resolve(dir, entry.name);
+            if (entry.isDirectory()) { walk(full); continue; }
+            if (!/\.jsx?$/.test(entry.name)) continue;
+            const rel = relative(REPO_ROOT, full).split(sep).join('/');
+            // Exclude self (the module itself defining these names).
+            if (rel === 'src/utils/proposalDocumentationStore.js') continue;
+            readFileSync(full, 'utf8').split(/\r?\n/).forEach((line, i) => {
+                if (NAMES.test(line)) refs.push(`${rel}:${i + 1}:${line.trim()}`);
+            });
+        }
+    };
+    walk(resolve(REPO_ROOT, 'src'));
     assert.equal(refs.length, 0,
         `proposalDocumentationStore.js is no longer dead code — it now has importers:\n` +
         `${refs.join('\n')}\n` +
