@@ -5233,7 +5233,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             proposalId={config?.proposalId || config?.MARKET_ADDRESS}
                             chainId={config?.chainId || 100}
                             height={448}
-                            candleLimit={500}
+                            candleLimit={1000}
                             config={config}
                             // External spot price from CoinGecko (via ?useSpotPrice=... or config.marketInfo.coingecko_ticker)
                             showSpot={!!effectiveSpotPriceParam}
