@@ -1141,7 +1141,10 @@ const ConfirmSwapModal = memo(({
             // Move to the second substep
             setCurrentSubstep({ step: 1, substep: 2 });
 
-            // 3. Execute split position
+            // 3. Execute split position. Gas is left to the wallet's estimate: a
+            // fixed 2,000,000 limit made wallets show ~5x the real fee (a mainnet
+            // split uses ~360k gas) and could block a wallet whose ETH covers the
+            // split but not that limit.
             const marketAddress = transactionData?.marketAddress || MARKET_ADDRESS;
 
             if (isEthersSigner) {
@@ -1155,8 +1158,7 @@ const ConfirmSwapModal = memo(({
                 const tx = await routerContract.splitPosition(
                     marketAddress,
                     baseToken.address,
-                    amountInWei,
-                    { gasLimit: 2000000 }
+                    amountInWei
                 );
                 // Check for Safe wallet
                 if (isSafeConnection(walletClient)) {
@@ -1184,8 +1186,7 @@ const ConfirmSwapModal = memo(({
                     abi: FUTARCHY_ROUTER_ABI,
                     functionName: 'splitPosition',
                     args: [marketAddress, baseToken.address, amountInWei],
-                    account,
-                    gas: 2000000n
+                    account
                 });
 
                 const hash = await walletClient.writeContract(request);
