@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { STEPS_CONFIG } from './constants/swapSteps';
 import { ethers } from 'ethers';
@@ -34,6 +34,8 @@ import { useContractConfig } from '../../../hooks/useContractConfig';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
 import { getUniswapV3QuoteWithPriceImpact, getPoolSqrtPrice, sqrtPriceX96ToPrice } from '../../../utils/uniswapSdk';
 import { usePublicClient, useChainId } from 'wagmi';
+import { describeQuoteError } from '../../../utils/txErrors';
+import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMath';
 
 // Opens only from the native-swap action — load it on demand.
 const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
@@ -143,6 +145,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     error: null
   });
   const [showPriceInfo, setShowPriceInfo] = useState(false);
+  // Id of the latest quote request; a response for an older one is dropped
+  const quoteRequestIdRef = useRef(0);
   const [tradeAnywayAcknowledged, setTradeAnywayAcknowledged] = useState(false);
   const publicClient = usePublicClient();
   const walletChainId = useChainId();
@@ -214,6 +218,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     setQuoterPreview(prev => ({ ...prev, isLoading: true }));
 
     let isActive = true;
+    const requestId = ++quoteRequestIdRef.current;
+    const isCurrent = () => isActive && requestId === quoteRequestIdRef.current;
 
     // Debounce: wait 500ms after user stops typing
     const timer = setTimeout(async () => {
@@ -279,6 +285,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
             try {
               const quote = await getSwapQuote(quoteParams, ethersProvider);
+              if (quote?.partialFill) {
+                // The pool stops at its price limit before taking the whole amount
+                const partialError = new Error('Pool can only fill part of this amount');
+                partialError.partialFill = true;
+                throw partialError;
+              }
               if (quote) {
                 quoteResult = {
                   amountOut: quote.expectedReceive, // String already
@@ -381,7 +393,14 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             currentPrice = sqrtPriceX96ToPrice(poolData.sqrtPriceX96);
           }
 
-          executionPrice = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
+          // Average price actually paid, already in currency per company
+          executionPrice = executionPriceFor({
+            amountIn: amount,
+            amountOut: quoteResult.amountOutFormatted,
+            isBuy: selectedAction === 'Buy'
+          });
+          // Pool spot price after the swap (token1/token0; inverted below)
+          quoteResult.priceAfter = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
         }
 
         // Determine if we need to invert based on action (Buy/Sell)
@@ -404,7 +423,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
           if (shouldInvert) {
             currentPrice = 1 / currentPrice;
-            executionPrice = 1 / executionPrice;
+            quoteResult.priceAfter = 1 / quoteResult.priceAfter;
           }
 
           console.log('[QUOTER SHOWCASE] Uniswap Prices:', {
@@ -427,7 +446,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
 
-        if (isActive) {
+        if (isCurrent()) {
           const afterPrice = quoteResult.priceAfter ?? executionPrice;
           const priceImpactPct = Number.isFinite(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
             ? Math.abs(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
@@ -454,8 +473,13 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
       } catch (error) {
-        if (isActive) {
+        if (isCurrent()) {
           console.error('[QUOTER SHOWCASE] Error:', error);
+          // A partial fill or a reverted simulation means the pool cannot take
+          // this amount; RPC and other failures are reported as they are.
+          const { kind, message } = error?.partialFill
+            ? { kind: 'partial', message: 'Pool can only fill part of this amount' }
+            : describeQuoteError(error);
 
           // Even when the quoter fails (e.g. no liquidity in sell direction),
           // try to show the current pool price so More Info still works
@@ -481,13 +505,15 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             console.warn('[QUOTER SHOWCASE] Could not get fallback pool price:', poolErr.message);
           }
 
+          if (!isCurrent()) return; // a newer quote started while the fallback price loaded
+
           setQuoterPreview({
             isLoading: false,
             amountOut: null,
             currentPrice: fallbackPrice,
             chainId: chainId,
-            insufficientLiquidity: true, // Quoter failure means pool can't handle this trade
-            error: error.message
+            insufficientLiquidity: kind === 'partial' || kind === 'reverted',
+            error: message
           });
         }
       }
@@ -718,13 +744,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
         priceAfter: (USING_FUTARCHY_QUOTER && quoterPreview?.priceAfter) ? quoterPreview.priceAfter : null,
         minimumReceived: (USING_FUTARCHY_QUOTER && quoterPreview?.minimumReceived) ? quoterPreview.minimumReceived : null,
         amountOutRaw: (USING_FUTARCHY_QUOTER && quoterPreview?.amountOutRaw) ? quoterPreview.amountOutRaw : null,
-        // Price Impact: Change in Pool Spot Price (Price After vs Current Price)
+        // Price impact of this trade, already included in the quoted output
         priceImpact: quoterPreview?.priceImpactPct ?? null,
-
-        // Slippage: Execution Price (Avg) vs Current Spot Price
-        slippage: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice && quoterPreview?.executionPrice)
-          ? ((Math.abs(parseFloat(quoterPreview.currentPrice) - parseFloat(quoterPreview.executionPrice)) / parseFloat(quoterPreview.currentPrice)) * 100).toFixed(4)
-          : null,
 
         currentPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice) ? quoterPreview.currentPrice : null,
         executionPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.executionPrice) ? quoterPreview.executionPrice : null,
@@ -1110,7 +1131,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1209,7 +1235,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
