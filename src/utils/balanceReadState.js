@@ -65,7 +65,7 @@ export function mergeWithLastKnown(previous, next) {
 export function describeFailedReads(failedReads, totalReads) {
     if (!failedReads || failedReads.length === 0) return null;
     if (failedReads.length >= totalReads) {
-        return "Couldn't load balances: the RPC did not respond.";
+        return 'The RPC did not respond.';
     }
-    return `Couldn't load ${failedReads.length} of ${totalReads} balances: the RPC did not respond.`;
+    return `${failedReads.length} of ${totalReads} balance reads failed: the RPC did not respond.`;
 }

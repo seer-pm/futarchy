@@ -68,6 +68,6 @@ test('describeFailedReads — no failures → null (no error state)', () => {
 });
 
 test('describeFailedReads — some or all failed → a user-facing message', () => {
-    assert.match(describeFailedReads(['Currency balance'], 8), /Couldn't load 1 of 8 balances/);
-    assert.match(describeFailedReads(Array(8).fill('x'), 8), /^Couldn't load balances/);
+    assert.match(describeFailedReads(['Currency balance'], 8), /^1 of 8 balance reads failed/);
+    assert.equal(describeFailedReads(Array(8).fill('x'), 8), 'The RPC did not respond.');
 });
