@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useRef, memo, useState, useCallback, useMemo } from "react";
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import Image from "next/image";
@@ -2164,6 +2164,43 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false);
   const [isEditProposalModalOpen, setIsEditProposalModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  // The sticky hero collapses on desktop once the page scrolls. Without a
+  // placeholder the content below jumps up by the height it loses, moving
+  // whatever is under the cursor mid-click. heroReserve re-adds that height
+  // as a spacer at the top of the page content so nothing shifts.
+  const heroRef = useRef(null);
+  const [heroEl, setHeroEl] = useState(null);
+  const attachHeroRef = useCallback((el) => {
+    heroRef.current = el;
+    setHeroEl(el);
+  }, []);
+  const expandedHeroHeightRef = useRef(0);
+  const isScrolledRef = useRef(false);
+  const [heroReserve, setHeroReserve] = useState(0);
+  const syncHeroReserve = useCallback(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const height = el.offsetHeight;
+    if (!isScrolledRef.current) {
+      expandedHeroHeightRef.current = height;
+      setHeroReserve(0);
+    } else {
+      setHeroReserve(Math.max(0, expandedHeroHeightRef.current - height));
+    }
+  }, []);
+  // Layout effect: measure after the collapse commits but before paint.
+  useLayoutEffect(() => {
+    isScrolledRef.current = isScrolled;
+    syncHeroReserve();
+  }, [isScrolled, syncHeroReserve]);
+  // Follow later size changes (data loading, the 300ms padding transition).
+  useEffect(() => {
+    if (!heroEl || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(syncHeroReserve);
+    observer.observe(heroEl);
+    return () => observer.disconnect();
+  }, [heroEl, syncHeroReserve]);
 
   // Chart line visibility filters
   const [chartFilters, setChartFilters] = useState({
@@ -4755,7 +4792,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
   // Extract hero content for RootLayout
   const marketHero = (
-    <div className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
+    <div ref={attachHeroRef} className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
       }`}>
       <div className="container mx-auto px-5 flex-grow flex flex-col justify-center">
         <div className={`grid grid-cols-1 lg:grid-cols-3 transition-all duration-300 ease-in-out ${isScrolled ? 'py-8 lg:py-3' : 'py-4 lg:py-6'
@@ -5076,6 +5113,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       <PriceHeader yesPrice={newYesPrice} noPrice={newNoPrice} currencySymbol={currencySymbol} />
       <RootLayout headerConfig="app" footerConfig="main" useSnapScroll={false} heroContent={marketHero}>
         <PageLayout>
+          {/* Holds the height the sticky hero gives up when it collapses */}
+          <div aria-hidden="true" style={{ height: heroReserve }} />
           {/* Main Content Area - Split Design */}
           <div className="relative flex-1">
             {/* Dark top half */}
