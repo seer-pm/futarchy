@@ -273,17 +273,29 @@ test('source — division-by-zero guard: invert only when current/price > 0', ()
 });
 
 // ---------------------------------------------------------------------------
-// Output match logic — find the side that is NOT the input
+// Output selection — by sign, via selectSwapDeltas (M18)
 // ---------------------------------------------------------------------------
 
-test('source — amountOut detection: matches input side, returns the OTHER', () => {
-    // Pinned: the contract returns two deltas (one positive, one
-    // negative). The input matches one. amountOut = the other.
-    // A regression that reverses this returns the input as output —
-    // catastrophic display bug.
-    assert.match(SRC,
-        /if\s*\(absD0\.eq\(amountBig\)\)\s*\{\s*amountOutBig\s*=\s*absD1[\s\S]*?\}\s*else\s*\{\s*amountOutBig\s*=\s*absD0/,
-        `amountOut detection logic drifted — must be: if absD0==input then amountOut=absD1 else amountOut=absD0`);
+test('source — output delta is picked by sign (selectSwapDeltas), not "whichever is not amountIn"', () => {
+    // The old rule (if |d0| == amountIn then out = |d1| else out = |d0|)
+    // reported the INPUT as the output whenever a thin pool stopped at its
+    // price limit and consumed less than amountIn.
+    assert.match(SRC, /import\s*\{\s*selectSwapDeltas\s*\}\s*from\s*["']\.\/swapQuoteMath(\.js)?["']/,
+        'FutarchyQuoteHelper must use selectSwapDeltas');
+    assert.match(SRC, /selectSwapDeltas\(\{[\s\S]*?amount0Delta:[\s\S]*?amount1Delta:[\s\S]*?amountIn:/,
+        'selectSwapDeltas must receive both deltas and the requested amountIn');
+    assert.doesNotMatch(SRC, /absD0\.eq\(amountBig\)/,
+        'the "match the input size" output rule must not come back');
+});
+
+test('source — partial fills are reported (partialFill + raw.amountInConsumed)', () => {
+    assert.match(SRC, /partialFill:\s*isPartialFill/);
+    assert.match(SRC, /amountInConsumed:\s*amountInConsumed\.toString\(\)/);
+});
+
+test('source — a failed simulation keeps the original error as cause (code/reason survive)', () => {
+    assert.match(SRC, /wrapped\.cause\s*=\s*error/);
+    assert.match(SRC, /wrapped\.code\s*=\s*error\.code/);
 });
 
 test('source — uses callStatic (eth_call simulation, NOT a real tx)', () => {
