@@ -15,13 +15,14 @@
 
 import { ethers } from 'ethers';
 import { getBestRpcProvider } from './getBestRpc';
+import { readOrNull } from './balanceReadState';
 
 /**
  * TESTING FLAGS - Enable to simulate various failure scenarios
  *
  * SIMULATE_RPC_FAILURE: When true, simulates complete RPC failure
  * - Fails at the provider level (getBestRpc will fail)
- * - All balance fetches return 0
+ * - All balance fetches fail (reported as null + an error, never as 0)
  * - Useful for testing error handling and fallback UI states
  *
  * SHOW_REALISTIC_ERROR: When true, shows realistic error messages instead of "Simulated" prefix
@@ -84,23 +85,26 @@ const ERC1155_ABI = [
 ];
 
 /**
- * Helper to format balance safely
+ * Helper to format balance safely.
+ * A failed read (null) stays null so the UI can tell it from a real zero.
  */
 function formatBalanceSafely(balance) {
   try {
-    if (!balance) return '0';
+    if (balance === null || balance === undefined) return null;
     const formatted = ethers.utils.formatEther(balance);
-    return formatted === 'NaN' ? '0' : formatted;
+    return formatted === 'NaN' ? null : formatted;
   } catch (error) {
     console.error('[UNIFIED-BALANCE] Error formatting balance:', error);
-    return '0';
+    return null;
   }
 }
 
 /**
- * Helper to calculate total (unwrapped + wrapped)
+ * Helper to calculate total (unwrapped + wrapped).
+ * Unknown if either part failed to load.
  */
 function calculateTotal(unwrapped, wrapped) {
+  if (unwrapped === null || wrapped === null) return null;
   try {
     const unwrappedBN = ethers.utils.parseUnits(unwrapped || '0', 18);
     const wrappedBN = ethers.utils.parseUnits(wrapped || '0', 18);
@@ -113,10 +117,11 @@ function calculateTotal(unwrapped, wrapped) {
 }
 
 /**
- * Safe contract call wrapper with error handling
+ * Safe contract call wrapper with error handling.
+ * Resolves to null (never 0) on failure and records the read in `failed`.
  */
-async function safeContractCall(contractCall, description) {
-  try {
+async function safeContractCall(contractCall, description, failed) {
+  return readOrNull(async () => {
     // Simulate RPC failure for testing if flag is enabled
     if (SIMULATE_RPC_FAILURE) {
       console.warn(`[UNIFIED-BALANCE] 🧪 SIMULATING FAILURE for ${description}`);
@@ -127,12 +132,9 @@ async function safeContractCall(contractCall, description) {
     }
 
     const result = await contractCall();
-    console.log(`[UNIFIED-BALANCE] ✅ ${description}: ${result.toString()}`);
+    console.log(`[UNIFIED-BALANCE] ✅ ${description}: ${result?.toString()}`);
     return result;
-  } catch (error) {
-    console.log(`[UNIFIED-BALANCE] ❌ Failed ${description}:`, error.message);
-    return ethers.BigNumber.from(0);
-  }
+  }, description, failed);
 }
 
 /**
@@ -141,7 +143,9 @@ async function safeContractCall(contractCall, description) {
  * @param {Object} config - Contract configuration with BASE_TOKENS_CONFIG, MERGE_CONFIG, CONDITIONAL_TOKENS_ADDRESS
  * @param {string} address - User wallet address
  * @param {number} chainId - Chain ID (1 for Ethereum, 100 for Gnosis)
- * @returns {Promise<Object>} Object containing all balances and positions
+ * @returns {Promise<Object>} Object containing all balances and positions.
+ *   A balance whose read failed is null (not '0'), and `failedReads` lists
+ *   the reads that failed, out of `totalReads`.
  */
 export async function fetchAllBalancesAndPositions(config, address, chainId = 100) {
   console.log('[UNIFIED-BALANCE] 🚀 Starting unified balance fetch...', {
@@ -232,6 +236,7 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
 
   // Fetch all balances in parallel
   console.log('[UNIFIED-BALANCE] 🔄 Fetching all balances in parallel...');
+  const failedReads = [];
 
   const [
     // Base tokens
@@ -249,15 +254,15 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
     positionBalances
   ] = await Promise.all([
     // Base tokens
-    safeContractCall(() => currencyContract.balanceOf(address), `Currency balance`),
-    safeContractCall(() => companyContract.balanceOf(address), `Company balance`),
-    safeContractCall(() => provider.getBalance(address), `Native balance`),
+    safeContractCall(() => currencyContract.balanceOf(address), `Currency balance`, failedReads),
+    safeContractCall(() => companyContract.balanceOf(address), `Company balance`, failedReads),
+    safeContractCall(() => provider.getBalance(address), `Native balance`, failedReads),
 
     // Wrapped position tokens
-    safeContractCall(() => wrappedCurrencyYesContract.balanceOf(address), `Wrapped currency YES`),
-    safeContractCall(() => wrappedCurrencyNoContract.balanceOf(address), `Wrapped currency NO`),
-    safeContractCall(() => wrappedCompanyYesContract.balanceOf(address), `Wrapped company YES`),
-    safeContractCall(() => wrappedCompanyNoContract.balanceOf(address), `Wrapped company NO`),
+    safeContractCall(() => wrappedCurrencyYesContract.balanceOf(address), `Wrapped currency YES`, failedReads),
+    safeContractCall(() => wrappedCurrencyNoContract.balanceOf(address), `Wrapped currency NO`, failedReads),
+    safeContractCall(() => wrappedCompanyYesContract.balanceOf(address), `Wrapped company YES`, failedReads),
+    safeContractCall(() => wrappedCompanyNoContract.balanceOf(address), `Wrapped company NO`, failedReads),
 
     // ERC1155 positions (batch query)
     safeContractCall(
@@ -265,20 +270,17 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
         Array(positionIds.length).fill(address),
         positionIds
       ),
-      `ERC1155 position balances`
-    ).then(result => Array.isArray(result) ? result : [
-      ethers.BigNumber.from(0),
-      ethers.BigNumber.from(0),
-      ethers.BigNumber.from(0),
-      ethers.BigNumber.from(0)
-    ])
+      `ERC1155 position balances`,
+      failedReads
+    ).then(result => Array.isArray(result) ? result : [null, null, null, null])
   ]);
 
   console.log('[UNIFIED-BALANCE] 📊 Raw results:', {
-    currency: currencyBalance.toString(),
-    company: companyBalance.toString(),
-    native: nativeBalance.toString(),
-    positions: positionBalances.map(b => b.toString())
+    currency: currencyBalance?.toString(),
+    company: companyBalance?.toString(),
+    native: nativeBalance?.toString(),
+    positions: positionBalances.map(b => b?.toString()),
+    failedReads
   });
 
   // Format all balances
@@ -319,9 +321,9 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
     formattedBalances.wrappedCompanyNo
   );
 
-  console.log('[UNIFIED-BALANCE] ✅ All balances fetched successfully:', formattedBalances);
+  console.log('[UNIFIED-BALANCE] ✅ Balance fetch finished:', formattedBalances);
 
-  return formattedBalances;
+  return { ...formattedBalances, failedReads, totalReads: 8 };
 }
 
 /**
@@ -372,10 +374,14 @@ export async function fetchAllowances(config, ownerAddress, spenderAddress, chai
   );
 
   // Fetch allowances in parallel
+  const failedReads = [];
   const [currencyAllowance, companyAllowance] = await Promise.all([
-    safeContractCall(() => currencyContract.allowance(ownerAddress, spenderAddress), 'Currency allowance'),
-    safeContractCall(() => companyContract.allowance(ownerAddress, spenderAddress), 'Company allowance')
+    safeContractCall(() => currencyContract.allowance(ownerAddress, spenderAddress), 'Currency allowance', failedReads),
+    safeContractCall(() => companyContract.allowance(ownerAddress, spenderAddress), 'Company allowance', failedReads)
   ]);
+  if (failedReads.length > 0) {
+    throw new Error(`Failed to read allowances: ${failedReads.join(', ')}`);
+  }
 
   const allowances = {
     currency: formatBalanceSafely(currencyAllowance),

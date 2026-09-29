@@ -184,7 +184,7 @@ const ErrorState = ({ error, onRetry }) => (
   <div className="flex flex-col items-center justify-center p-6 space-y-4">
     <div className="text-center">
       <p className="text-sm font-semibold text-futarchyGray12 dark:text-white mb-1">
-        Failed to load balances
+        Couldn&apos;t load balances
       </p>
       <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
         {error || 'RPC connection failed'}
@@ -196,6 +196,22 @@ const ErrorState = ({ error, onRetry }) => (
         className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray12 dark:text-white border border-futarchyGray6 dark:border-futarchyGray6 transition-colors"
       >
         Try Again
+      </button>
+    )}
+  </div>
+);
+
+// Shown above balances we read earlier when the latest refresh failed, so the
+// user knows the numbers may be out of date instead of seeing them zeroed.
+const StaleBalancesNotice = ({ onRetry }) => (
+  <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg text-xs bg-futarchyGray4 dark:bg-futarchyDarkGray2 text-futarchyGray11 dark:text-futarchyGray112">
+    <span>Couldn&apos;t refresh balances — showing the last known values.</span>
+    {onRetry && (
+      <button
+        onClick={onRetry}
+        className="font-semibold text-futarchyGray12 dark:text-white hover:underline"
+      >
+        Retry
       </button>
     )}
   </div>
@@ -264,8 +280,11 @@ const MarketBalancePanel = ({
       </div>
       {/* Balance Content */}
       <div className="flex flex-col justify-between p-4">
-        {/* Show error state if there's an error */}
-        {balanceError ? (
+        {balanceError && positions?.wxdai && (
+          <StaleBalancesNotice onRetry={refetchBalances} />
+        )}
+        {/* Show error state if there's an error and nothing loaded to fall back on */}
+        {balanceError && !positions?.wxdai ? (
           <ErrorState error={balanceError} onRetry={refetchBalances} />
         ) : isLoadingPositions || !positions?.wxdai ? (
           /* Show loading state while fetching OR if balances are null (not loaded yet) */

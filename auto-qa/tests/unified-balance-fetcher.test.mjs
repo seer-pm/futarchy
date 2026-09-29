@@ -10,19 +10,19 @@
  *   1. ABIs — ERC20 (balanceOf + allowance), ERC1155 (balanceOf +
  *      balanceOfBatch). Drift in either silently breaks every fetch.
  *
- *   2. formatBalanceSafely — null/NaN/throw all coerce to '0'. NEVER
- *      throws. A regression that throws would crash the wallet
- *      display when any one balance fails to format.
+ *   2. formatBalanceSafely — a failed read (null) / NaN / throw all map
+ *      to null, never '0': a zero balance on an RPC hiccup looks like
+ *      the user's funds are gone. NEVER throws.
  *
  *   3. calculateTotal — BigNumber.add of unwrapped + wrapped, formatted
- *      back to ether. Try/catch returns '0' on parse failure.
+ *      back to ether. null (unknown) if either part failed to load.
  *
- *   4. safeContractCall — wraps every contract call; on error, returns
- *      BigNumber.from(0) (NOT throw). Prevents one failed balance call
- *      from cascading.
+ *   4. safeContractCall — wraps every contract call via readOrNull; on
+ *      error resolves to null (NOT throw, NOT 0) and records the read in
+ *      failedReads, which the result returns so the hook can show an error.
  *
  *   5. balanceOfBatch fallback — if the batch call result is NOT an
- *      array (e.g. single-error rejection), provides 4 zero defaults.
+ *      array (the read failed), provides 4 null defaults.
  *      Otherwise destructuring positionBalances[0..3] would crash.
  *
  *   6. Defensive config validation — throws on missing config / address
@@ -50,19 +50,20 @@ const SRC = readFileSync(
     'utf8',
 );
 
-// --- spec mirror of formatBalanceSafely (string '0' on any failure) ---
+// --- spec mirror of formatBalanceSafely (null on any failure) ---
 function formatBalanceSafelyMirror(balance, formatEther) {
     try {
-        if (!balance) return '0';
+        if (balance === null || balance === undefined) return null;
         const formatted = formatEther(balance);
-        return formatted === 'NaN' ? '0' : formatted;
+        return formatted === 'NaN' ? null : formatted;
     } catch {
-        return '0';
+        return null;
     }
 }
 
 // --- spec mirror of calculateTotal (BigInt-safe to test without ethers) ---
 function calculateTotalMirror(unwrapped, wrapped) {
+    if (unwrapped === null || wrapped === null) return null;
     try {
         const u = BigInt(unwrapped || '0');
         const w = BigInt(wrapped || '0');
@@ -149,31 +150,35 @@ test('ERC1155_ABI — has balanceOf(account, id) + balanceOfBatch(accounts[], id
 });
 
 // ---------------------------------------------------------------------------
-// formatBalanceSafely — null/NaN/throw all coerce to '0'
+// formatBalanceSafely — failed read/NaN/throw all map to null (never '0')
 // ---------------------------------------------------------------------------
 
-test('formatBalanceSafely spec mirror — null balance returns "0"', () => {
-    assert.equal(formatBalanceSafelyMirror(null, () => 'should not be called'), '0');
+test('formatBalanceSafely spec mirror — failed read (null) stays null, not "0"', () => {
+    assert.equal(formatBalanceSafelyMirror(null, () => 'should not be called'), null);
 });
 
-test('formatBalanceSafely spec mirror — undefined balance returns "0"', () => {
-    assert.equal(formatBalanceSafelyMirror(undefined, () => 'should not be called'), '0');
+test('formatBalanceSafely spec mirror — undefined balance returns null', () => {
+    assert.equal(formatBalanceSafelyMirror(undefined, () => 'should not be called'), null);
 });
 
-test('formatBalanceSafely spec mirror — throwing formatter returns "0" (try/catch)', () => {
+test('formatBalanceSafely spec mirror — throwing formatter returns null (try/catch)', () => {
     assert.equal(
         formatBalanceSafelyMirror('1000', () => { throw new Error('parse fail'); }),
-        '0'
+        null
     );
 });
 
-test('formatBalanceSafely spec mirror — formatter returning "NaN" string maps to "0"', () => {
+test('formatBalanceSafely spec mirror — formatter returning "NaN" string maps to null', () => {
     // Pinned: a regression that drops the explicit `=== 'NaN'` check
     // would surface "NaN" in the UI.
     assert.equal(
         formatBalanceSafelyMirror('1000', () => 'NaN'),
-        '0'
+        null
     );
+});
+
+test('formatBalanceSafely spec mirror — a real zero balance still formats', () => {
+    assert.equal(formatBalanceSafelyMirror(0n, () => '0.0'), '0.0');
 });
 
 test('formatBalanceSafely spec mirror — valid balance passes through formatter', () => {
@@ -186,10 +191,10 @@ test('formatBalanceSafely spec mirror — valid balance passes through formatter
 test('source — formatBalanceSafely guards on null + "NaN" string (BOTH paths)', () => {
     // Pinned both guard branches.
     assert.match(SRC,
-        /if\s*\(!balance\)\s*return\s+['"]0['"]/,
-        `formatBalanceSafely null/falsy guard shape drifted`);
+        /if\s*\(balance\s*===\s*null\s*\|\|\s*balance\s*===\s*undefined\)\s*return\s+null/,
+        `formatBalanceSafely null guard shape drifted`);
     assert.match(SRC,
-        /formatted\s*===\s*['"]NaN['"]\s*\?\s*['"]0['"]\s*:\s*formatted/,
+        /formatted\s*===\s*['"]NaN['"]\s*\?\s*null\s*:\s*formatted/,
         `formatBalanceSafely NaN-string guard shape drifted`);
 });
 
@@ -201,9 +206,12 @@ test('calculateTotal spec mirror — sums unwrapped + wrapped', () => {
     assert.equal(calculateTotalMirror('100', '50'), '150');
 });
 
-test('calculateTotal spec mirror — null/empty inputs treated as 0', () => {
-    assert.equal(calculateTotalMirror(null, '50'), '50');
-    assert.equal(calculateTotalMirror('100', null), '100');
+test('calculateTotal spec mirror — a failed part (null) makes the total unknown', () => {
+    assert.equal(calculateTotalMirror(null, '50'), null);
+    assert.equal(calculateTotalMirror('100', null), null);
+});
+
+test('calculateTotal spec mirror — empty/undefined inputs treated as 0', () => {
     assert.equal(calculateTotalMirror('', ''), '0');
     assert.equal(calculateTotalMirror(undefined, undefined), '0');
 });
@@ -228,16 +236,20 @@ test('source — calculateTotal uses parseUnits/formatUnits with 18 decimals (et
 });
 
 // ---------------------------------------------------------------------------
-// safeContractCall — wraps every call; returns BN.from(0) on error
+// safeContractCall — wraps every call; resolves to null on error
 // ---------------------------------------------------------------------------
 
-test('source — safeContractCall returns ethers.BigNumber.from(0) on error (NOT throw)', () => {
-    // Pinned: a regression that throws would cascade — one failed
-    // balance call would crash the entire fetch. The catch swallows
-    // and returns 0.
+test('source — safeContractCall goes through readOrNull (null + failedReads, NOT 0, NOT throw)', () => {
+    // Pinned: a failed read must neither throw (one failed call would sink
+    // the whole fetch) nor come back as 0 (looks like the funds are gone).
     assert.match(SRC,
-        /\}\s*catch\s*\(error\)\s*\{[\s\S]*?return\s+ethers\.BigNumber\.from\(0\)/,
-        `safeContractCall must return BigNumber.from(0) on error (NOT throw)`);
+        /async function safeContractCall\(contractCall,\s*description,\s*failed\)\s*\{\s*return readOrNull\(/,
+        `safeContractCall must delegate to readOrNull`);
+    assert.doesNotMatch(SRC, /BigNumber\.from\(0\)/,
+        `no read may fall back to BigNumber.from(0)`);
+    assert.match(SRC,
+        /return\s*\{\s*\.\.\.formattedBalances,\s*failedReads,\s*totalReads:\s*8\s*\}/,
+        `fetchAllBalancesAndPositions must report failedReads/totalReads`);
 });
 
 test('source — safeContractCall has the SIMULATE_RPC_FAILURE branch (testing-only)', () => {
@@ -254,14 +266,14 @@ test('source — safeContractCall has the SIMULATE_RPC_FAILURE branch (testing-o
 // balanceOfBatch fallback — if not array, default to 4 zeros
 // ---------------------------------------------------------------------------
 
-test('source — balanceOfBatch result coerced to 4-zero array if not array', () => {
-    // Pinned: the .then(result => Array.isArray(result) ? result : [4 zeros])
+test('source — balanceOfBatch result coerced to 4-null array if not array', () => {
+    // Pinned: the .then(result => Array.isArray(result) ? result : [4 nulls])
     // pattern. Without this, destructuring positionBalances[0..3] would
-    // throw if the batch call rejected (safeContractCall returns BN.from(0)
-    // which is NOT array).
+    // throw if the batch call failed (safeContractCall resolves to null).
+    // Nulls, not zeros: the positions are unknown, not empty.
     assert.match(SRC,
-        /\.then\(result\s*=>\s*Array\.isArray\(result\)\s*\?\s*result\s*:\s*\[\s*ethers\.BigNumber\.from\(0\),\s*ethers\.BigNumber\.from\(0\),\s*ethers\.BigNumber\.from\(0\),\s*ethers\.BigNumber\.from\(0\)\s*\]/,
-        `balanceOfBatch non-array fallback shape drifted (must default to 4 zeros)`);
+        /\.then\(result\s*=>\s*Array\.isArray\(result\)\s*\?\s*result\s*:\s*\[\s*null,\s*null,\s*null,\s*null\s*\]\)/,
+        `balanceOfBatch non-array fallback shape drifted (must default to 4 nulls)`);
 });
 
 // ---------------------------------------------------------------------------
