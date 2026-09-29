@@ -32,7 +32,7 @@ const SubgraphChart = ({
     proposalId,
     chainId = 100,
     height = 448,
-    candleLimit = 500,
+    candleLimit = 1000, // Page size per pool (indexer max is 1000)
     config = null,
     autoResyncInterval = 60, // Auto-resync every X seconds (configurable)
     // NEW: External spot price props
@@ -80,7 +80,13 @@ const SubgraphChart = ({
         error,
         refetch,
         lastUpdated
-    } = useSubgraphData(proposalId, chainId, candleLimit);
+    } = useSubgraphData(
+        proposalId,
+        chainId,
+        candleLimit,
+        config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp || null,
+        config?.startCandleUnix || config?.metadata?.startCandleUnix || config?.marketInfo?.startCandleUnix || null
+    );
 
     // Subscribe to context refresh triggers
     const { chartRefreshKey } = useSubgraphRefresh();

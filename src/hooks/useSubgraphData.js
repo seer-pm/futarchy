@@ -3,33 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 import { fetchConditionalPools } from '../services/conditionalPools';
-
-// Build queries for the Checkpoint indexer (no BigInt scalar; candles aren't
-// a reverse field on Pool; proposal/pool are flat string IDs that the
-// /candles/graphql proxy chain-prefixes when matched as inline literals).
-//
-// We inline the proposal ID and pool IDs as string literals so the proxy
-// regex (which only rewrites literals like `proposal: "0x…"`) picks them
-// up — variables like $proposalId aren't in the proxy's prefix list.
-function buildCandlesQuery(poolIds, limit, closeTimestamp) {
-    const idList = poolIds.map(id => `"${id}"`).join(', ');
-    return `{
-      candles(
-        first: ${limit},
-        orderBy: periodStartUnix,
-        orderDirection: desc,
-        where: { pool_in: [${idList}], period: 3600, periodStartUnix_lte: ${closeTimestamp} }
-      ) {
-        pool { id }
-        periodStartUnix
-        period
-        open
-        high
-        low
-        close
-      }
-    }`;
-}
+import { resolveCandleWindow, fetchCandlesInWindow } from '../utils/candleWindowQuery';
 
 // Module-level cache to prevent double fetches from React Strict Mode
 const fetchCache = new Map();
@@ -112,8 +86,11 @@ function adaptCandlesToChartFormat(candles) {
 /**
  * Hook to fetch chart data from subgraph
  * Uses module-level cache to handle React Strict Mode double-mounting
+ *
+ * Candles are fetched for the market's window [startUnix .. closeTimestamp]
+ * (open-ended when either is missing); candleLimit is the page size per pool.
  */
-export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTimestamp = null) {
+export function useSubgraphData(proposalId, chainId, candleLimit = 1000, closeTimestamp = null, startUnix = null) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [data, setData] = useState({
@@ -128,7 +105,7 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
     });
 
     // Unique key for this proposal/chain combo
-    const cacheKey = `${proposalId}-${chainId}`;
+    const cacheKey = `${proposalId}-${chainId}-${startUnix}-${closeTimestamp}`;
 
     // Track mounted state to avoid state updates after unmount
     const mountedRef = useRef(true);
@@ -194,28 +171,26 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
                     return emptyResult;
                 }
 
-                // Step 2 — fetch candles for those pools in one batched query.
-                // Checkpoint has no Pool.candles reverse field, so we query
-                // candles directly and group by pool address.
-                const poolIds = [yesPool, noPool].filter(Boolean).map(p => p.id);
-                const candlesCutoff = closeTimestamp
-                    ? Number(closeTimestamp)
-                    : Math.floor(Date.now() / 1000);
-
-                const candlesData = await executeQuery(
-                    endpoint,
-                    buildCandlesQuery(poolIds, candleLimit, candlesCutoff)
+                // Step 2 — fetch candles for those pools within the market's
+                // window: one aliased query per page, each pool with its own
+                // limit so a busy pool can't crowd out the other.
+                const candlePools = [
+                    yesPool && { alias: 'yes', id: yesPool.id },
+                    noPool && { alias: 'no', id: noPool.id },
+                ].filter(Boolean);
+                const range = resolveCandleWindow({
+                    startUnix,
+                    closeUnix: closeTimestamp,
+                    nowUnix: Math.floor(Date.now() / 1000)
+                });
+                const candles = await fetchCandlesInWindow(
+                    (query) => executeQuery(endpoint, query),
+                    candlePools,
+                    range,
+                    { pageSize: candleLimit }
                 );
-
-                const yesCandles = [];
-                const noCandles = [];
-                const yesId = (yesPool?.id || '').toLowerCase();
-                const noId = (noPool?.id || '').toLowerCase();
-                for (const c of candlesData.candles || []) {
-                    const poolAddr = (c.pool?.id || '').toLowerCase();
-                    if (poolAddr === yesId) yesCandles.push(c);
-                    else if (poolAddr === noId) noCandles.push(c);
-                }
+                const yesCandles = candles.yes || [];
+                const noCandles = candles.no || [];
 
                 const yesData = adaptCandlesToChartFormat(yesCandles);
                 const noData = adaptCandlesToChartFormat(noCandles);
@@ -275,7 +250,7 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
                 setLoading(false);
             }
         }
-    }, [proposalId, chainId, endpoint, candleLimit, cacheKey]);
+    }, [proposalId, chainId, endpoint, candleLimit, closeTimestamp, startUnix, cacheKey]);
 
     // Initial fetch - only once
     useEffect(() => {
@@ -283,7 +258,7 @@ export function useSubgraphData(proposalId, chainId, candleLimit = 500, closeTim
             doFetch(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [proposalId, endpoint]); // Minimal deps to prevent re-runs
+    }, [proposalId, endpoint, startUnix, closeTimestamp]); // Minimal deps to prevent re-runs
 
     return {
         ...data,
