@@ -80,6 +80,10 @@ const ACCEPTED_SMALL_FIRST = [
     // usePoolData: single-pool lookup by ID (`pools(where: { id: "0xabc" }, first: 1)`)
     // is intentionally narrow — we want exactly one pool, not many.
     { file: 'src/hooks/usePoolData.js', entity: 'pools', first: 1 },
+    // registryAdapter: proposalEntities filtered by one exact proposalAddress —
+    // a lookup, not a listing. It was always there; the extractor only started
+    // seeing it once it accepted a line break after `proposalEntities(`.
+    { file: 'src/adapters/registryAdapter.js', entity: 'proposalentities', first: 5 },
 ];
 
 function isAccepted(finding) {

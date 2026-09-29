@@ -20,7 +20,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = new URL('../../', import.meta.url);
@@ -59,7 +59,8 @@ function extractAssetRefs() {
     const refs = new Map(); // ref -> Set<callerFile>
     const re = /\/assets\/[a-zA-Z0-9._\-/]+\.(png|jpg|jpeg|webp|svg|gif|ico)/g;
     for (const file of walk(SRC_DIR)) {
-        const rel = relative(fileURLToPath(REPO_ROOT), file);
+        // POSIX-style so EXCLUDED_CALLERS also matches on Windows.
+        const rel = relative(fileURLToPath(REPO_ROOT), file).split(sep).join('/');
         if (EXCLUDED_CALLERS.has(rel)) continue;
         const src = readFileSync(file, 'utf8');
         const matches = src.match(re) || [];

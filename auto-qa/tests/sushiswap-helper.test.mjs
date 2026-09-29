@@ -59,7 +59,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -280,9 +279,9 @@ test('hazard H1 — futarchy.js:1238 still calls fetchSushiSwapRoute POSITIONALL
     // The other call site (ShowcaseSwapComponent.jsx) uses the correct
     // destructured form. This may be dead code, or a latent bug.
     // Per /loop directive: leave the bug, pin it.
-    const cmd = `grep -n 'fetchSushiSwapRoute(fromToken,\\s*toToken,\\s*parsedAmount)' ${JSON.stringify(resolve(REPO_ROOT, 'src/futarchyJS/futarchy.js'))} || true`;
-    const out = execSync(cmd, { encoding: 'utf8' }).trim();
-    assert.ok(out.length > 0,
+    // Read in-process rather than shelling out to grep, which cmd.exe lacks.
+    const futarchySrc = readFileSync(resolve(REPO_ROOT, 'src/futarchyJS/futarchy.js'), 'utf8');
+    assert.ok(/fetchSushiSwapRoute\(fromToken,\s*toToken,\s*parsedAmount\)/.test(futarchySrc),
         `futarchy.js no longer has the positional-args bug — either fixed (good — delete this test) ` +
         `or the call site moved (re-pin under new location).`);
 });
@@ -290,8 +289,13 @@ test('hazard H1 — futarchy.js:1238 still calls fetchSushiSwapRoute POSITIONALL
 test('hazard H1 — ShowcaseSwapComponent.jsx still uses the CORRECT destructured form', async () => {
     // Sanity-pin the working call site so a refactor that breaks it
     // would surface here.
-    const cmd = `grep -A 6 'fetchSushiSwapRoute({' ${JSON.stringify(resolve(REPO_ROOT, 'src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx'))} | head -8`;
-    const out = execSync(cmd, { encoding: 'utf8' });
+    // The call and the six lines after it (what `grep -A 6` used to return).
+    const lines = readFileSync(
+        resolve(REPO_ROOT, 'src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx'),
+        'utf8',
+    ).split(/\r?\n/);
+    const at = lines.findIndex(line => line.includes('fetchSushiSwapRoute({'));
+    const out = at === -1 ? '' : lines.slice(at, at + 7).join('\n');
     assert.ok(out.includes('tokenIn'),
         `ShowcaseSwapComponent.jsx no longer uses {tokenIn, ...} destructured form — verify call still works`);
 });

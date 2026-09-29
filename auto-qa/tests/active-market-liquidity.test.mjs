@@ -10,11 +10,17 @@ const sourcePath = resolve(root, 'src/utils/activeMarketLiquidity.js');
 const source = await readFile(sourcePath, 'utf8');
 
 // The pure reserve valuation has no runtime dependency; strip the application
-// import so Node can evaluate it in isolation under the repository's CJS mode.
-const testableSource = source.replace(
-  "import { getSubgraphEndpoint } from '../config/subgraphEndpoints';",
-  'const getSubgraphEndpoint = (chainId) => `https://chain-${chainId}.example/graphql`;'
-);
+// imports so Node can evaluate it in isolation under the repository's CJS mode.
+// (config/rpcEndpoints joined them in f2b0de2, when the RPC lists were merged.)
+const testableSource = source
+  .replace(
+    "import { getSubgraphEndpoint } from '../config/subgraphEndpoints';",
+    'const getSubgraphEndpoint = (chainId) => `https://chain-${chainId}.example/graphql`;'
+  )
+  .replace(
+    "import { getPrimaryRpcUrl } from '../config/rpcEndpoints';",
+    'const getPrimaryRpcUrl = (chainId) => `https://rpc-${chainId}.example`;'
+  );
 const liquidity = await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(testableSource)}`);
 
 const {

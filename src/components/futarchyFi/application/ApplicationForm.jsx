@@ -409,7 +409,7 @@ const ApplicationForm = () => {
               </div>
               <h2 className="text-3xl font-bold">Application Submitted!</h2>
               <p className="text-gray-300">
-                Thank you for your interest in Futarchy. We'll review your application and get back to you within 1-2 weeks.
+                Thank you for your interest in Futarchy. We&apos;ll review your application and get back to you within 1-2 weeks.
               </p>
             </motion.div>
           ) : (

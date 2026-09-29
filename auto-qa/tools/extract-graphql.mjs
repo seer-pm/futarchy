@@ -14,7 +14,8 @@
  *       body: JSON.stringify({ query: `{ ... }` })
  *
  * Heuristic: a string counts as GraphQL if it matches /\b(query|mutation|subscription)\s+\w*\s*[({]/
- * OR opens with `\s*\{\s*\w` and contains `(where:` or `(id:` or `(first:`.
+ * OR opens with `\s*\{\s*\w` and contains `(where:` or `(id:` or `(first:`
+ * (whitespace allowed after the parenthesis).
  *
  * Output: JSON to stdout — array of {file, line, source, query, length}.
  * `source` is the raw matched template body (for debugging); `query` is the
@@ -26,9 +27,12 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('../../', import.meta.url).pathname;
+// fileURLToPath, not URL#pathname: on Windows the pathname is "/D:/..." and
+// every readdirSync under it fails, so the walk silently finds nothing.
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const SCAN_DIRS = ['src'];
 const EXTS = new Set(['.js', '.jsx', '.mjs', '.ts', '.tsx']);
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', 'storybook-static', 'coverage']);
@@ -59,8 +63,10 @@ const TEMPLATE_RE = /`((?:\\.|\$\{[\s\S]*?\}|[^`\\])*)`/g;
 function looksLikeGraphQL(body) {
     const trimmed = body.trim();
     if (/\b(query|mutation|subscription)\s+\w*\s*[({]/.test(trimmed)) return true;
+    // Allow whitespace after `(` so multi-line argument lists count too:
+    // `candles(` followed by `first: 1,` on the next line.
     if (/^\{\s*\w/.test(trimmed) &&
-        /\((where|id|first|orderBy|skip|after):/.test(trimmed)) return true;
+        /\(\s*(where|id|first|orderBy|skip|after)\s*:/.test(trimmed)) return true;
     return false;
 }
 
@@ -88,7 +94,9 @@ for (const dir of SCAN_DIRS) {
             const body = m[1];
             if (!looksLikeGraphQL(body)) continue;
             queries.push({
-                file: relative(ROOT, file),
+                // POSIX-style paths so callers can match 'src/hooks/foo.js'
+                // regardless of the host OS.
+                file: relative(ROOT, file).split(sep).join('/'),
                 line: lineForIndex(text, m.index),
                 length: body.length,
                 source: body,

@@ -255,6 +255,9 @@ export const BASE_TOKENS_CONFIG = {
     }
 };
 
+// Fallback name still imported by ConfirmSwapModal and ShowcaseSwapComponent
+export const DEFAULT_BASE_TOKENS_CONFIG = BASE_TOKENS_CONFIG;
+
 // Split Configuration
 export const SPLIT_CONFIG = {
     conditionId: '0x9c89eb71b3b54134a6099fdced88df75254606b9a08d0c9b5f96fa3905e2db3d',
