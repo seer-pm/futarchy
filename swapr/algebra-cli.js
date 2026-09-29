@@ -18,7 +18,7 @@ const rl = require('node:readline/promises')
            .createInterface({ input: process.stdin, output: process.stdout });
 
 /* ───────────── CONFIG ───────────── */
-const RPC_URL     = process.env.RPC_URL || 'https://rpc.gnosis.gateway.fm';
+const RPC_URL     = process.env.RPC_URL || 'https://rpc.gnosischain.com';
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 if (!PRIVATE_KEY) throw new Error('Add PRIVATE_KEY to .env');
 
@@ -26,7 +26,8 @@ if (!PRIVATE_KEY) throw new Error('Add PRIVATE_KEY to .env');
 // Easy to modify gas settings - change these values as needed
 const GAS_CONFIG = {
   // Gas price in gwei - set to null for auto gas price
-  GAS_PRICE_GWEI: process.env.GAS_PRICE_GWEI || '2.0', // 2 gwei for fast transactions on Gnosis Chain
+  // 'auto' lets the node price each transaction; set a number to pin it.
+  GAS_PRICE_GWEI: process.env.GAS_PRICE_GWEI || 'auto',
   
   // Show detailed gas price logs for each transaction
   showGasPriceLog: true,
@@ -429,7 +430,9 @@ async function ensureAllowance(tok, spender, need, spenderName) {
   }
   
   console.log(`▸ approving ${token.symbol} ${spenderName ? `for ${spenderName} ` : ''}…`);
-  const tx = await token.contract.approve(spender, ethers.MaxUint256, getGasOptions('APPROVAL'));
+  // Exact allowance by default; APPROVE_MAX=true restores unlimited approvals.
+  const amount = process.env.APPROVE_MAX === 'true' ? ethers.MaxUint256 : need;
+  const tx = await token.contract.approve(spender, amount, getGasOptions('APPROVAL'));
   await logTransaction(`${token.symbol} Approval${spenderName ? ` to ${spenderName}` : ''}`, tx.hash);
   await tx.wait();
   console.log(`  ✔ ${token.symbol} approved.`);
@@ -1928,7 +1931,7 @@ async function createNewProposal(autoMode = false, config = null) {
     
     category = DEFAULT_CATEGORY;
     language = DEFAULT_LANGUAGE;
-    minBond = DEFAULT_MIN_BOND;
+    minBond = config && config.minBondWei ? String(config.minBondWei) : DEFAULT_MIN_BOND;
     
     // Use openingTime from config if provided, otherwise default to 3 months from now
     if (config && config.openingTime) {
@@ -3437,6 +3440,7 @@ function parseConfigValues(config) {
     liquidityDefault: liquidityAmounts[0], // Keep for backward compatibility (use first value)
     adapterAddress: config.ADAPTER_ADDRESS || config.adapterAddress || DEFAULT_ADAPTER_ADDRESS,
     openingTime: config.OPENING_TIME || config.openingTime ? parseInt(config.OPENING_TIME || config.openingTime) : null,
+    minBondWei: config.MIN_BOND_WEI || config.minBondWei || null, // Reality min bond; falls back to DEFAULT_MIN_BOND
     skipExistingWhenAUTO: config.SKIP_EXISTING_WHEN_AUTO !== undefined ? (config.SKIP_EXISTING_WHEN_AUTO === 'true' || config.SKIP_EXISTING_WHEN_AUTO === true) : 
                           config.skipExistingWhenAUTO !== undefined ? config.skipExistingWhenAUTO : true, // Default to true
     forceAddLiquidityPools: forceAddLiquidityPools, // New: pools to force liquidity addition even if they exist
