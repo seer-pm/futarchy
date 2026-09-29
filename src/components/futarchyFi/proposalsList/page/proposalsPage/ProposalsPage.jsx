@@ -53,6 +53,7 @@ const ProposalsPage = ({
     org: subgraphOrg,
     isOwner,
     loading: subgraphLoading,
+    error: orgError,
     refetch: refetchOrg
   } = useOrganization(isAddressId ? initialCompanyId : null);
 
@@ -80,6 +81,7 @@ const ProposalsPage = ({
   // Effect for subgraph-based data (address IDs)
   useEffect(() => {
     if (isAddressId && subgraphOrg && !subgraphLoading) {
+      setError(null);
       setCompanyData(subgraphOrg);
 
       // Async function to fetch pool data for proposals
@@ -227,8 +229,14 @@ const ProposalsPage = ({
       setCompanyData(null);
       setIsLoadingCompany(false);
       setIsLoading(false);
+      // A failed request is not an empty organization: show the error.
+      if (orgError) {
+        setError(/not found/i.test(orgError.message || '')
+          ? 'Organization not found.'
+          : "Couldn't load this organization's milestones. The registry did not respond.");
+      }
     }
-  }, [isAddressId, subgraphOrg, subgraphLoading]);
+  }, [isAddressId, subgraphOrg, subgraphLoading, orgError]);
 
   // Update the filter options structure
   const filterOptions = [
@@ -423,8 +431,16 @@ const ProposalsPage = ({
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
                   </div>
                 ) : error ? (
-                  <div className="text-center text-futarchyCrimson11 py-8">
-                    {error}
+                  <div role="alert" className="flex flex-col items-center gap-3 text-center text-futarchyCrimson11 py-8">
+                    <span>{error}</span>
+                    {orgError && (
+                      <button
+                        onClick={() => { setIsLoading(true); refetchOrg(); }}
+                        className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-futarchyGray62 dark:border-futarchyGray11/70 text-futarchyGray12 dark:text-white hover:border-futarchyLavender transition-colors"
+                      >
+                        Retry
+                      </button>
+                    )}
                   </div>
                 ) : filteredProposals.length === 0 ? (
                   <div className="text-center text-black dark:text-futarchyGray112 py-8">
