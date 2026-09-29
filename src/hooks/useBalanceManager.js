@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAccount } from 'wagmi';
 import { fetchAllBalancesAndPositions } from '../utils/unifiedBalanceFetcher';
 
 const useBalanceManager = (config, address, isConnected) => {
-  // Get current chain from wagmi
-  const { chain } = useAccount();
-  const chainId = chain?.id || 100; // Default to Gnosis
+  // Read balances on the market's chain, not the wallet's: the token addresses
+  // in config only exist there, and quotes already use config.chainId.
+  const chainId = config?.chainId || 100; // Default to Gnosis
 
   console.log('[BALANCE] Hook initialized with:', {
     hasConfig: !!config,

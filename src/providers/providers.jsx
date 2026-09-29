@@ -166,7 +166,7 @@ const Providers = ({ children }) => {
               </div>
             ),
           }}
-          initialChain={mainnet}
+          initialChain={gnosis}
           coolMode={false}
         >
           <SafeAutoConnector />

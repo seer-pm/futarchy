@@ -1,5 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useSwitchChain } from 'wagmi';
+import { isWrongChain } from '../utils/chainGuard';
+
+// Get chain name helper
+function getChainName(chainId) {
+  switch (Number(chainId)) {
+    case 1:
+      return 'Ethereum Mainnet';
+    case 100:
+      return 'Gnosis Chain';
+    case 137:
+      return 'Polygon';
+    case 42161:
+      return 'Arbitrum';
+    default:
+      return `Chain ${chainId}`;
+  }
+}
 
 /**
  * Hook to validate that the user is on the correct chain based on config
@@ -84,22 +101,6 @@ export const useChainValidation = (config, configLoading = false) => {
     }
   };
 
-  // Get chain name helper
-  function getChainName(chainId) {
-    switch (chainId) {
-      case 1:
-        return 'Ethereum Mainnet';
-      case 100:
-        return 'Gnosis Chain';
-      case 137:
-        return 'Polygon';
-      case 42161:
-        return 'Arbitrum';
-      default:
-        return `Chain ${chainId}`;
-    }
-  }
-
   return {
     isCorrectChain,
     currentChainId: currentChain?.id,
@@ -112,5 +113,26 @@ export const useChainValidation = (config, configLoading = false) => {
     canSwitch: !!switchChain && chains?.some(c => c.id === configChainId),
     showModal,
     setShowModal
+  };
+};
+
+/**
+ * Guard for modals that submit a market's transactions. Unlike
+ * useChainValidation it holds no state, so it is correct on the render where
+ * the wallet changes chain, and it does not drive the WrongNetworkModal (which
+ * the user may have dismissed).
+ *
+ * @param {number} requiredChainId - Chain the market lives on (config.chainId)
+ */
+export const useRequiredChain = (requiredChainId = 100) => {
+  const { chainId: walletChainId, isConnected } = useAccount();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
+
+  return {
+    isWrongChain: isWrongChain({ isConnected, walletChainId, requiredChainId }),
+    walletChainName: walletChainId ? getChainName(walletChainId) : null,
+    requiredChainName: getChainName(requiredChainId),
+    isSwitching,
+    switchToRequiredChain: () => switchChain({ chainId: Number(requiredChainId) }),
   };
 };

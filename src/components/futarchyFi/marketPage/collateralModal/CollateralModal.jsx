@@ -18,6 +18,7 @@ import { getEthersSigner, isSafeWallet } from "../../../../utils/ethersAdapters"
 // import { useContractConfig } from "../../../../hooks/useContractConfig";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
+import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
 
 const toBN = (value) => ethers.BigNumber.from(value.toString());
@@ -341,6 +342,7 @@ const CollateralModal = ({
   const { address: account, isConnected } = useAccount();
   // const { config, isLoading: configLoading } = useContractConfig();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
+  const requiredChain = useRequiredChain(config?.chainId || 100);
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -1128,6 +1130,10 @@ const CollateralModal = ({
       setLocalError("Please connect your wallet first");
       return;
     }
+    if (requiredChain.isWrongChain) {
+      setLocalError(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
+      return;
+    }
 
     try {
       console.log('[CollateralModal] Starting transaction with:', {
@@ -1726,6 +1732,12 @@ const CollateralModal = ({
     // buttonAction remains () => {} or can be explicitly set if needed
     buttonIsEnabled = false; // Disabled while processing
     buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+  } else if (requiredChain.isWrongChain) {
+    // Split/merge calls go to this market's contracts, which only exist on its chain
+    buttonContent = requiredChain.isSwitching ? "Switching network..." : `Switch to ${requiredChain.requiredChainName}`;
+    buttonAction = requiredChain.switchToRequiredChain;
+    buttonIsEnabled = !requiredChain.isSwitching;
+    buttonClasses += " bg-black hover:bg-black/80 text-white dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
   } else { // Not processing, in input mode (localProcessingStep is null/undefined)
     buttonContent = action === "add" ? "Split Collateral" : "Merge Collateral";
     buttonAction = onHandleActionButtonClick;
@@ -1991,6 +2003,12 @@ const CollateralModal = ({
           </motion.div>
         )}
       </AnimatePresence >
+
+      {requiredChain.isWrongChain && !localProcessingStep && (
+        <div className="p-2 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+          This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || "another network"}.
+        </div>
+      )}
 
       {/* Unified Action Button */}
       <div className="" > {/* Ensures button is at the bottom, mt-auto pushes it down if content is short, pt-4 for spacing */}
