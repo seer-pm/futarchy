@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { formatBalance } from '../../../utils/formatters';
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { formatWith } from '../../../utils/precisionFormatter';
 
 const LoadingSpinner = ({ className = "h-4 w-4" }) => (
@@ -134,12 +135,30 @@ const WalletBalanceItem = ({ tokenName, walletBalance, isLoading, showBorder = f
   </div>
 );
 
-const BalanceItem = ({ tokenName, positionBalance, walletBalance, isLoading, showBorder = false, buyTokenUrl }) => (
-  <div className={`flex-1 flex flex-col items-center p-3 ${showBorder ? 'border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40' : ''}`}>
+// positionBalance is min(YES, NO): the amount that can be merged back into
+// the base token. Label it as such and show the YES/NO holdings, otherwise a
+// wallet holding only YES tokens reads as "0 GNO".
+const BalanceItem = ({ tokenName, positionBalance, yesBalance, noBalance, walletBalance, isLoading, showBorder = false, buyTokenUrl }) => (
+  <div className={`flex-1 min-w-0 flex flex-col items-center p-3 ${showBorder ? 'border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40' : ''}`}>
     <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">{tokenName}</span>
-    <span className="text-sm font-semibold text-futarchyGray12 dark:text-white h-6 flex items-center">
-      {isLoading ? <LoadingSpinner /> : `${formatWith(parseFloat(positionBalance || '0'), 'balance')} ${tokenName}`}
+    <span
+      className="text-sm font-semibold text-futarchyGray12 dark:text-white h-6 flex items-center gap-1"
+      title={`Mergeable = min(YES_${tokenName}, NO_${tokenName}): the amount you can merge back into ${tokenName}`}
+    >
+      {isLoading ? <LoadingSpinner /> : (
+        <>
+          {`${formatWith(parseFloat(positionBalance || '0'), 'balance')} ${tokenName}`}
+          <span className="text-[10px] font-medium text-futarchyGray11 dark:text-white/60">mergeable</span>
+        </>
+      )}
     </span>
+    {!isLoading && (
+      <span className="text-[10px] text-futarchyGray11 dark:text-white/60 whitespace-nowrap">
+        <span className="text-futarchyBlue11 dark:text-futarchyBlue9">YES {formatWith(parseFloat(yesBalance || '0'), 'balance')}</span>
+        {' · '}
+        <span className="text-futarchyGold11 dark:text-futarchyGold8">NO {formatWith(parseFloat(noBalance || '0'), 'balance')}</span>
+      </span>
+    )}
     <a
       href={buyTokenUrl}
       target="_blank"
@@ -200,6 +219,25 @@ const ErrorState = ({ error, onRetry }) => (
     )}
   </div>
 );
+
+const ConnectWalletState = () => {
+  const { openConnectModal } = useConnectModal();
+  return (
+    <div className="flex flex-col items-center justify-center p-6 space-y-3">
+      <p className="text-sm text-futarchyGray11 dark:text-white/70 text-center">
+        Connect a wallet to see balances
+      </p>
+      {openConnectModal && (
+        <button
+          onClick={openConnectModal}
+          className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray12 dark:text-white border border-futarchyGray6 dark:border-futarchyGray6 transition-colors"
+        >
+          Connect Wallet
+        </button>
+      )}
+    </div>
+  );
+};
 
 const LoadingState = () => (
   <div className="flex flex-col items-center justify-center p-6 space-y-3">
@@ -265,7 +303,9 @@ const MarketBalancePanel = ({
       {/* Balance Content */}
       <div className="flex flex-col justify-between p-4">
         {/* Show error state if there's an error */}
-        {balanceError ? (
+        {!address ? (
+          <ConnectWalletState />
+        ) : balanceError ? (
           <ErrorState error={balanceError} onRetry={refetchBalances} />
         ) : isLoadingPositions || !positions?.wxdai ? (
           /* Show loading state while fetching OR if balances are null (not loaded yet) */
@@ -273,10 +313,12 @@ const MarketBalancePanel = ({
         ) : devMode ? (
           <>
             {/* Unified Balance Card for devMode=true */}
-            <div className="flex rounded-2xl h-[90px] border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 overflow-hidden">
+            <div className="flex rounded-2xl min-h-[90px] border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 overflow-hidden">
               <BalanceItem
                 tokenName={getCurrencySymbol()}
                 positionBalance={sdiPositionBalance}
+                yesBalance={positions?.currencyYes?.total}
+                noBalance={positions?.currencyNo?.total}
                 walletBalance={positions?.wxdai}
                 isLoading={isLoadingPositions}
                 showBorder
@@ -285,6 +327,8 @@ const MarketBalancePanel = ({
               <BalanceItem
                 tokenName={getCompanySymbol()}
                 positionBalance={gnoPositionBalance}
+                yesBalance={positions?.companyYes?.total}
+                noBalance={positions?.companyNo?.total}
                 walletBalance={positions?.faot}
                 isLoading={isLoadingPositions}
                 buyTokenUrl={getCompanyUrl()}
