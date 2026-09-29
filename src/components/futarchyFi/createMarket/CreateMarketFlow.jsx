@@ -13,6 +13,24 @@ const panelClass = 'border border-futarchyGray6 dark:border-futarchyGray7 bg-whi
 const inputClass = 'w-full px-3 py-2 bg-futarchyGray2 dark:bg-futarchyGray3 border border-futarchyGray6 dark:border-futarchyGray7 rounded-md text-sm text-futarchyGray12 dark:text-white focus:outline-none focus:ring-2 focus:ring-futarchyBlue9';
 const labelClass = 'text-xs font-semibold uppercase tracking-wide text-futarchyGray10 dark:text-futarchyGray11';
 
+// The permissionless Chiado stack is not deployed yet; only show its plan
+// when debugging.
+const SHOW_PERMISSIONLESS_STACK = process.env.NEXT_PUBLIC_DEBUG_MODE?.toLowerCase() === 'true';
+
+// Start with the proposal fields blank instead of the workflow's sample
+// proposal (e.g. KIP-90), which may already be resolved.
+function emptyProposalForm(organizationId) {
+  return {
+    ...createMarketWizardDefaults({ organizationId }),
+    proposalNumber: '',
+    proposalCode: '',
+    displayTitle0: '',
+    displayTitle1: '',
+    question: '',
+    description: '',
+  };
+}
+
 function formatDate(timestamp) {
   if (!timestamp) return 'Not set';
   return new Date(Number(timestamp) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -85,19 +103,18 @@ function MetadataPreview({ metadata }) {
 
 export default function CreateMarketFlow() {
   const [organizationId, setOrganizationId] = useState('kleros');
-  const defaults = useMemo(
-    () => createMarketWizardDefaults({ organizationId }),
-    [organizationId]
-  );
-  const [form, setForm] = useState(defaults);
+  const [form, setForm] = useState(() => emptyProposalForm(organizationId));
 
   const selectedOrganization = KNOWN_ORGANIZATIONS[organizationId];
   const marketPlan = useMemo(() => buildOneStepMarketPlan({ ...form, organizationId }), [form, organizationId]);
-  const permissionlessPlan = useMemo(() => buildPermissionlessStackPlan(), []);
+  const permissionlessPlan = useMemo(
+    () => (SHOW_PERMISSIONLESS_STACK ? buildPermissionlessStackPlan() : null),
+    []
+  );
 
   const updateOrganization = (nextOrganizationId) => {
     setOrganizationId(nextOrganizationId);
-    setForm(createMarketWizardDefaults({ organizationId: nextOrganizationId }));
+    setForm(emptyProposalForm(nextOrganizationId));
   };
 
   const updateField = (field, value) => {
@@ -135,20 +152,22 @@ export default function CreateMarketFlow() {
             </Link>
           </div>
 
-          <section className={`${panelClass} mb-6`}>
-            <div className="border-b border-futarchyGray6 px-4 py-3 dark:border-futarchyGray7">
-              <h2 className="text-lg font-semibold text-futarchyGray12 dark:text-white">Permissionless Chiado Stack</h2>
-              <p className="mt-1 text-sm text-futarchyGray11">
-                This is the target testnet lifecycle: any wallet creates an organization, it is listed
-                automatically, and the organization receives a default liquidity manager for proposal liquidity.
-              </p>
-            </div>
-            <StageList stages={permissionlessPlan.stages} />
-            <div className="border-t border-futarchyGray6 px-4 py-3 dark:border-futarchyGray7">
-              <h3 className="text-sm font-semibold text-futarchyGray12 dark:text-white">Contract Actions</h3>
-            </div>
-            <ActionList actions={permissionlessPlan.contractActions} />
-          </section>
+          {permissionlessPlan && (
+            <section className={`${panelClass} mb-6`}>
+              <div className="border-b border-futarchyGray6 px-4 py-3 dark:border-futarchyGray7">
+                <h2 className="text-lg font-semibold text-futarchyGray12 dark:text-white">Permissionless Chiado Stack</h2>
+                <p className="mt-1 text-sm text-futarchyGray11">
+                  This is the target testnet lifecycle: any wallet creates an organization, it is listed
+                  automatically, and the organization receives a default liquidity manager for proposal liquidity.
+                </p>
+              </div>
+              <StageList stages={permissionlessPlan.stages} />
+              <div className="border-t border-futarchyGray6 px-4 py-3 dark:border-futarchyGray7">
+                <h3 className="text-sm font-semibold text-futarchyGray12 dark:text-white">Contract Actions</h3>
+              </div>
+              <ActionList actions={permissionlessPlan.contractActions} />
+            </section>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
             <section className={`${panelClass} p-4`}>
@@ -174,6 +193,7 @@ export default function CreateMarketFlow() {
                   <input
                     id="proposalCode"
                     className={`${inputClass} mt-1`}
+                    placeholder={`${selectedOrganization.proposalPrefix}-123`}
                     value={form.proposalCode}
                     onChange={(event) => updateField('proposalCode', event.target.value)}
                   />
@@ -184,12 +204,14 @@ export default function CreateMarketFlow() {
                   <input
                     id="displayTitle0"
                     className={`${inputClass} mt-1`}
+                    placeholder={`What will the impact on ${selectedOrganization.companyToken.symbol} price be`}
                     value={form.displayTitle0}
                     onChange={(event) => updateField('displayTitle0', event.target.value)}
                   />
                   <input
                     aria-label="Display title event"
                     className={`${inputClass} mt-2`}
+                    placeholder="if the proposal is passed?"
                     value={form.displayTitle1}
                     onChange={(event) => updateField('displayTitle1', event.target.value)}
                   />
@@ -200,6 +222,7 @@ export default function CreateMarketFlow() {
                   <textarea
                     id="question"
                     className={`${inputClass} mt-1 min-h-[88px]`}
+                    placeholder={`Will the proposal be passed by ${selectedOrganization.name}?`}
                     value={form.question}
                     onChange={(event) => updateField('question', event.target.value)}
                   />

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /ops
+
+Sitemap: https://futarchy.seer.pm/sitemap.xml
