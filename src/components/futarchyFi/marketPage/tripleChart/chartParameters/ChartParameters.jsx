@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatWith } from '../../../../../utils/precisionFormatter';
+import { computeImpactPercent, formatImpactPercent } from '../../../../../utils/marketPageUtils.mjs';
 
 /**
  * A reusable card for displaying a single market parameter.
@@ -87,11 +88,8 @@ const ChartParameters = ({
   console.log('[ChartParameters] precisionConfig extracted:', precisionConfig);
   console.log('[ChartParameters] precision display values:', precisionConfig?.display);
   // Impact = (Yes - No) / Max(Yes, No) * 100 — independent of spot price
-  let impact = 0;
-  if (yesPrice !== null && noPrice !== null) {
-    const denominator = Math.max(yesPrice, noPrice);
-    impact = denominator > 0 ? ((yesPrice - noPrice) / denominator) * 100 : 0;
-  }
+  // Same formula and formatter as the header's "Impact (spot)" stat.
+  const impact = computeImpactPercent(yesPrice, noPrice) ?? 0;
   const impactColorClass = impact >= 0 ? '!text-futarchyTeal7' : '!text-futarchyCrimson7';
 
   return (
@@ -164,9 +162,9 @@ const ChartParameters = ({
           }`}
         onClick={() => onFilterClick && onFilterClick('impact')}
       >
-        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact</span>
+        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact (spot)</span>
         <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${impactColorClass}`}>
-          {(spotPrice === null || yesPrice === null || noPrice === null) ? <LoadingSpinner /> : `${formatWith(impact, 'default', precisionConfig)}%`}
+          {(spotPrice === null || yesPrice === null || noPrice === null) ? <LoadingSpinner /> : formatImpactPercent(computeImpactPercent(yesPrice, noPrice))}
         </span>
       </div>
     </div>

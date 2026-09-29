@@ -726,23 +726,23 @@ const TwapCountdown = ({
     if (diff < 1e-8) {
       return {
         leaderboardText: 'YES and NO are currently tied on TWAP.',
-        percentDiff: '0.00',
+        percentDiff: formatImpactPercent(0),
         leaderTheme: 'neutral'
       };
     }
 
+    // Same (YES - NO) / max(YES, NO) formula and formatter as "Impact (spot)".
+    const twapImpact = formatImpactPercent(computeImpactPercent(yes, no));
     if (yes > no) {
-      const pct = no > 0 ? (diff / no) * 100 : 100;
       return {
         leaderboardText: 'YES outcome is ahead on TWAP.',
-        percentDiff: `+${pct.toFixed(2)}`,
+        percentDiff: twapImpact,
         leaderTheme: 'blue'
       };
     } else {
-      const pct = yes > 0 ? (diff / yes) * 100 : 100;
       return {
         leaderboardText: 'NO outcome is ahead on TWAP.',
-        percentDiff: `-${pct.toFixed(2)}`,
+        percentDiff: twapImpact,
         leaderTheme: 'yellow'
       };
     }
@@ -836,7 +836,7 @@ const TwapCountdown = ({
             </span>
             {percentDiff && (isActive || hasEnded) && (
               <span className={`text-xs font-bold ${theme.text}`}>
-                ({percentDiff}%)
+                (TWAP impact {percentDiff})
               </span>
             )}
           </div>
@@ -4813,38 +4813,9 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 text-left transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               <StatDisplay
-                label="Impact"
-                value={(() => {
-                  // Calculate impact using existing logic
-                  if (newYesPrice === null || newNoPrice === null || typeof newYesPrice === 'undefined' || typeof newNoPrice === 'undefined') {
-                    return 'Loading...';
-                  }
-                  if (typeof newYesPrice !== 'number' || typeof newNoPrice !== 'number' || newNoPrice === 0) {
-                    return 'N/A';
-                  }
-                  const yes = Number(newYesPrice);
-                  const no = Number(newNoPrice);
-                  const denominator = Math.max(yes, no);
-                  const impactValue = denominator > 0 ? ((yes - no) / denominator) * 100 : 0;
-
-                  const prefix = impactValue > 0 ? '+' : '';
-                  return `${prefix}${impactValue.toFixed(2)}%`;
-                })()}
-                valueClassName={(() => {
-                  // Calculate impact to determine color
-                  if (newYesPrice === null || newNoPrice === null || typeof newYesPrice === 'undefined' || typeof newNoPrice === 'undefined') {
-                    return 'text-futarchyTeal7';
-                  }
-                  if (typeof newYesPrice !== 'number' || typeof newNoPrice !== 'number' || newNoPrice === 0) {
-                    return 'text-futarchyTeal7';
-                  }
-                  const yes = Number(newYesPrice);
-                  const no = Number(newNoPrice);
-                  const denominator = Math.max(yes, no);
-                  const impactValue = denominator > 0 ? ((yes - no) / denominator) * 100 : 0;
-
-                  return impactValue >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11';
-                })()}
+                label="Impact (spot)"
+                value={formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice))}
+                valueClassName={(computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11'}
                 Icon={ImpactIcon}
                 isLoading={newYesPrice === null || newNoPrice === null}
               />
