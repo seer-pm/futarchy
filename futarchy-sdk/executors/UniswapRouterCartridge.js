@@ -12,6 +12,7 @@ import {
     concatHex
 } from 'viem';
 import { waitForSafeTxReceipt } from '../../src/utils/waitForSafeTxReceipt';
+import { isSafeTransactionSent } from '../../src/utils/txErrors';
 
 const MAX_UINT256 = (2n ** 256n) - 1n;
 const MAX_UINT160 = (2n ** 160n) - 1n;
@@ -954,7 +955,7 @@ export class UniswapRouterCartridge {
         try {
             yield* this.swapV3(args, viemClients);
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             throw error; // Re-throw other errors or handle them
         }
     }

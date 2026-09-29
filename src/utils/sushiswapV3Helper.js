@@ -7,6 +7,7 @@ import {
   // ... other necessary config imports
 } from '../components/futarchyFi/marketPage/constants/contracts'; // Adjust path if needed
 import { isSafeWallet } from './ethersAdapters';
+import { SAFE_TRANSACTION_SENT, isSafeTransactionSent } from './txErrors';
 import { approvalAmountFor } from './approvalAmount';
 
 /**
@@ -91,6 +92,7 @@ export const checkAndApproveTokenForV3Swap = async ({
   spenderAddressOverride = null,
   publicClient = null,
   walletClient = null, // Add walletClient param
+  connector, // wagmi useAccount() connector, for Safe detection
   useUnlimitedApproval = false // Default to false - approve only exact amount
 }) => {
   // Define checksummedTokenAddress outside try-catch for proper scoping
@@ -278,9 +280,9 @@ export const checkAndApproveTokenForV3Swap = async ({
     console.log('Approval transaction submitted:', approveTx.hash);
 
     // Check for Safe wallet
-    if (walletClient && isSafeWallet(walletClient)) {
+    if (walletClient && isSafeWallet(walletClient, connector)) {
       console.log('[checkAndApproveTokenForV3Swap] Safe wallet detected - skipping wait() and throwing SAFE_TRANSACTION_SENT');
-      throw new Error("SAFE_TRANSACTION_SENT");
+      throw new Error(SAFE_TRANSACTION_SENT);
     }
 
     console.log('Waiting for confirmation...');
@@ -296,6 +298,9 @@ export const checkAndApproveTokenForV3Swap = async ({
     return true; // Approval was needed and successful
 
   } catch (error) {
+    // A Safe queued the approval: pass the signal through untouched so callers
+    // recognise it instead of showing it as a failure.
+    if (isSafeTransactionSent(error)) throw error;
     console.error('=== TOKEN APPROVAL ERROR ===');
     console.error('Token address:', checksummedTokenAddress || tokenAddress);
     console.error('Spender address targeted:', spenderAddress || 'Not determined yet');

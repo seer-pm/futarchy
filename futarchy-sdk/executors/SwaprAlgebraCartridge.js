@@ -2,6 +2,7 @@
 
 import { parseEther, formatEther } from 'viem';
 import { waitForSafeTxReceipt } from '../../src/utils/waitForSafeTxReceipt';
+import { isSafeTransactionSent } from '../../src/utils/txErrors';
 
 // =============================================================================
 // SWAPR V3 CONSTANTS
@@ -607,7 +608,7 @@ export class SwaprAlgebraCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete Swapr swap failed: ${error.message}`,
@@ -717,7 +718,7 @@ export class SwaprAlgebraCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete exact output swap failed: ${error.message}`,
