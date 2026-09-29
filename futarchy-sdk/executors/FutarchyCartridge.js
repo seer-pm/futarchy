@@ -2,6 +2,7 @@
 
 import { parseEther, formatEther } from 'viem';
 import { waitForSafeTxReceipt } from '../../src/utils/waitForSafeTxReceipt';
+import { assertReceiptSucceeded, isSafeTransactionSent } from '../../src/utils/txErrors';
 
 // =============================================================================
 // FUTARCHY ROUTER ABI
@@ -278,7 +279,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -338,7 +339,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -398,7 +399,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -459,7 +460,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -567,7 +568,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -722,7 +723,7 @@ export class FutarchyCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete split failed: ${error.message}`,
@@ -892,7 +893,7 @@ export class FutarchyCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete merge failed: ${error.message}`,
@@ -1181,7 +1182,7 @@ export class FutarchyCartridge {
      * @param {object} args - { proposal, token1Address, token2Address, amount1, amount2 }
      */
     async* completeRedeemOutcomes(args, { publicClient, walletClient, account }) {
-        const { proposal, token1Address, token2Address, amount1, amount2, exactApproval = true } = args;
+        const { proposal, token1Address, token2Address, amount1, amount2, exactApproval = true, useBlockExplorer = false } = args;
 
         yield {
             status: 'pending',
@@ -1302,7 +1303,8 @@ export class FutarchyCartridge {
                     const approveAmount1 = exactApproval ? amount1 : 'unlimited';
                     for await (const status of this.approveCollateral({
                         collateralToken: token1Address,
-                        amount: approveAmount1
+                        amount: approveAmount1,
+                        useBlockExplorer
                     }, { publicClient, walletClient, account })) {
                         if (status.status === 'success') {
                             yield {
@@ -1349,7 +1351,8 @@ export class FutarchyCartridge {
                     const approveAmount2 = exactApproval ? amount2 : 'unlimited';
                     for await (const status of this.approveCollateral({
                         collateralToken: token2Address,
-                        amount: approveAmount2
+                        amount: approveAmount2,
+                        useBlockExplorer
                     }, { publicClient, walletClient, account })) {
                         if (status.status === 'success') {
                             yield {
@@ -1402,7 +1405,25 @@ export class FutarchyCartridge {
                 data: { transactionHash: hash }
             };
 
-            const receipt = await publicClient.waitForTransactionReceipt({ hash });
+            let receipt;
+            if (isSafeWallet(walletClient)) {
+                if (!useBlockExplorer) {
+                    throw new Error("SAFE_TRANSACTION_SENT");
+                }
+                // For a Safe, `hash` is the safeTxHash, not an on-chain tx hash
+                const chainId = await publicClient.getChainId();
+                receipt = await waitForSafeTxReceipt({
+                    chainId,
+                    safeTxHash: hash,
+                    publicClient
+                });
+            } else {
+                receipt = await publicClient.waitForTransactionReceipt({ hash });
+            }
+
+            if (receipt.status === 'reverted') {
+                throw new Error(`Redemption transaction reverted (${receipt.transactionHash})`);
+            }
 
             yield {
                 status: 'success',
@@ -1419,6 +1440,7 @@ export class FutarchyCartridge {
             };
 
         } catch (error) {
+            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
             yield {
                 status: 'error',
                 message: `Complete redeem outcomes failed: ${error.message}`,

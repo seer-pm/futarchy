@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from "react";
 import Header from "../common/Header";
 import Footer from "../common/Footer";
-import Providers from "../../providers/providers";
 import { Oxanium } from "next/font/google";
 
 const oxanium = Oxanium({
@@ -65,7 +64,7 @@ const RootLayout = ({
       <>
         {/* Mobile-only Snap Scroll Layout */}
         <div className={`${oxanium.className} lg:hidden h-screen overflow-y-scroll snap-y snap-mandatory`}>
-          <Providers>
+          <>
             {/* Section 1: Header + Hero */}
             <section className="snap-start h-screen flex flex-col">
               <Header 
@@ -91,12 +90,12 @@ const RootLayout = ({
               {secondaryHeader}
               <Footer className="flex-grow" />
             </section>
-          </Providers>
+          </>
         </div>
         
         {/* Desktop Layout (Original) */}
         <div className={`${oxanium.className} hidden lg:flex flex-col min-h-screen`}>
-          <Providers>
+          <>
             <Header 
               config={headerConfig} 
               darkMode={isDarkMode}
@@ -110,7 +109,7 @@ const RootLayout = ({
               {children}
             </main>
             <Footer />
-          </Providers>
+          </>
         </div>
       </>
     );
@@ -118,15 +117,19 @@ const RootLayout = ({
 
   return (
     <div className={`${oxanium.className} flex flex-col min-h-screen`}>
-      <Providers>
+      <>
         <Header
           config={headerConfig}
           darkMode={isDarkMode}
           toggleDarkMode={toggleDarkMode} // Pass the toggle function
         />
         {secondaryHeader}
+        {/* Sticky only on lg+, where the hero collapses to a compact bar on
+            scroll. On phones and tablets the full hero (~500px) would pin
+            over most of the viewport, so it scrolls away with the page;
+            mt-20 clears the fixed header that top-20 cleared before. */}
         {heroContent && (
-          <div className="sticky top-20 z-30">
+          <div className="relative z-30 mt-20 lg:mt-0 lg:sticky lg:top-20">
             {heroContent}
           </div>
         )}
@@ -134,7 +137,7 @@ const RootLayout = ({
           {children}
         </main>
         <Footer />
-      </Providers>
+      </>
     </div>
   );
 };

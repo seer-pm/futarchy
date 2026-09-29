@@ -14,57 +14,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   reactStrictMode: true,
-  headers: async () => {
-    return [
-      {
-        source: '/manifest.json',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'X-Requested-With, Content-Type, Authorization',
-          },
-        ],
-      },
-      {
-        source: '/safe-app-manifest.json',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'X-Requested-With, Content-Type, Authorization',
-          },
-        ],
-      },
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'ALLOW-FROM https://app.safe.global',
-          },
-          {
-            key: 'Content-Security-Policy',
-            value: "frame-ancestors 'self' https://app.safe.global https://*.safe.global;",
-          },
-        ],
-      },
-    ];
-  },
+  // Strip console.log/info/debug from production bundles; errors and
+  // warnings stay so real failures still reach the console.
+  compiler: process.env.NODE_ENV === 'production'
+    ? { removeConsole: { exclude: ['error', 'warn'] } }
+    : {},
   rewrites: process.env.NODE_ENV === 'development' ? async () => {
     return [
       {

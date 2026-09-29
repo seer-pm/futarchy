@@ -328,7 +328,8 @@ const HighlightCard = ({
   const renderValue = (value, format) => {
     if (isLoading) return <LoadingSpinner />;
     if (isError) return <span className="text-sm font-semibold text-red-500">Error</span>;
-    if (value === null || value === undefined) return `0.00 ${baseTokenSymbol}`;
+    // A missing price (indexer down or no trades yet) is unknown, not zero.
+    if (value === null || value === undefined) return '—';
     if (typeof format !== 'function') return value;
     return format(value);
   };

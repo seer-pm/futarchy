@@ -354,7 +354,7 @@ export function ProposalLinkModal({
                             {/* No results */}
                             {!searchLoading && proposals.length === 0 && searchQuery.length >= 2 && (
                                 <div className="text-center py-4 text-futarchyGray11 dark:text-futarchyGray6">
-                                    No proposals found for "{searchQuery}"
+                                    No proposals found for &quot;{searchQuery}&quot;
                                 </div>
                             )}
                         </div>

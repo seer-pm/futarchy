@@ -6,8 +6,8 @@
  * legacy Supabase-era SEO content is preserved via
  * src/config/legacy-seo.json.
  *
- * Total markets: 40
- * Active markets: 5
+ * Total markets: 37
+ * Active markets: 2
  */
 
 export const MARKETS_CONFIG = {
@@ -19,7 +19,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on GNO price be if GIP-145 is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/gnosis market-145.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis%20market-145.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -27,7 +27,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "What will the impact on GNO price be if GIP-145 is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "https://futarchy.seer.pm/assets/gnosis market-145.png"
+      "image": "https://futarchy.seer.pm/assets/gnosis%20market-145.png"
     },
     "keywords": [
       "futarchy",
@@ -66,7 +66,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on VLR price be if 'PIP-XX: Deploy liquidity into Liquity v2 VLR pool' is approved? | Futarchy",
       "description": "Will VeloraDAO approve and execute PIP-XX: Deploy liquidity into Liquity v2 VLR pool before 2026-02-01 00:00 UTC?",
-      "image": "/assets/veloradao-market-card-2.png",
+      "image": "https://futarchy.seer.pm/assets/veloradao-market-card-2.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -103,7 +103,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What is the impact on AAVE token price if AAVE token alignment proposal is approved? | Futarchy",
       "description": "Will $AAVE token alignment (Phase 1) proposal, or an alternative by eboado, be approved (Yes) by AaveDAO before the end of February, 2026? If eboado confirms his proposal is rejected, or if not approved by this date, resolves as (No).",
-      "image": "/assets/aave-dao-market-card-1.png",
+      "image": "https://futarchy.seer.pm/assets/aave-dao-market-card-1.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -141,7 +141,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on VLR price be if PIP-75 is approved? | Futarchy",
       "description": "Will 'PIP-75 - Fund request from a user claiming losses due to the March 2024 AugustusV6 vulnerability' be approved ('Yes') or rejected ('No') by VeloraDAO?",
-      "image": "/assets/futarchy-market-pip-45.png",
+      "image": "https://futarchy.seer.pm/assets/futarchy-market-pip-45.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -178,7 +178,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on GNO price be if GIP-145 is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/gnosis-proposal-145.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-145.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -213,19 +213,18 @@ export const MARKETS_CONFIG = {
       "visibility": "private",
       "endDate": "2025-12-11T17:48:46+00:00",
       "createdAt": "2025-12-11T19:15:34.271383+00:00",
-      "source": "legacy+registry",
-      "resolutionOutcome": null
+      "source": "legacy"
     }
   },
   "0xcd57aE6f64E4Ff0687daB3699611907A5f4c528B": {
     "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved?",
     "description": "Auto-generated pool for futarchy governance norm prediction.",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xcd57aE6f64E4Ff0687daB3699611907A5f4c528B",
     "openGraph": {
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -233,7 +232,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -266,12 +265,12 @@ export const MARKETS_CONFIG = {
   "0x1b12f43F30bcF9c7B9868Ae3D1E3b574c589Fc97": {
     "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved?",
     "description": "Auto-generated pool for futarchy governance norm prediction.",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0x1b12f43F30bcF9c7B9868Ae3D1E3b574c589Fc97",
     "openGraph": {
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -279,7 +278,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -317,7 +316,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will be the price of GNO if GIP-143 is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -363,7 +362,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy: Predict VLR impact if VeloraDAO deploys Liquity v2 liquidity | Futarchy",
       "description": "Will VeloraDAO approve and execute PIP-XX (Deploy liquidity into Liquity v2 VLR pool) before 2026-01-01 00:00 UTC? Outcomes: 'Yes' if governance approves AND the liquidity deployment transaction is executed on-chain. 'No' if the proposal is rejected, expires, or execution does not occur by the deadline. If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.",
-      "image": "/assets/velora-market-card-1.png",
+      "image": "https://futarchy.seer.pm/assets/velora-market-card-1.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -400,7 +399,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance: Predict KIP-81 Impact on PNK Price | Futarchy",
       "description": "Shape Kleros policy—trade on KIP-81 approval’s effect on PNK using PNK & sDAI. Influence governance and profit from your foresight now!",
-      "image": "/assets/kleros-market-card-81.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-81.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -447,7 +446,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will be the price of GNO if its price is >= 130 sDAI? | Futarchy",
       "description": "Predict whether Gnosis (GNO) will trade at or above 130 sDAI (Savings xDAI) by December 28, 2025, at 11:59 PM. Join the market to forecast GNO’s long-term price movement, stake your opinion with sDAI, and see where traders think GNO is headed.",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -493,7 +492,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on GNO price be if GIP-140 is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -539,7 +538,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "What will the impact on GNO price be if GIP-139 be approved by GnosisDAO? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -580,12 +579,12 @@ export const MARKETS_CONFIG = {
   "0x1F54f0312E85c5AFACe2bDF15AA2514BeFDB844F": {
     "title": "Futarchy: Predict SBUX impact if CEO exits before 2026",
     "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-    "image": "/assets/starbucks-market-card-1.png",
+    "image": "/assets/og-default.png",
     "path": "/markets/0x1F54f0312E85c5AFACe2bDF15AA2514BeFDB844F",
     "openGraph": {
       "title": "Futarchy: Predict SBUX impact if CEO exits before 2026 | Futarchy",
       "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-      "image": "/assets/starbucks-market-card-1.png",
+      "image": "https://futarchy.seer.pm/assets/og-default.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -593,7 +592,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "Futarchy: Predict SBUX impact if CEO exits before 2026 | Futarchy",
       "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-      "image": "https://futarchy.seer.pm/assets/starbucks-market-card-1.png"
+      "image": "https://futarchy.seer.pm/assets/og-default.png"
     },
     "keywords": [
       "futarchy",
@@ -622,7 +621,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy: Predict TSLA impact if 2025 CEO Award passes | Futarchy",
       "description": "Will Tesla shareholders approve Elon Musk’s 2025 CEO Performance Award (the 'Mega Package') at the Annual Meeting on November 6, 2025? Outcomes: 'Yes' (approved) or 'No' (rejected). If unresolved by 2025-11-30 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized TSLA share price will be in each scenario, earning profits by accurately anticipating market sentiment regarding shareholder decisions.",
-      "image": "/assets/tesla-market-card-1.png",
+      "image": "https://futarchy.seer.pm/assets/tesla-market-card-1.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -659,7 +658,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: GIP-133 Approval Impact | Futarchy",
       "description": "Predict GnosisDAO's GIP-133 outcome and its effect on GNO price. Trade with GNO, sDAI, and influence governance—shape the future of GnosisDAO now!",
-      "image": "/assets/gnosis-market-card-133.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-133.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -705,7 +704,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: GIP-133 Approval Impact | Futarchy",
       "description": "Test",
-      "image": "/assets/gnosis-market-card-133.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-133.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -751,7 +750,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance: Predict KIP-78 Impact on PNK Price | Futarchy",
       "description": "Shape Kleros policy—trade on KIP-78 approval’s effect on PNK using PNK & sDAI. Influence governance and profit from your foresight now!",
-      "image": "/assets/kleros-market-card-78.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-78.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -797,7 +796,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance: Predict KIP-77 Outcome & PNK Impact | Futarchy",
       "description": "Shape Kleros policy—forecast KIP-77 approval and its effect on PNK price using PNK & sDAI. Join the futarchy governance market now!",
-      "image": "/assets/kleros-market-card-1-bg.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -843,7 +842,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Market: GIP-128 Approval Prediction | Futarchy",
       "description": "Predict GIP-128's approval by GnosisDAO and its impact on GNO price using GNO & sDAI. Shape governance outcomes—trade and influence now!",
-      "image": "/assets/gnosis-market-card-1-bg.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -889,7 +888,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: GIP-128 GnosisDAO $30M Funding Vote | Futarchy",
       "description": "Predict if GnosisDAO approves $30M/year for Gnosis Ltd. Trade with GNO & sDAI, shape policy, and influence GNO price through Futarchy governance now!",
-      "image": "/assets/gnosis-market-card-1-bg.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -935,7 +934,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: GIP-128 GNO Funding Vote | Futarchy",
       "description": "Predict GIP-128’s approval and its effect on GNO price using GNO & sDAI. Shape GnosisDAO policy—trade or participate in this key governance market!",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -981,7 +980,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: KIP-76 PNK Minting Approval? | Futarchy",
       "description": "Predict KIP-76’s impact on PNK price using sDAI and PNK in this futarchy governance market. Influence Kleros policy—trade or participate now!",
-      "image": "/assets/kleros-market-card-2-bg.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-2-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1022,12 +1021,12 @@ export const MARKETS_CONFIG = {
   "0xf36e2f05E8F45954d896b2ed72cD2a0bAB6A6Dd7": {
     "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact",
     "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-    "image": "/kip76",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xf36e2f05E8F45954d896b2ed72cD2a0bAB6A6Dd7",
     "openGraph": {
       "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact | Futarchy",
       "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-      "image": "/kip76",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1035,7 +1034,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact | Futarchy",
       "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-      "image": "https://futarchy.seer.pm/kip76"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -1068,12 +1067,12 @@ export const MARKETS_CONFIG = {
   "0xa6A71F5335447B1e711ab9c78c52a24BE6c9f997": {
     "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact",
     "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xa6A71F5335447B1e711ab9c78c52a24BE6c9f997",
     "openGraph": {
       "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact | Futarchy",
       "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1081,7 +1080,7 @@ export const MARKETS_CONFIG = {
       "card": "summary_large_image",
       "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact | Futarchy",
       "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -1119,7 +1118,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance: Predict Gnosis TVL & Policy Impact | Futarchy",
       "description": "Shape Gnosis policy via Futarchy! Trade GNO & sDAI to decide if $400M TVL boosts GNO price. Influence DeFi governance—join the market now.",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1165,7 +1164,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Prediction: GnosisDAO $5M Policy Market | Futarchy",
       "description": "Predict if GnosisDAO will adopt futarchy for $5M+ decisions using GNO & sDAI. Influence future governance—trade now to shape DAO policy outcomes!",
-      "image": "/assets/gnosis-market-card-6-bg.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-6-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1211,7 +1210,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance: Predict USDC Deployment on Gnosis Chain | Futarchy",
       "description": "Shape Gnosis Chain policy: Vote with GNO & sDAI on Circle’s USDC deployment and its impact on GNO price. Influence decisions—trade or govern now!",
-      "image": "/assets/gnosis-market-card-7-bg.png",
+      "image": "https://futarchy.seer.pm/assets/gnosis-market-card-7-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1257,7 +1256,7 @@ export const MARKETS_CONFIG = {
     "openGraph": {
       "title": "Futarchy Governance Market: GnosisPay €2M Volume & GNO Impact | Futarchy",
       "description": "Trade GNO or sDAI in this Futarchy market to influence GnosisPay policy. Decide if €2M weekly volume will affect GNO price. Shape governance now!",
-      "image": "/assets/gnosis-proposal-1.webp",
+      "image": "https://futarchy.seer.pm/assets/gnosis-proposal-1.webp",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1295,46 +1294,6 @@ export const MARKETS_CONFIG = {
       "source": "legacy"
     }
   },
-  "0x026b7e9473bcd860fa5c3e11a98f9312fe4b1859": {
-    "title": "TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ('Yes') or rejected ('No') by GnosisDAO? If unresolved by 2025-09-30 23:59 UTC, it resolves to 'No'.",
-    "description": "Live futarchy prediction market by Gnosis: TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ...",
-    "image": "/assets/og-default.png",
-    "path": "/markets/0x026b7e9473bcd860fa5c3e11a98f9312fe4b1859",
-    "openGraph": {
-      "title": "TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ('Yes') or rejected ('No') by GnosisDAO? If unresolved by 2025-09-30 23:59 UTC, it resolves to 'No'. | Futarchy",
-      "description": "Live futarchy prediction market by Gnosis: TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ...",
-      "image": "https://futarchy.seer.pm/assets/og-default.png",
-      "type": "website",
-      "siteName": "Futarchy"
-    },
-    "twitter": {
-      "card": "summary_large_image",
-      "title": "TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ('Yes') or rejected ('No') by GnosisDAO? If unresolved by 2025-09-30 23:59 UTC, it resolves to 'No'. | Futarchy",
-      "description": "Live futarchy prediction market by Gnosis: TEST4-Will 'GIP-133: Should Gnosis DAO extend the Gnosis Pay Cashback budget (GIP-110) by 2,000 GNO?' be approved ...",
-      "image": "https://futarchy.seer.pm/assets/og-default.png"
-    },
-    "keywords": [
-      "futarchy",
-      "prediction market",
-      "governance",
-      "blockchain",
-      "GNO",
-      "Gnosis",
-      "GnosisDAO"
-    ],
-    "category": "governance",
-    "isActive": true,
-    "metadata": {
-      "source": "registry",
-      "organization": "Gnosis",
-      "organizationId": "0x818fdf727aa4672c80bbfd47ee13975080ac40e5",
-      "chainId": 100,
-      "resolutionStatus": null,
-      "resolutionOutcome": null,
-      "visibility": "public",
-      "closeTimestamp": null
-    }
-  },
   "0x0cae5e6f520e52e3d6a93c856bb6dbf7781f2e31": {
     "title": "What will the impact on PNK price be if KIP-88 is approved?",
     "description": "Will KIP-88 (DAO Guidance to the Cooperative) be approved ('Yes') or rejected ('No') by Kleros Governance? If the proposal is not approved by the end of the Snapshot vote, results as ('No').",
@@ -1370,20 +1329,20 @@ export const MARKETS_CONFIG = {
       "organization": "Kleros DAO",
       "organizationId": "0xaab097ead5c2db1ca7b1e5034224a2118edabe36",
       "chainId": 100,
-      "resolutionStatus": null,
-      "resolutionOutcome": null,
+      "resolutionStatus": "resolved",
+      "resolutionOutcome": "yes",
       "visibility": "public",
       "closeTimestamp": 1780660800
     }
   },
   "0x0d78b95fca9f3e1b588271a330b0d6f731ec38aa": {
     "title": "What will the impact on ETH price be if EIP-8363 is Scheduled for Inclusion in Hegotá?",
-    "description": "Resolves YES if, at any time before 2026-10-24 00:00 UTC, EIP-8363 is listed under the 'Scheduled for Inclusion' section of EIP-8081 (Hardfork Meta - Hegotá) as merged in the master branch of the ethereum/EIPs GitHub repository. If EIP-8081 is renumbered or replaced, the successor Hardfork Meta EIP for the same network upgrade counts. Listing under any other section does not count. Later removal after listing does not change a YES. Only EIP number 8363 counts. Otherwise resolves NO.",
+    "description": "Will Ethereum's core developers schedule EIP-8363 (Tapered Issuance Burn) for the Hegotá upgrade by Oct 24, 2026? The YES and NO pools price ETH in USDS under each outcome — the gap between them is the market's live estimate of the EIP's impact on ETH. Binding resolution text lives in the Reality.eth question (Resolve Question link).",
     "image": "/assets/eth-eip8363-market-card.png",
     "path": "/markets/0x0d78b95fca9f3e1b588271a330b0d6f731ec38aa",
     "openGraph": {
       "title": "What will the impact on ETH price be if EIP-8363 is Scheduled for Inclusion in Hegotá? | Futarchy",
-      "description": "Resolves YES if, at any time before 2026-10-24 00:00 UTC, EIP-8363 is listed under the 'Scheduled for Inclusion' section of EIP-8081 (Hardfork Meta - Hegotá) as merged in the master branch of the ethereum/EIPs GitHub repository. If EIP-8081 is renumbered or replaced, the successor Hardfork Meta EIP for the same network upgrade counts. Listing under any other section does not count. Later removal after listing does not change a YES. Only EIP number 8363 counts. Otherwise resolves NO.",
+      "description": "Will Ethereum's core developers schedule EIP-8363 (Tapered Issuance Burn) for the Hegotá upgrade by Oct 24, 2026? The YES and NO pools price ETH in USDS under each outcome — the gap between them is the market's live estimate of the EIP's impact on ETH. Binding resolution text lives in the Reality.eth question (Resolve Question link).",
       "image": "https://futarchy.seer.pm/assets/eth-eip8363-market-card.png",
       "type": "website",
       "siteName": "Futarchy"
@@ -1391,7 +1350,7 @@ export const MARKETS_CONFIG = {
     "twitter": {
       "card": "summary_large_image",
       "title": "What will the impact on ETH price be if EIP-8363 is Scheduled for Inclusion in Hegotá? | Futarchy",
-      "description": "Resolves YES if, at any time before 2026-10-24 00:00 UTC, EIP-8363 is listed under the 'Scheduled for Inclusion' section of EIP-8081 (Hardfork Meta - Hegotá) as merged in the master branch of the ethereum/EIPs GitHub repository. If EIP-8081 is renumbered or replaced, the successor Hardfork Meta EIP for the same network upgrade counts. Listing under any other section does not count. Later removal after listing does not change a YES. Only EIP number 8363 counts. Otherwise resolves NO.",
+      "description": "Will Ethereum's core developers schedule EIP-8363 (Tapered Issuance Burn) for the Hegotá upgrade by Oct 24, 2026? The YES and NO pools price ETH in USDS under each outcome — the gap between them is the market's live estimate of the EIP's impact on ETH. Binding resolution text lives in the Reality.eth question (Resolve Question link).",
       "image": "https://futarchy.seer.pm/assets/eth-eip8363-market-card.png"
     },
     "keywords": [
@@ -1537,85 +1496,6 @@ export const MARKETS_CONFIG = {
       "closeTimestamp": 1783086060
     }
   },
-  "0x8922b043efc0d2ff9001bf37909dd7376d15cdf7": {
-    "title": "What impact will be on GNO if GIP-XX pass?",
-    "description": "GIP-XX is lorem ipsum",
-    "image": "/assets/og-default.png",
-    "path": "/markets/0x8922b043efc0d2ff9001bf37909dd7376d15cdf7",
-    "openGraph": {
-      "title": "What impact will be on GNO if GIP-XX pass? | Futarchy",
-      "description": "GIP-XX is lorem ipsum",
-      "image": "https://futarchy.seer.pm/assets/og-default.png",
-      "type": "website",
-      "siteName": "Futarchy"
-    },
-    "twitter": {
-      "card": "summary_large_image",
-      "title": "What impact will be on GNO if GIP-XX pass? | Futarchy",
-      "description": "GIP-XX is lorem ipsum",
-      "image": "https://futarchy.seer.pm/assets/og-default.png"
-    },
-    "keywords": [
-      "futarchy",
-      "prediction market",
-      "governance",
-      "blockchain",
-      "GNO",
-      "Gnosis",
-      "GnosisDAO"
-    ],
-    "category": "governance",
-    "isActive": true,
-    "metadata": {
-      "source": "registry",
-      "organization": "Gnosis",
-      "organizationId": "0x818fdf727aa4672c80bbfd47ee13975080ac40e5",
-      "chainId": 100,
-      "resolutionStatus": null,
-      "resolutionOutcome": null,
-      "visibility": "public",
-      "closeTimestamp": null
-    }
-  },
-  "0xa3bfb330364ec836442290dfb5604343e0ec4efc": {
-    "title": "What will be the impact on COW price if CIP-83 is approved",
-    "description": "Replenish Team Grant with 5% base + up to 10% performance-linked incentives.",
-    "image": "https://swap.cow.fi/images/og-meta-cowswap.png?v=4",
-    "path": "/markets/0xa3bfb330364ec836442290dfb5604343e0ec4efc",
-    "openGraph": {
-      "title": "What will be the impact on COW price if CIP-83 is approved | Futarchy",
-      "description": "Replenish Team Grant with 5% base + up to 10% performance-linked incentives.",
-      "image": "https://swap.cow.fi/images/og-meta-cowswap.png?v=4",
-      "type": "website",
-      "siteName": "Futarchy"
-    },
-    "twitter": {
-      "card": "summary_large_image",
-      "title": "What will be the impact on COW price if CIP-83 is approved | Futarchy",
-      "description": "Replenish Team Grant with 5% base + up to 10% performance-linked incentives.",
-      "image": "https://swap.cow.fi/images/og-meta-cowswap.png?v=4"
-    },
-    "keywords": [
-      "futarchy",
-      "prediction market",
-      "governance",
-      "blockchain",
-      "COW",
-      "CoW DAO"
-    ],
-    "category": "trading",
-    "isActive": false,
-    "metadata": {
-      "source": "registry",
-      "organization": "CoW DAO",
-      "organizationId": "0xe071734b1ce5332da778fb1ffd79456375d420d9",
-      "chainId": 100,
-      "resolutionStatus": null,
-      "resolutionOutcome": null,
-      "visibility": "public",
-      "closeTimestamp": 1770000000
-    }
-  },
   "0xb607bd7c7201e966e6a150cd6ef1d08db55cad5d": {
     "title": "What will the impact on PNK price be if KIP-86 is approved?",
     "description": "Will KIP-86 (Exclude PNK held by the Kleros Cooperative from KIP-66) be approved ('Yes') or rejected ('No') by Kleros Governance? If proposal is not approved by the end of March 2026, results as ('No').",
@@ -1657,55 +1537,14 @@ export const MARKETS_CONFIG = {
       "closeTimestamp": 1775001599
     }
   },
-  "0xe7f5f349a44ffb7222dff6c308233f226c901df5": {
-    "title": "What will the impact on PNK price be if KIP-86 is approved?",
-    "description": "Will KIP-86 (Exclude PNK held by the Kleros Cooperative from KIP-66) be approved ('Yes') or rejected ('No') by Kleros Governance? If proposal is not approved by the end of March 2026, results as ('No').",
-    "image": "/assets/og-default.png",
-    "path": "/markets/0xe7f5f349a44ffb7222dff6c308233f226c901df5",
-    "openGraph": {
-      "title": "What will the impact on PNK price be if KIP-86 is approved? | Futarchy",
-      "description": "Will KIP-86 (Exclude PNK held by the Kleros Cooperative from KIP-66) be approved ('Yes') or rejected ('No') by Kleros Governance? If proposal is not approved by the end of March 2026, results as ('No').",
-      "image": "https://futarchy.seer.pm/assets/og-default.png",
-      "type": "website",
-      "siteName": "Futarchy"
-    },
-    "twitter": {
-      "card": "summary_large_image",
-      "title": "What will the impact on PNK price be if KIP-86 is approved? | Futarchy",
-      "description": "Will KIP-86 (Exclude PNK held by the Kleros Cooperative from KIP-66) be approved ('Yes') or rejected ('No') by Kleros Governance? If proposal is not approved by the end of March 2026, results as ('No').",
-      "image": "https://futarchy.seer.pm/assets/og-default.png"
-    },
-    "keywords": [
-      "futarchy",
-      "prediction market",
-      "governance",
-      "blockchain",
-      "PNK",
-      "Kleros",
-      "arbitration",
-      "Kleros Dao"
-    ],
-    "category": "trading",
-    "isActive": true,
-    "metadata": {
-      "source": "registry",
-      "organization": "Kleros Dao",
-      "organizationId": "0xcb9b0aef0687aaf7082eda3b2715001b4ea213fd",
-      "chainId": 100,
-      "resolutionStatus": null,
-      "resolutionOutcome": null,
-      "visibility": "public",
-      "closeTimestamp": null
-    }
-  },
   "0xece80208cb8376be311ce0f5ea4ef73850a0dcf0": {
     "title": "What will the impact on GNO price be if GIP-151 is passed?",
-    "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No.",
+    "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0x657fbf8892200d24e887c68245cee73b59c466394192be1c10673b39814c74c4",
     "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg",
     "path": "/markets/0xece80208cb8376be311ce0f5ea4ef73850a0dcf0",
     "openGraph": {
       "title": "What will the impact on GNO price be if GIP-151 is passed? | Futarchy",
-      "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No.",
+      "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0x657fbf8892200d24e887c68245cee73b59c466394192be1c10673b39814c74c4",
       "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg",
       "type": "website",
       "siteName": "Futarchy"
@@ -1713,7 +1552,7 @@ export const MARKETS_CONFIG = {
     "twitter": {
       "card": "summary_large_image",
       "title": "What will the impact on GNO price be if GIP-151 is passed? | Futarchy",
-      "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No.",
+      "description": "Will GIP-151 (one-time pro-rata treasury redemption) be passed by GnosisDAO? Resolves Yes if GIP-151 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0x657fbf8892200d24e887c68245cee73b59c466394192be1c10673b39814c74c4",
       "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg"
     },
     "keywords": [
@@ -1737,6 +1576,47 @@ export const MARKETS_CONFIG = {
       "resolutionOutcome": "yes",
       "visibility": "public",
       "closeTimestamp": 1782486884
+    }
+  },
+  "0xee8878d0a7136c5cd109554f06bb780e225badef": {
+    "title": "What will the impact on GNO price be if GIP-152 is passed?",
+    "description": "Will GIP-152 (spin out the Gnosis App into an independent company) be passed by GnosisDAO? Resolves Yes if GIP-152 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0xd3300b62e9aabd41e04fd4d302898a1364f1a40eee62235dc9ef1fd6bb9afd20",
+    "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg",
+    "path": "/markets/0xee8878d0a7136c5cd109554f06bb780e225badef",
+    "openGraph": {
+      "title": "What will the impact on GNO price be if GIP-152 is passed? | Futarchy",
+      "description": "Will GIP-152 (spin out the Gnosis App into an independent company) be passed by GnosisDAO? Resolves Yes if GIP-152 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0xd3300b62e9aabd41e04fd4d302898a1364f1a40eee62235dc9ef1fd6bb9afd20",
+      "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg",
+      "type": "website",
+      "siteName": "Futarchy"
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "title": "What will the impact on GNO price be if GIP-152 is passed? | Futarchy",
+      "description": "Will GIP-152 (spin out the Gnosis App into an independent company) be passed by GnosisDAO? Resolves Yes if GIP-152 is passed by GnosisDAO; otherwise resolves No. Snapshot: https://snapshot.box/#/s:gnosis.eth/proposal/0xd3300b62e9aabd41e04fd4d302898a1364f1a40eee62235dc9ef1fd6bb9afd20",
+      "image": "https://www.cryptoninjas.net/wp-content/uploads/gnosis-crypto-ninjas.jpg"
+    },
+    "keywords": [
+      "futarchy",
+      "prediction market",
+      "governance",
+      "blockchain",
+      "GNO",
+      "Gnosis",
+      "GnosisDAO",
+      "Gnosis DAO"
+    ],
+    "category": "trading",
+    "isActive": false,
+    "metadata": {
+      "source": "registry",
+      "organization": "Gnosis DAO",
+      "organizationId": "0x3fd2e8e71f75eed4b5c507706c413e33e0661bbf",
+      "chainId": 100,
+      "resolutionStatus": null,
+      "resolutionOutcome": null,
+      "visibility": "public",
+      "closeTimestamp": 1786544340
     }
   }
 };

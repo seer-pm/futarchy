@@ -38,14 +38,10 @@
  *
  * HAZARDS pinned (leave-as-is per /loop directive):
  *
- *   H1. CALLER BUG in src/futarchyJS/futarchy.js:1238 — calls
- *       fetchSushiSwapRoute(fromToken, toToken, parsedAmount)
- *       POSITIONALLY, but the helper expects a destructured
- *       {tokenIn, tokenOut, amount, ...} object. Destructuring a
- *       string gives undefined for all keys → "Invalid amount" error.
- *       The other call site (ShowcaseSwapComponent.jsx:1125) uses the
- *       correct destructured form. Pinned via grep so a fix to either
- *       side flags the test.
+ *   H1. (resolved) The positional caller lived in the dead
+ *       src/futarchyJS/futarchy.js, now deleted. The remaining call site
+ *       (ShowcaseSwapComponent.jsx) uses the destructured form; pinned
+ *       via grep so a refactor that breaks it flags the test.
  *
  *   H2. Hardcoded feeReceiver leak in console.log — line 91 logs
  *       `0xca226bd9c754F1283123d32B2a7cF62a722f8ADa` regardless of
@@ -59,7 +55,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -266,32 +261,22 @@ test('source — allowance check uses .lt() (strictly less than amount)', () => 
 });
 
 // ---------------------------------------------------------------------------
-// HAZARD H1: positional-args caller bug in futarchy.js:1238
+// HAZARD H1: the positional-args caller in src/futarchyJS/futarchy.js was
+// deleted with that dead module; only the correct call site remains.
 // ---------------------------------------------------------------------------
 
-test('hazard H1 — futarchy.js:1238 still calls fetchSushiSwapRoute POSITIONALLY (BUG)', async () => {
-    // PINNED HAZARD: src/futarchyJS/futarchy.js calls
-    //   fetchSushiSwapRoute(fromToken, toToken, parsedAmount)
-    // but the helper expects:
-    //   fetchSushiSwapRoute({tokenIn, tokenOut, amount, ...})
-    // Destructuring a string (fromToken) gives undefined for tokenIn,
-    // tokenOut, amount → "Invalid amount provided" error.
-    //
-    // The other call site (ShowcaseSwapComponent.jsx) uses the correct
-    // destructured form. This may be dead code, or a latent bug.
-    // Per /loop directive: leave the bug, pin it.
-    const cmd = `grep -n 'fetchSushiSwapRoute(fromToken,\\s*toToken,\\s*parsedAmount)' ${JSON.stringify(resolve(REPO_ROOT, 'src/futarchyJS/futarchy.js'))} || true`;
-    const out = execSync(cmd, { encoding: 'utf8' }).trim();
-    assert.ok(out.length > 0,
-        `futarchy.js no longer has the positional-args bug — either fixed (good — delete this test) ` +
-        `or the call site moved (re-pin under new location).`);
-});
-
-test('hazard H1 — ShowcaseSwapComponent.jsx still uses the CORRECT destructured form', async () => {
-    // Sanity-pin the working call site so a refactor that breaks it
-    // would surface here.
-    const cmd = `grep -A 6 'fetchSushiSwapRoute({' ${JSON.stringify(resolve(REPO_ROOT, 'src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx'))} | head -8`;
-    const out = execSync(cmd, { encoding: 'utf8' });
+test('hazard H1 — ShowcaseSwapComponent.jsx never calls fetchSushiSwapRoute positionally', async () => {
+    // Its only call site sat in a handleConfirmSwap that nothing invoked
+    // (it signed through window.ethereum) and was removed. Should a call come
+    // back, it must use the destructured {tokenIn, ...} form.
+    const lines = readFileSync(
+        resolve(REPO_ROOT, 'src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx'),
+        'utf8',
+    ).split(/\r?\n/);
+    if (!lines.some(line => line.includes('fetchSushiSwapRoute('))) return;
+    // The call and the six lines after it (what `grep -A 6` used to return).
+    const at = lines.findIndex(line => line.includes('fetchSushiSwapRoute({'));
+    const out = at === -1 ? '' : lines.slice(at, at + 7).join('\n');
     assert.ok(out.includes('tokenIn'),
         `ShowcaseSwapComponent.jsx no longer uses {tokenIn, ...} destructured form — verify call still works`);
 });

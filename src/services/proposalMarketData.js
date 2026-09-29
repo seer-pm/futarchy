@@ -17,6 +17,7 @@
 
 import { SUBGRAPH_ENDPOINTS } from '../config/subgraphEndpoints';
 import { cachedOnce } from './requestCache';
+import { readGraphqlData } from '../utils/graphqlResponse';
 
 const buildQuery = (proposalId) => `{
     proposal(id: "${proposalId}") {
@@ -50,7 +51,8 @@ const buildQuery = (proposalId) => `{
  * @param {number} chainId
  * @param {string} proposalAddress
  * @returns {Promise<{proposal: Object|null, whitelistedTokens: Array, pools: Array}|null>}
- *   null when the chain is unsupported or the query fails
+ *   null when the chain is unsupported. Rejects when the request fails (HTTP
+ *   error or GraphQL `errors`), so a failure is never cached as "no data".
  */
 export function fetchProposalMarketData(chainId, proposalAddress) {
     const endpoint = SUBGRAPH_ENDPOINTS[chainId];
@@ -59,28 +61,18 @@ export function fetchProposalMarketData(chainId, proposalAddress) {
     const proposalId = proposalAddress.toLowerCase();
 
     return cachedOnce(`candles:proposal-market:${chainId}:${proposalId}`, async () => {
-        try {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: buildQuery(proposalId) }),
-            });
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: buildQuery(proposalId) }),
+        });
 
-            const result = await response.json();
-            if (result.errors) {
-                console.error('[ProposalMarketData] GraphQL errors:', result.errors);
-                return null;
-            }
-
-            return {
-                proposal: result.data?.proposal || null,
-                whitelistedTokens: result.data?.whitelistedTokens || [],
-                pools: result.data?.pools || [],
-            };
-        } catch (error) {
-            console.error('[ProposalMarketData] Fetch error:', error);
-            return null;
-        }
+        const data = await readGraphqlData(response, 'Proposal market data');
+        return {
+            proposal: data.proposal || null,
+            whitelistedTokens: data.whitelistedTokens || [],
+            pools: data.pools || [],
+        };
     });
 }
 

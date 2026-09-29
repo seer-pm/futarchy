@@ -13,9 +13,12 @@ import {
 } from "../constants/contracts";
 import FutarchyCartridge from "futarchy-sdk/executors/FutarchyCartridge";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
+import { useRequiredChain } from "../../../../hooks/useChainValidation";
+import { DEBUG_MODE } from "../../../../config/featureFlags";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { isSafeWallet } from "../../../../utils/ethersAdapters";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
+import { getRedeemSide, describeRedeemError } from "../../../../utils/redeemPlan";
 
 const DEFAULT_REDEEM_GAS_LIMIT = 700000;
 const REDEEM_GAS_LIMIT_BY_CHAIN = {
@@ -107,7 +110,7 @@ const TransactionParamsCollapse = ({ params, isWinningOutcomeYes }) => {
   const [copied, setCopied] = useState(false);
 
   // Check if debugMode is enabled in URL
-  const isDebugMode = typeof window !== 'undefined' &&
+  const isDebugMode = DEBUG_MODE && typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('debugMode') === 'true';
 
   if (!params || !isDebugMode) return null;
@@ -519,6 +522,7 @@ const RedemptionModal = ({
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
+  const requiredChain = useRequiredChain(config?.chainId || 100);
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -544,7 +548,7 @@ const RedemptionModal = ({
   const [localIsProcessing, setLocalIsProcessing] = useState(false);
 
   // Determine if winning outcome is YES
-  const isWinningOutcomeYes = config?.marketInfo?.finalOutcome?.toLowerCase() === 'yes';
+  const isWinningOutcomeYes = getRedeemSide(config?.marketInfo?.finalOutcome) === 'yes';
 
   const signer = useMemo(() => {
     if (!walletClient) {
@@ -699,6 +703,10 @@ const RedemptionModal = ({
       setLocalError("Please connect your wallet first");
       return;
     }
+    if (requiredChain.isWrongChain) {
+      setLocalError(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
+      return;
+    }
 
     try {
       console.log('[RedemptionModal] Starting redemption with:', {
@@ -738,14 +746,19 @@ const RedemptionModal = ({
           token2Address: winningTokens.currencyTokenAddress,
           amount1: winningTokens.companyAmount.toString(),
           amount2: winningTokens.currencyAmount.toString(),
-          amount1: winningTokens.companyAmount.toString(),
-          amount2: winningTokens.currencyAmount.toString(),
           exactApproval: !useUnlimitedApproval,
           useBlockExplorer
         }, { publicClient, walletClient, account });
 
         for await (const status of iterator) {
           console.log('[RedemptionModal] SDK Status:', status);
+
+          // SDK failures come back as { status: 'error', message, error } with no step
+          if (status.status === 'error') {
+            throw new Error(status.error || status.message);
+          }
+          const step = status.step || '';
+          const message = status.message || '';
 
           // Update debug info from SDK status
           if (status.txHash) {
@@ -762,27 +775,27 @@ const RedemptionModal = ({
           }
 
           // Map SDK steps to UI steps
-          if (status.step.includes('approving_token1')) {
+          if (step.includes('approving_token1')) {
             setCurrentSubstep({ step: 1, substep: 1 });
-            if (status.step === 'token1_approved' || status.message.includes('Token 1 approved') || status.message.includes('Token 1 already approved')) {
+            if (step === 'token1_approved' || message.includes('Token 1 approved') || message.includes('Token 1 already approved')) {
               markSubstepCompleted(1, 1);
             }
-          } else if (status.step.includes('approving_token2')) {
+          } else if (step.includes('approving_token2')) {
             // If token 1 was skipped or done quickly, ensure it's marked
             markSubstepCompleted(1, 1);
             setCurrentSubstep({ step: 1, substep: 2 });
-            if (status.step === 'token2_approved' || status.message.includes('Token 2 approved') || status.message.includes('Token 2 already approved')) {
+            if (step === 'token2_approved' || message.includes('Token 2 approved') || message.includes('Token 2 already approved')) {
               markSubstepCompleted(1, 2);
             }
-          } else if (status.step.includes('redeem')) {
+          } else if (step.includes('redeem')) {
             markSubstepCompleted(1, 1);
             markSubstepCompleted(1, 2);
             setCurrentSubstep({ step: 1, substep: 3 });
-            if (status.step === 'complete') {
+            if (step === 'complete') {
               markSubstepCompleted(1, 3);
               setCompletedSubsteps(prev => ({ ...prev, 1: { ...prev[1], completed: true } }));
             }
-          } else if (status.step === 'complete') {
+          } else if (step === 'complete') {
             setLocalProcessingStep("completed");
             setLocalIsProcessing(false);
           }
@@ -875,13 +888,7 @@ const RedemptionModal = ({
 
     } catch (error) {
       console.error('Redemption failed:', error);
-      let errorMessage = error.message || "Unknown error occurred.";
-      if (error.code === 4001 || error.code === "ACTION_REJECTED") {
-        errorMessage = "Transaction rejected by the user.";
-      } else if (error.message?.includes("user rejected")) {
-        errorMessage = "Transaction rejected by the user.";
-      }
-      setLocalError(errorMessage);
+      setLocalError(describeRedeemError(error));
       setLocalProcessingStep(undefined);
       setLocalIsProcessing(false);
       setCurrentSubstep({ step: 1, substep: 1 });
@@ -947,6 +954,12 @@ const RedemptionModal = ({
     buttonContent = "Processing Redemption...";
     buttonIsEnabled = false;
     buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+  } else if (requiredChain.isWrongChain) {
+    // Redemption goes through this market's router, which only exists on its chain
+    buttonContent = requiredChain.isSwitching ? "Switching network..." : `Switch to ${requiredChain.requiredChainName}`;
+    buttonAction = requiredChain.switchToRequiredChain;
+    buttonIsEnabled = !requiredChain.isSwitching;
+    buttonClasses += " bg-black hover:bg-black/80 text-white dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
   } else {
     buttonContent = "Redeem Winning Tokens";
     buttonAction = handleRedemption;
@@ -1077,6 +1090,12 @@ const RedemptionModal = ({
           )}
         </AnimatePresence>
 
+        {requiredChain.isWrongChain && !localIsProcessing && localProcessingStep !== "completed" && (
+          <div className="p-2 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+            This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || "another network"}.
+          </div>
+        )}
+
         {/* Action Button */}
         <div className="">
           <button
@@ -1095,7 +1114,7 @@ const RedemptionModal = ({
         )}
 
         {/* Debug Info */}
-        {debugInfo && (
+        {DEBUG_MODE && debugInfo && (
           <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
             <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
               Safe Transaction Tracker

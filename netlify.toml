@@ -22,9 +22,6 @@
   NEXT_PUBLIC_API_URL = "https://api.futarchy.seer.pm"
   NEXT_PUBLIC_API_VERSION = "v1"
   NEXT_PUBLIC_GNOSIS_RPC_URL = "https://rpc.gnosischain.com"
-  NEXT_PUBLIC_SUPABASE_URL = "https://nvhqdqtlsdboctqjcelq.supabase.co"
-  NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52aHFkcXRsc2Rib2N0cWpjZWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIxNDU3ODEsImV4cCI6MjA1NzcyMTc4MX0.6kjpxGVqSQNMz3DqycuNPv_ug8sdBNKeJsN0Z3X7oLg"
-  NEXT_PUBLIC_DATA_SOURCE = "supabase"
   NEXT_PUBLIC_DEBUG_MODE = "false"
   NEXT_PUBLIC_USE_DEFAULT_MOCK_METADATA = "true"
   NEXT_PUBLIC_USE_MOCK_SNAPSHOT = "false"
@@ -46,15 +43,54 @@
   status = 301
   force = true
 
-# Security headers
+# Retired routes. /gnosis/milestones was a Gnosis-only proposal list (its
+# pages are gone) and bare /markets has no market to show; send both to the
+# company list. Bare /market can't be matched here (rules ignore whether a
+# query is present), so src/pages/market.js redirects it client-side.
+[[redirects]]
+  from = "/gnosis/milestones"
+  to = "/companies"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/gnosis/milestones/*"
+  to = "/companies"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/markets"
+  to = "/companies"
+  status = 301
+  force = true
+
+# Security headers. Framing is limited with CSP frame-ancestors rather than
+# X-Frame-Options, which can't name another origin: the app must load inside
+# the Safe{Wallet} Safe Apps iframe.
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
+    Content-Security-Policy = "frame-ancestors 'self' https://app.safe.global"
     X-Content-Type-Options = "nosniff"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Safe{Wallet} fetches <app url>/manifest.json cross-origin to list the app.
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, Content-Type, Authorization"
+
+[[headers]]
+  for = "/safe-app-manifest.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, Content-Type, Authorization"
 
 # Cache static assets
 [[headers]]

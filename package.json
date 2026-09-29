@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/generate-sitemap.mjs",
     "build-with-seo": "npm run generate-seo && npm run build",
     "start": "next start",
     "lint": "next lint",
@@ -18,8 +19,8 @@
     "auto-qa:extract-graphql": "node auto-qa/tools/extract-graphql.mjs",
     "auto-qa:probe-graphql": "node auto-qa/tools/probe-graphql.mjs",
     "auto-qa:test": "npm run auto-qa:test:unit",
-    "auto-qa:test:unit": "node --test 'auto-qa/tests/**/*.test.mjs'",
-    "auto-qa:test:live": "node --test 'auto-qa/live/**/*.test.mjs'"
+    "auto-qa:test:unit": "node --test \"auto-qa/tests/**/*.test.mjs\"",
+    "auto-qa:test:live": "node --test \"auto-qa/live/**/*.test.mjs\""
   },
   "dependencies": {
     "@gnosis.pm/cow-sdk": "^0.0.6",
@@ -83,6 +84,5 @@
     "node-fetch": "^2.7.0",
     "axios": "^1.7.7",
     "cookie": "^0.7.0"
-  },
-  "packageManager": "pnpm@9.4.0+sha512.f549b8a52c9d2b8536762f99c0722205efc5af913e77835dbccc3b0b0b2ca9e7dc8022b78062c17291c48e88749c70ce88eb5a74f1fa8c4bf5e18bb46c8bd83a"
+  }
 }

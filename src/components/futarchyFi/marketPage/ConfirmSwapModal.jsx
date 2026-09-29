@@ -46,12 +46,16 @@ import {
     MARKET_ADDRESS,
 } from './constants/contracts';
 import { useContractConfig } from '../../../hooks/useContractConfig';
+import { useRequiredChain } from '../../../hooks/useChainValidation';
 import DebugToast from './DebugToast';
 import { formatBalance, formatPrice, formatPercentage } from '../../../utils/formatters';
 import { Decimal } from 'decimal.js';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
-import { getEthersSigner, getEthersProvider, isSafeWallet } from '../../../utils/ethersAdapters';
+import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
+import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
+import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, describeQuoteError } from '../../../utils/txErrors';
+import { minReceiveFromQuote, compareQuotes } from '../../../utils/swapQuoteMath';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
 
@@ -425,6 +429,11 @@ const DEFAULT_EXPLORER_CONFIG = {
     url: 'https://gnosisscan.io/tx/', // Default to GnosisScan
     name: 'GnosisScan'
 };
+// Ethereum-market transactions (Uniswap SDK) link here instead
+const MAINNET_EXPLORER_CONFIG = {
+    url: 'https://etherscan.io/tx/',
+    name: 'Etherscan'
+};
 
 // ---> Simple SVG Cog Icon <----
 const SettingsIcon = () => (
@@ -542,6 +551,11 @@ const ConfirmSwapModal = memo(({
     // Approval preference state (for Uniswap SDK on mainnet)
     const [useUnlimitedApproval, setUseUnlimitedApproval] = useState(false);
     const [tradeAnywayAcknowledged, setTradeAnywayAcknowledged] = useState(Boolean(transactionData?.tradeAnywayAcknowledged));
+    // Set when the pre-send re-quote differs from the quote on screen
+    const [priceMoveNotice, setPriceMoveNotice] = useState(null);
+    // Output of the latest re-quote; overrides the trade panel's quote when
+    // the quote effect rebuilds the display data
+    const refreshedQuoteRef = useRef(null);
 
     // A high-impact acknowledgment is only valid for the quote it was given on.
     // Re-quotes (slippage change, refresh) can change impact materially — require
@@ -636,17 +650,19 @@ const ConfirmSwapModal = memo(({
         return slippageTolerance;
     }, [slippageTolerance]);
 
+    // The transaction's amountOutMinimum. The dialog's "Min. Receive" is
+    // computed by the same function, from the same quote and tolerance.
     const minimumFromQuote = useCallback((quotedAmountOutRaw) => {
         const quotedAmountOut = ethers.BigNumber.from(quotedAmountOutRaw || 0);
         if (quotedAmountOut.isZero()) throw new Error('A non-zero on-chain quote is required for minOut');
-        const slippageBps = Math.round(getSafeSlippageTolerance() * 100);
-        return quotedAmountOut.mul(10000 - slippageBps).div(10000);
+        return ethers.BigNumber.from(minReceiveFromQuote(quotedAmountOut.toString(), getSafeSlippageTolerance()).toString());
     }, [getSafeSlippageTolerance]);
 
     // Replace useMetaMask with wagmi hooks
-    const { address: account, isConnected, chain } = useAccount();
+    const { address: account, isConnected, chain, connector } = useAccount();
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
+    const isSafeConnection = useSafeConnection();
 
     // Effect to update swap method when chain changes
     useEffect(() => {
@@ -716,10 +732,13 @@ const ConfirmSwapModal = memo(({
     const pollingRetryCountRef = useRef(0);
     const MAX_POLLING_ATTEMPTS = 5;
 
-    // Define backdrop variants for Framer Motion
+    // Define backdrop variants for Framer Motion. Fade the backdrop colour in,
+    // not the element's opacity: the panel is a child of this element, so an
+    // opacity fade-in left it see-through and the price chart showed through
+    // it while the modal opened.
     const backdropVariants = {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { duration: 0.2 } },
+        hidden: { backgroundColor: 'rgba(0, 0, 0, 0)' },
+        visible: { backgroundColor: 'rgba(0, 0, 0, 0.5)', transition: { duration: 0.2 } },
         exit: { opacity: 0, transition: { duration: 0.3 } },
     };
 
@@ -787,26 +806,27 @@ const ConfirmSwapModal = memo(({
 
     // Helper function to format transaction-related errors
     const formatTransactionError = (rawError, txId) => {
+        // A declined signature is not a failure worth explaining
+        if (isUserRejection(rawError)) {
+            return TX_CANCELLED_MESSAGE;
+        }
+
         if (txId) {
             return `Transaction Failed. ID: ${txId}. Please check details and try again.`;
         }
 
-        let message = '';
-        if (rawError && rawError.message) {
-            message = rawError.message;
-        } else if (typeof rawError === 'string') {
-            message = rawError;
-        } else {
-            message = rawError.toString();
-        }
+        // viem's shortMessage / the first line only: the full message carries
+        // request arguments and calldata that would flood the modal
+        const message = describeTxError(rawError, '');
 
         // Check for slippage-related errors first
         const slippageKeywords = [
             "too little received", "insufficient output amount", "slippage",
             "amountOutMinimum", "price impact", "output amount"
         ];
+        const fullMessage = `${message} ${rawError?.message || ''}`.toLowerCase();
         const isSlippageError = slippageKeywords.some(keyword =>
-            message.toLowerCase().includes(keyword.toLowerCase())
+            fullMessage.includes(keyword.toLowerCase())
         );
 
         if (isSlippageError) {
@@ -851,6 +871,8 @@ const ConfirmSwapModal = memo(({
 
     // Use the contract config hook - get proposal ID from props or URL
     const { config, loading: configLoading, error: configError } = useContractConfig(proposalIdFromProps);
+    // The swap route, quotes and token addresses all come from this market's chain
+    const requiredChain = useRequiredChain(config?.chainId || 100);
 
     // Get currency symbol from config (no hardcoded chain-based logic)
     const currencySymbol = config?.BASE_TOKENS_CONFIG?.currency?.symbol || 'sDAI';
@@ -1102,10 +1124,10 @@ const ConfirmSwapModal = memo(({
                     // Wait for confirmation
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error("SAFE_TRANSACTION_SENT");
+                            throw new Error(SAFE_TRANSACTION_SENT);
                         } else {
                             console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                             const chainId = await walletClient.getChainId();
@@ -1118,6 +1140,7 @@ const ConfirmSwapModal = memo(({
                     } else {
                         receipt = await publicClient.waitForTransactionReceipt({ hash });
                     }
+                    assertReceiptSucceeded(receipt, hash);
                     console.log('Approval confirmed:', receipt);
                 } else {
                     console.log(`Token already approved (allowance: ${allowance.toString()})`);
@@ -1150,10 +1173,10 @@ const ConfirmSwapModal = memo(({
 
                         let receipt;
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                                throw new Error("SAFE_TRANSACTION_SENT");
+                                throw new Error(SAFE_TRANSACTION_SENT);
                             } else {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                                 const chainId = await walletClient.getChainId();
@@ -1173,8 +1196,11 @@ const ConfirmSwapModal = memo(({
                             ]);
                         }
 
+                        assertReceiptSucceeded(receipt, tx.hash);
                         console.log('Approval confirmed:', receipt);
                     } catch (error) {
+                        // Pass the Safe "queued" signal through untouched
+                        if (isSafeTransactionSent(error)) throw error;
                         console.error('Approval transaction failed:', error);
                         throw new Error(`Token approval failed: ${error.message}`);
                     }
@@ -1264,6 +1290,10 @@ const ConfirmSwapModal = memo(({
 
                 for await (const status of iterator) {
                     console.log('[ConfirmSwapModal] SDK Status:', status);
+                    // The SDK reports failures (e.g. a reverted receipt) as an error status
+                    if (status.status === 'error') {
+                        throw new Error(status.message || status.error);
+                    }
 
                     // Map SDK steps to UI steps
                     if (status.step.includes('approv')) {
@@ -1377,10 +1407,10 @@ const ConfirmSwapModal = memo(({
                     { gasLimit: 2000000 }
                 );
                 // Check for Safe wallet
-                if (isSafeWallet(walletClient)) {
+                if (isSafeConnection(walletClient)) {
                     if (!useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        throw new Error("SAFE_TRANSACTION_SENT");
+                        throw new Error(SAFE_TRANSACTION_SENT);
                     } else {
                         console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                         const chainId = await walletClient.getChainId();
@@ -1413,10 +1443,10 @@ const ConfirmSwapModal = memo(({
                 try {
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error("SAFE_TRANSACTION_SENT");
+                            throw new Error(SAFE_TRANSACTION_SENT);
                         } else {
                             console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                             const chainId = await walletClient.getChainId();
@@ -1440,6 +1470,8 @@ const ConfirmSwapModal = memo(({
                         throw new Error(`Transaction failed with status: ${receipt.status}`);
                     }
                 } catch (confirmError) {
+                    // Pass the Safe "queued" signal through untouched
+                    if (isSafeTransactionSent(confirmError)) throw confirmError;
                     console.error('Error confirming split position transaction:', confirmError);
                     throw new Error(`Transaction confirmation failed: ${confirmError.message}`);
                 }
@@ -1461,7 +1493,7 @@ const ConfirmSwapModal = memo(({
             return true;
         } catch (error) {
             // Handle Safe transaction signal
-            if (error.message === "SAFE_TRANSACTION_SENT") {
+            if (isSafeTransactionSent(error)) {
                 console.log('[ConfirmSwapModal] Safe transaction sent in collateral action - closing modal');
                 onSafeTransaction?.();
                 onClose();
@@ -1485,6 +1517,101 @@ const ConfirmSwapModal = memo(({
         }
     };
 
+    // A fresh on-chain quote for the confirmed amount: the Futarchy quote
+    // helper for Algebra (Gnosis) and QuoterV2 for the Uniswap SDK (Ethereum).
+    // Returns null when there is no fresh-quote source for this swap.
+    const fetchFreshQuote = async (amountInWei, amount) => {
+        if (transactionData.action !== 'Buy' && transactionData.action !== 'Sell') return null;
+        const isYes = transactionData.outcome === 'Event Will Occur';
+        const isBuy = transactionData.action === 'Buy';
+
+        if (selectedSwapMethod === 'algebra') {
+            if (!proposalIdFromProps) return null;
+            const { getSwapQuote } = await import('../../../utils/FutarchyQuoteHelper');
+            const quote = await getSwapQuote({
+                proposal: proposalIdFromProps,
+                amount: ethers.utils.formatEther(amountInWei),
+                isYesPool: isYes,
+                isInputCompanyToken: !isBuy,
+                slippagePercentage: getSafeSlippageTolerance() / 100
+            }, await getBestRpcProvider(100));
+            return quote ? { amountOutRaw: quote.raw.amountOut, partialFill: Boolean(quote.partialFill) } : null;
+        }
+
+        if (selectedSwapMethod === 'uniswapSdk') {
+            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG || DEFAULT_MERGE_CONFIG;
+            const currency = isYes ? mergeConfig.currencyPositions.yes : mergeConfig.currencyPositions.no;
+            const company = isYes ? mergeConfig.companyPositions.yes : mergeConfig.companyPositions.no;
+            const quote = await getUniswapV3QuoteWithPriceImpact({
+                tokenIn: (isBuy ? currency : company).wrap.wrappedCollateralTokenAddress,
+                tokenOut: (isBuy ? company : currency).wrap.wrappedCollateralTokenAddress,
+                amountIn: amount,
+                fee: 500,
+                provider: await getBestRpcProvider(1),
+                chainId: 1
+            });
+            return { amountOutRaw: quote.amountOut, partialFill: false };
+        }
+
+        return null;
+    };
+
+    // Shows a re-quoted output in place of the one on screen.
+    const applyRefreshedQuote = (amountOutRaw) => {
+        refreshedQuoteRef.current = { buyAmount: amountOutRaw.toString() };
+        const update = (prev) => (prev?.data
+            ? { ...prev, data: { ...prev.data, buyAmount: amountOutRaw.toString() } }
+            : prev);
+        setSwapRouteData(update);
+        if (selectedSwapMethod === 'algebra') setSushiSwapQuoteData(update);
+    };
+
+    // Re-quotes right before sending. The transaction's minimum output stays
+    // the Min. Receive the user confirmed; if the fresh quote is below it the
+    // swap would revert, so the dialog shows the new quote and stops.
+    // Returns false when the swap must not be sent.
+    const requoteBeforeSend = async (amountInWei, amount) => {
+        const confirmedAmountOutRaw = swapRouteData.data?.buyAmount;
+        if (!confirmedAmountOutRaw) return true;
+
+        let fresh;
+        try {
+            fresh = await fetchFreshQuote(amountInWei, amount);
+        } catch (quoteError) {
+            const { kind, message } = describeQuoteError(quoteError);
+            if (kind === 'network') {
+                // The confirmed Min. Receive still protects the swap
+                console.warn('[ConfirmSwapModal] Could not refresh the quote, sending with the confirmed minimum:', quoteError);
+                return true;
+            }
+            setError(message);
+            return false;
+        }
+        if (!fresh) return true;
+
+        if (fresh.partialFill) {
+            setError('The pool can no longer fill this amount. Reduce the amount and try again.');
+            return false;
+        }
+
+        const tolerance = getSafeSlippageTolerance();
+        const { movedPct, exceedsTolerance } = compareQuotes({
+            confirmedAmountOutRaw,
+            freshAmountOutRaw: fresh.amountOutRaw,
+            slippagePct: tolerance
+        });
+
+        if (exceedsTolerance) {
+            applyRefreshedQuote(fresh.amountOutRaw);
+            setPriceMoveNotice(`The price moved ${movedPct.toFixed(2)}% since the quote, beyond your ${tolerance}% slippage tolerance. The quote has been updated: review Min. Receive and confirm again.`);
+            return false;
+        }
+        if (Math.abs(movedPct) >= 0.01) {
+            setPriceMoveNotice(`The quote changed by ${movedPct > 0 ? '-' : '+'}${Math.abs(movedPct).toFixed(2)}% since it was shown, within your ${tolerance}% tolerance. Min. Receive is unchanged.`);
+        }
+        return true;
+    };
+
     // Refactor handleConfirmSwap
     const handleConfirmSwap = async () => {
         // --- Basic Setup and Validation ---
@@ -1501,6 +1628,10 @@ const ConfirmSwapModal = memo(({
             alert('Please connect your wallet first!');
             return;
         }
+        if (requiredChain.isWrongChain) {
+            setError(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
+            return;
+        }
 
         console.log('[DEBUG] handleConfirmSwap started with:', {
             selectedSwapMethod,
@@ -1513,6 +1644,7 @@ const ConfirmSwapModal = memo(({
         });
 
         setError(null);
+        setPriceMoveNotice(null);
         setIsProcessing(true);
         setOrderStatus('submitted');
         setTransactionResultHash(null);
@@ -1568,6 +1700,14 @@ const ConfirmSwapModal = memo(({
                 action: transactionData.action,
                 outcome: transactionData.outcome
             });
+
+            // Re-quote before any transaction (including the collateral split)
+            if (requiresPoolQuote && !(await requoteBeforeSend(amountInWei, amount))) {
+                setIsProcessing(false);
+                setOrderStatus(null);
+                setProcessingStep(null);
+                return;
+            }
 
             // --- Step 1: Collateral (Remains the same, unrelated to swap method) ---
             const needsCollateral = transactionData.action === 'Buy' ||
@@ -1784,6 +1924,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalCow = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
@@ -1818,6 +1959,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalAlgebraRedeem = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -1853,12 +1995,13 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
                             setProcessingStep('completed');
                             setIsProcessing(false);
+                            onTransactionComplete?.();
                             onClose(); // Auto-close for Safe
                             return;
                         } else {
@@ -1889,6 +2032,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -1942,7 +2086,8 @@ const ConfirmSwapModal = memo(({
                         useUnlimitedApproval,
                         walletClient,
                         publicClient,
-                        account
+                        account,
+                        connector
                     );
 
                     // Mark substep 2 as completed if not already done
@@ -1966,11 +2111,12 @@ const ConfirmSwapModal = memo(({
                         quotedAmountOutRaw,
                         account,
                         signer,
-                        slippageTolerance / 100,
+                        getSafeSlippageTolerance() / 100,
                         walletClient,
                         publicClient,
                         account,
-                        transactionData.outputDecimals || 18
+                        transactionData.outputDecimals || 18,
+                        connector
                     );
 
                     if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
@@ -1982,7 +2128,7 @@ const ConfirmSwapModal = memo(({
                     markSubstepCompleted(2, 3);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2046,6 +2192,8 @@ const ConfirmSwapModal = memo(({
                     // Continue with original Uniswap V3 flow
                     const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
                         signer: signer,
+                        walletClient,
+                        connector,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
                         usePermit2,
@@ -2099,7 +2247,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2153,6 +2301,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2181,7 +2330,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(redeemTx.hash); // Store Tx Hash
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2233,6 +2382,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalCow = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
@@ -2260,7 +2410,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(swapTx.hash);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2283,6 +2433,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalAlgebra = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2321,7 +2472,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2364,6 +2515,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -2402,7 +2554,8 @@ const ConfirmSwapModal = memo(({
                         useUnlimitedApproval,
                         walletClient,
                         publicClient,
-                        account
+                        account,
+                        connector
                     );
 
                     // Mark substep 2 as completed if not already done
@@ -2426,11 +2579,12 @@ const ConfirmSwapModal = memo(({
                         quotedAmountOutRaw,
                         account,
                         signer,
-                        slippageTolerance / 100,
+                        getSafeSlippageTolerance() / 100,
                         walletClient,
                         publicClient,
                         account,
-                        transactionData.outputDecimals || 18
+                        transactionData.outputDecimals || 18,
+                        connector
                     );
 
                     if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
@@ -2444,7 +2598,7 @@ const ConfirmSwapModal = memo(({
                     let receipt;
                     try {
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                                 setOrderStatus('fulfilled');
@@ -2488,6 +2642,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
 
@@ -2500,6 +2655,7 @@ const ConfirmSwapModal = memo(({
                                     setOrderStatus('fulfilled');
                                     setProcessingStep('completed');
                                     setIsProcessing(false);
+                                    onTransactionComplete?.();
                                     return; // Exit successfully
                                 }
                             } catch (receiptError) {
@@ -2530,6 +2686,8 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
                         signer: signer,
+                        walletClient,
+                        connector,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
                         usePermit2,
@@ -2579,7 +2737,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2617,6 +2775,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx failed during confirmation:', waitError);
                         throw waitError;
@@ -2632,6 +2791,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2667,7 +2827,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2726,7 +2886,7 @@ const ConfirmSwapModal = memo(({
 
         } catch (error) {
             // Handle Safe transaction signal
-            if (error.message === "SAFE_TRANSACTION_SENT") {
+            if (isSafeTransactionSent(error)) {
                 console.log('[ConfirmSwapModal] Safe transaction sent in swap action - closing modal');
                 onSafeTransaction?.();
                 onClose();
@@ -2754,7 +2914,13 @@ const ConfirmSwapModal = memo(({
                 }
             }
 
-            setError(formatTransactionError({ ...error, message: detailedError }, transactionResultHash));
+            let errorMessage = formatTransactionError({ ...error, message: detailedError }, transactionResultHash);
+            // Mined but reverted (a CALL_EXCEPTION carrying its receipt): with no
+            // revert reason, the usual cause is a price move past the tolerance
+            if (error?.receipt && detailedError === error.message) {
+                errorMessage = `${describeTxError(error)}. ${SWAP_REVERT_HINT}`;
+            }
+            setError(errorMessage);
             setOrderStatus('failed'); // Set failed status
             setTransactionResultHash(null);
             setIsProcessing(false); // Unlock UI on failure
@@ -2955,13 +3121,14 @@ const ConfirmSwapModal = memo(({
                             estimatedGas: '350000',
                             feeAmount: '0',
                             priceImpact: parseFloat(transactionData.priceImpact || 0),
-                            slippage: parseFloat(transactionData.slippage || 0),
                             protocol: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
                             protocolName: selectedSwapMethod === 'uniswapSdk' ? 'Uniswap SDK' : 'Uniswap V3',
                             currentPrice: parseFloat(transactionData.currentPrice || 0),
                             executionPrice: parseFloat(transactionData.executionPrice || 0),
                             poolPriceAfter: parseFloat(transactionData.priceAfter || 0),
-                            displayPrice: transactionData.executionPrice
+                            displayPrice: transactionData.executionPrice,
+                            // a pre-send re-quote replaces the panel's output
+                            ...(refreshedQuoteRef.current || {})
                         };
 
                         setSwapRouteData({
@@ -3264,16 +3431,15 @@ const ConfirmSwapModal = memo(({
                             swapPrice: transactionData.executionPrice,
                             estimatedGas: '400000', // Default estimate
                             feeAmount: '0',
-                            slippage: parseFloat(transactionData.slippage || 0), // Use distinct Slippage
-                            priceImpact: parseFloat(transactionData.priceImpact || 0), // Use distinct Price Impact
+                            priceImpact: parseFloat(transactionData.priceImpact || 0), // Price impact, already in the quoted output
                             protocol: 'Algebra (Direct Quoter)',
                             protocolName: 'Algebra (Direct Quoter)',
                             currentPrice: parseFloat(transactionData.currentPrice || 0),
                             executionPrice: parseFloat(transactionData.executionPrice || 0),
                             displayPrice: transactionData.executionPrice,
-                            minimumReceived: transactionData.minimumReceived,
-                            minimumReceivedFormatted: transactionData.minimumReceived,
-                            poolPriceAfter: parseFloat(transactionData.priceAfter || 0)
+                            poolPriceAfter: parseFloat(transactionData.priceAfter || 0),
+                            // a pre-send re-quote replaces the panel's output
+                            ...(refreshedQuoteRef.current || {})
                         };
 
                         sushiPromise = Promise.resolve({ data: precalcData, error: null });
@@ -3541,10 +3707,13 @@ const ConfirmSwapModal = memo(({
     }
 
     // ---> Prepare explorer config based on UI state <---
-    const explorerConfig = {
-        url: uiExplorerUrl,   // Use state directly
-        name: uiExplorerName // Use state directly
-    };
+    // Ethereum markets link to Etherscan unless the dev explorer UI overrode the default
+    const explorerConfig = (config?.chainId || chain?.id) === 1 && uiExplorerUrl === DEFAULT_EXPLORER_CONFIG.url
+        ? MAINNET_EXPLORER_CONFIG
+        : {
+            url: uiExplorerUrl,   // Use state directly
+            name: uiExplorerName // Use state directly
+        };
 
     // Determine if the transaction is in a final state for the main button behavior
     const isFinalStateForCloseButton =
@@ -3584,6 +3753,18 @@ const ConfirmSwapModal = memo(({
         !swapRouteData.data?.buyAmount ||
         ethers.BigNumber.from(swapRouteData.data?.buyAmount || 0).isZero()
     );
+
+    // "Min. Receive" = the amountOutMinimum the transaction will send
+    const outputDecimals = swapRouteData.data?.decimalsOut || transactionData?.outputDecimals || 18;
+    const displayedMinReceive = (() => {
+        try {
+            const quoted = swapRouteData.data?.buyAmount;
+            if (!quoted || ethers.BigNumber.from(quoted).isZero()) return null;
+            return ethers.utils.formatUnits(minimumFromQuote(quoted), outputDecimals);
+        } catch {
+            return null;
+        }
+    })();
 
     const modalContent = (
         <>
@@ -3907,7 +4088,7 @@ const ConfirmSwapModal = memo(({
                                                 ) : swapRouteData.data?.buyAmount ? (
                                                     <>
                                                         {(() => {
-                                                            const amountFormatted = ethers.utils.formatUnits(swapRouteData.data.buyAmount, 18);
+                                                            const amountFormatted = ethers.utils.formatUnits(swapRouteData.data.buyAmount, outputDecimals);
                                                             return formatTokenAmount(amountFormatted);
                                                         })()} {transactionData.receiveToken ||
                                                             (transactionData.action === 'Buy'
@@ -3937,11 +4118,7 @@ const ConfirmSwapModal = memo(({
                                                     '-'
                                                 ) : swapRouteData.data?.buyAmount ? (
                                                     <>
-                                                        {(() => {
-                                                            const amountFormatted = ethers.utils.formatUnits(swapRouteData.data.buyAmount, 18);
-                                                            const minReceive = parseFloat(amountFormatted) * (1 - getSafeSlippageTolerance() / 100);
-                                                            return formatTokenAmount(minReceive);
-                                                        })()} {transactionData.receiveToken ||
+                                                        {displayedMinReceive !== null ? formatTokenAmount(displayedMinReceive) : '-'} {transactionData.receiveToken ||
                                                             (transactionData.action === 'Buy'
                                                                 ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol
                                                                 : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency.symbol)}
@@ -4041,31 +4218,6 @@ const ConfirmSwapModal = memo(({
                                                 )}
                                             </>
                                         )}
-                                        {/* Show Slippage for Uniswap SDK */}
-                                        {(swapRouteData.data?.slippage !== null && swapRouteData.data?.slippage !== undefined) && (
-                                            <>
-                                                <div className="flex justify-between">
-                                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Slippage</span>
-                                                    <span className={`font-medium ${Math.abs(swapRouteData.data.slippage) > 2 ? 'text-futarchyCrimson11' : 'text-futarchyGreen11'}`}>
-                                                        {Math.abs(swapRouteData.data.slippage).toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                                {/* Warning if calculated slippage exceeds configured tolerance */}
-                                                {Math.abs(swapRouteData.data.slippage) > slippageTolerance && (
-                                                    <div className="mt-2 p-2 bg-futarchyCrimson3 dark:bg-futarchyCrimson11/10 border border-futarchyCrimson11 rounded-lg">
-                                                        <div className="flex-1">
-                                                            <p className="text-futarchyCrimson11 font-medium text-sm">
-                                                                Slippage Warning
-                                                            </p>
-                                                            <p className="text-futarchyCrimson11 text-xs mt-1">
-                                                                Expected slippage ({Math.abs(swapRouteData.data.slippage).toFixed(2)}%) exceeds your configured tolerance ({slippageTolerance}%).
-                                                                Transaction will likely fail. Consider increasing slippage tolerance in settings below.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
                                     </>
                                 )}
                                 {/* For Algebra (Chain 100 - Gnosis), show Algebra Quoter fields */}
@@ -4093,7 +4245,7 @@ const ConfirmSwapModal = memo(({
                                                 ) : swapRouteData.data?.buyAmount ? (
                                                     <>
                                                         {(() => {
-                                                            const amountFormatted = ethers.utils.formatUnits(swapRouteData.data.buyAmount, 18);
+                                                            const amountFormatted = ethers.utils.formatUnits(swapRouteData.data.buyAmount, outputDecimals);
                                                             return formatTokenAmount(amountFormatted);
                                                         })()} {transactionData.receiveToken ||
                                                             (transactionData.action === 'Buy'
@@ -4104,7 +4256,7 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Min. Receive</span>
+                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Min. Receive ({getSafeSlippageTolerance()}% slippage)</span>
                                             <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
@@ -4116,9 +4268,9 @@ const ConfirmSwapModal = memo(({
                                                     </span>
                                                 ) : swapRouteData.error ? (
                                                     '-'
-                                                ) : swapRouteData.data?.minimumReceivedFormatted ? (
+                                                ) : displayedMinReceive !== null ? (
                                                     <>
-                                                        {formatTokenAmount(swapRouteData.data.minimumReceivedFormatted)} {transactionData.receiveToken ||
+                                                        {formatTokenAmount(displayedMinReceive)} {transactionData.receiveToken ||
                                                             (transactionData.action === 'Buy'
                                                                 ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol
                                                                 : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency.symbol)}
@@ -4197,31 +4349,6 @@ const ConfirmSwapModal = memo(({
                                                             : Math.abs(swapRouteData.data.priceImpact).toFixed(2)}%`}
                                                 </span>
                                             </div>
-                                        )}
-                                        {/* Show Slippage for Algebra (Direct Quoter) */}
-                                        {selectedSwapMethod === 'algebra' && (swapRouteData.data?.slippage !== null && swapRouteData.data?.slippage !== undefined) && (
-                                            <>
-                                                <div className="flex justify-between">
-                                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Slippage</span>
-                                                    <span className={`font-medium ${Math.abs(swapRouteData.data.slippage) > 2 ? 'text-futarchyCrimson11' : 'text-futarchyGreen11'}`}>
-                                                        {Math.abs(swapRouteData.data.slippage).toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                                {/* Warning if calculated slippage exceeds configured tolerance */}
-                                                {Math.abs(swapRouteData.data.slippage) > slippageTolerance && (
-                                                    <div className="mt-2 p-2 bg-futarchyCrimson3 dark:bg-futarchyCrimson11/10 border border-futarchyCrimson11 rounded-lg">
-                                                        <div className="flex-1">
-                                                            <p className="text-futarchyCrimson11 font-medium text-sm">
-                                                                Slippage Warning
-                                                            </p>
-                                                            <p className="text-futarchyCrimson11 text-xs mt-1">
-                                                                Expected slippage ({Math.abs(swapRouteData.data.slippage).toFixed(2)}%) exceeds your configured tolerance ({slippageTolerance}%).
-                                                                Transaction will likely fail. Consider increasing slippage tolerance in settings below.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </>
                                         )}
                                     </>
                                 )}
@@ -4450,9 +4577,21 @@ const ConfirmSwapModal = memo(({
                             </div>
                         )}
 
+                        {requiredChain.isWrongChain && !isProcessing && !isFinalStateForCloseButton && (
+                            <div className="mb-6 p-4 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+                                This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || 'another network'}.
+                            </div>
+                        )}
+
+                        {priceMoveNotice && (
+                            <div className="mb-6 p-4 bg-futarchyOrange3 dark:bg-futarchyOrange11/10 border border-futarchyOrange7 rounded-lg text-futarchyOrange11 text-sm">
+                                {priceMoveNotice}
+                            </div>
+                        )}
+
                         {/* Error Display */}
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm flex overflow-y-auto">
+                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm break-words max-h-32 overflow-y-auto">
                                 {error}
                             </div>
                         )}
@@ -4660,6 +4799,7 @@ const ConfirmSwapModal = memo(({
                                             className="flex items-center gap-1 text-sm text-futarchyGreen11 dark:text-futarchyGreenDark11 hover:underline"
                                         >
                                             View on {selectedSwapMethod === 'cowswap' ? 'CoW Explorer' : explorerConfig.name}
+                                            <span className="font-mono">({transactionResultHash.substring(0, 10)}…{transactionResultHash.substring(transactionResultHash.length - 8)})</span>
                                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                                                 <polyline points="15 3 21 3 21 9" />
@@ -4764,6 +4904,14 @@ const ConfirmSwapModal = memo(({
                                         Close
                                     </button>
                                 </div>
+                            ) : requiredChain.isWrongChain && !isProcessing && !isFinalStateForCloseButton ? (
+                                <button
+                                    onClick={requiredChain.switchToRequiredChain}
+                                    disabled={requiredChain.isSwitching}
+                                    className="w-full mb-4 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80"
+                                >
+                                    {requiredChain.isSwitching ? 'Switching network...' : `Switch to ${requiredChain.requiredChainName}`}
+                                </button>
                             ) : (
                                 <button
                                     onClick={

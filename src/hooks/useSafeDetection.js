@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react';
 import { useWalletClient } from 'wagmi';
 import { isSafeWallet as isSafeWalletSync } from '../utils/ethersAdapters';
 
+// Safe Apps load the app inside an iframe. Outside one there is no parent
+// to answer the SDK handshake, so it can only time out.
+const isInIframe = () => {
+    if (typeof window === 'undefined') return false;
+    try {
+        return window.parent !== window;
+    } catch {
+        return true; // cross-origin access blocked: we are framed
+    }
+};
+
 export const useSafeDetection = () => {
     const { data: walletClient } = useWalletClient();
     const [isSafe, setIsSafe] = useState(false);
@@ -23,7 +34,11 @@ export const useSafeDetection = () => {
                 // Continue to verify with SDK...
             }
 
-            // 2. Robust Async Check (SDK Handshake)
+            // 2. Robust Async Check (SDK Handshake) - only when framed
+            if (!isInIframe()) {
+                if (mounted) setIsLoading(false);
+                return;
+            }
             try {
                 // Dynamic import to avoid SSR issues
                 const { default: SafeAppsSDK } = await import('@safe-global/safe-apps-sdk');

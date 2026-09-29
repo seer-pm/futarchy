@@ -6,7 +6,7 @@
  * deploys where someone renames an asset without updating callers.
  *
  * Per the auto-qa directive (do not fix production bugs in this loop),
- * the 6 currently-broken refs are pinned in BASELINE_BROKEN_REFS.
+ * the 4 currently-broken refs are pinned in BASELINE_BROKEN_REFS.
  * Any NEW broken ref fails the test loudly. Any time someone fixes
  * one from the baseline, the test prompts them to remove it from the
  * baseline (so the count keeps ratcheting down).
@@ -20,7 +20,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = new URL('../../', import.meta.url);
@@ -40,9 +40,7 @@ const BASELINE_BROKEN_REFS = new Set([
     '/assets/default-company-logo.png',     // src/utils/imageUtils.js
     '/assets/default-logo.png',             // EventHighlightCard.jsx
     '/assets/fallback-company.png',         // ResolvedEventsDataTransformer.jsx + 2 more
-    '/assets/kleros-proposal-1.png',        // src/config/mapped-seo.json
     '/assets/market-logo.svg',              // MarketPage.jsx
-    '/assets/starbucks-market-card-1.png',  // src/config/mapped-seo.json
 ]);
 
 function walk(dir, results = []) {
@@ -59,7 +57,8 @@ function extractAssetRefs() {
     const refs = new Map(); // ref -> Set<callerFile>
     const re = /\/assets\/[a-zA-Z0-9._\-/]+\.(png|jpg|jpeg|webp|svg|gif|ico)/g;
     for (const file of walk(SRC_DIR)) {
-        const rel = relative(fileURLToPath(REPO_ROOT), file);
+        // POSIX-style so EXCLUDED_CALLERS also matches on Windows.
+        const rel = relative(fileURLToPath(REPO_ROOT), file).split(sep).join('/');
         if (EXCLUDED_CALLERS.has(rel)) continue;
         const src = readFileSync(file, 'utf8');
         const matches = src.match(re) || [];
@@ -125,7 +124,7 @@ test('asset-refs — baseline broken count is exactly what we expect', () => {
     // Snapshot ratchet — surfaces if the baseline gets edited without
     // updating this number (the dual-test above would catch removals,
     // but this catches manual baseline-list additions).
-    assert.equal(BASELINE_BROKEN_REFS.size, 6,
-        `BASELINE_BROKEN_REFS size changed from 6 to ${BASELINE_BROKEN_REFS.size}. ` +
+    assert.equal(BASELINE_BROKEN_REFS.size, 4,
+        `BASELINE_BROKEN_REFS size changed from 4 to ${BASELINE_BROKEN_REFS.size}. ` +
         `If you added entries, also bump this number; if you removed entries (a fix landed), bump down.`);
 });

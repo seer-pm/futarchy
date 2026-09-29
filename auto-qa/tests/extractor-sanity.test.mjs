@@ -55,10 +55,14 @@ test('finds known queries authored in this session', () => {
 
     // Files we know contain GraphQL strings (rewritten in PRs #62, #63, #65).
     const expected = [
-        'src/hooks/useSubgraphData.js',         // PR #65
+        // useSubgraphData.js's candle query moved to src/utils/candleWindowQuery.js,
+        // which composes it from per-pool alias fragments that no static extractor
+        // can see; auto-qa/tests/candle-window-query.test.mjs pins its shape instead.
         'src/hooks/usePoolData.js',             // PR #65
         'src/utils/subgraphTradesClient.js',    // PR #63
-        'src/adapters/subgraphConfigAdapter.js',// PR #62
+        // The proposal query from subgraphConfigAdapter.js (PR #62) moved
+        // here in 0240c3d, shared with usePoolData.
+        'src/services/proposalMarketData.js',
         'src/hooks/useAggregatorProposals.js',  // PR #64 area
         'src/utils/SubgraphBulkPriceFetcher.js',// PR #64 area
     ];

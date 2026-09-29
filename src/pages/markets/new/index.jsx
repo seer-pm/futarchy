@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic';
+import Head from 'next/head';
 
 const CreateMarketFlow = dynamic(
   () => import('../../../components/futarchyFi/createMarket/CreateMarketFlow'),
@@ -13,5 +14,12 @@ const CreateMarketFlow = dynamic(
 );
 
 export default function NewMarketPage() {
-  return <CreateMarketFlow />;
+  return (
+    <>
+      <Head>
+        <title>Create a Market | Futarchy</title>
+      </Head>
+      <CreateMarketFlow />
+    </>
+  );
 }

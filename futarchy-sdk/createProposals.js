@@ -18,7 +18,7 @@ const rl = require('node:readline/promises')
            .createInterface({ input: process.stdin, output: process.stdout });
 
 /* ───────────── CONFIG ───────────── */
-const RPC_URL     = process.env.RPC_URL || 'https://rpc.gnosis.gateway.fm';
+const RPC_URL     = process.env.RPC_URL || 'https://rpc.gnosischain.com';
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 if (!PRIVATE_KEY) throw new Error('Add PRIVATE_KEY to .env');
 

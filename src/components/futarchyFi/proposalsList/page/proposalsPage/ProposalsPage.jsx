@@ -18,6 +18,8 @@ import { useOrganization } from "../../../../../hooks/useOrganization";
 import { useChainId } from "wagmi";
 import OrganizationManagerModal from "../../../../debug/OrganizationManagerModal";
 import { SHOW_DATA_DEBUG } from "../../../../../config/featureFlags";
+import { fetchOnChainResolutions, resolutionKey } from "../../../../../utils/onChainResolution";
+import { applyOnChainResolution } from "../../../../../utils/proposalLifecycle";
 
 const PROPOSAL_IMAGES = {
   "ethereum-budget": "/assets/ethereum-budget-picture.webp",
@@ -53,6 +55,7 @@ const ProposalsPage = ({
     org: subgraphOrg,
     isOwner,
     loading: subgraphLoading,
+    error: orgError,
     refetch: refetchOrg
   } = useOrganization(isAddressId ? initialCompanyId : null);
 
@@ -80,6 +83,7 @@ const ProposalsPage = ({
   // Effect for subgraph-based data (address IDs)
   useEffect(() => {
     if (isAddressId && subgraphOrg && !subgraphLoading) {
+      setError(null);
       setCompanyData(subgraphOrg);
 
       // Async function to fetch pool data for proposals
@@ -211,6 +215,24 @@ const ProposalsPage = ({
           })
         );
 
+        // Registry resolution metadata lags the chain (KIP-90 stayed "Ongoing"
+        // after it resolved), so read the ConditionalTokens payout state for
+        // whatever it still calls ongoing — batched, two RPC POSTs per chain.
+        const ongoing = transformedProposals.filter((p) => p.approvalStatus === 'ongoing');
+        if (ongoing.length > 0) {
+          const resolutions = await fetchOnChainResolutions(ongoing.map((p) => ({
+            proposalAddress: p.proposalID,
+            chainId: p.chainId,
+            conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
+          })));
+          for (const p of ongoing) {
+            const result = resolutions.get(resolutionKey(p.chainId, p.proposalID));
+            if (!result?.resolved) continue;
+            applyOnChainResolution(p, result);
+            p.approvalStatus = p.resolution_outcome === 'yes' ? 'approved' : 'refused';
+          }
+        }
+
         // Sort by total volume (highest first), fallback to timestamp
         transformedProposals.sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0));
 
@@ -227,8 +249,14 @@ const ProposalsPage = ({
       setCompanyData(null);
       setIsLoadingCompany(false);
       setIsLoading(false);
+      // A failed request is not an empty organization: show the error.
+      if (orgError) {
+        setError(/not found/i.test(orgError.message || '')
+          ? 'Organization not found.'
+          : "Couldn't load this organization's milestones. The registry did not respond.");
+      }
     }
-  }, [isAddressId, subgraphOrg, subgraphLoading]);
+  }, [isAddressId, subgraphOrg, subgraphLoading, orgError]);
 
   // Update the filter options structure
   const filterOptions = [
@@ -423,8 +451,16 @@ const ProposalsPage = ({
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
                   </div>
                 ) : error ? (
-                  <div className="text-center text-futarchyCrimson11 py-8">
-                    {error}
+                  <div role="alert" className="flex flex-col items-center gap-3 text-center text-futarchyCrimson11 py-8">
+                    <span>{error}</span>
+                    {orgError && (
+                      <button
+                        onClick={() => { setIsLoading(true); refetchOrg(); }}
+                        className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-futarchyGray62 dark:border-futarchyGray11/70 text-futarchyGray12 dark:text-white hover:border-futarchyLavender transition-colors"
+                      >
+                        Retry
+                      </button>
+                    )}
                   </div>
                 ) : filteredProposals.length === 0 ? (
                   <div className="text-center text-black dark:text-futarchyGray112 py-8">

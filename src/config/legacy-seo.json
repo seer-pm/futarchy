@@ -200,12 +200,12 @@
   "0xcd57aE6f64E4Ff0687daB3699611907A5f4c528B": {
     "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved?",
     "description": "Auto-generated pool for futarchy governance norm prediction.",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xcd57aE6f64E4Ff0687daB3699611907A5f4c528B",
     "openGraph": {
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -213,7 +213,7 @@
       "card": "summary_large_image",
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -245,12 +245,12 @@
   "0x1b12f43F30bcF9c7B9868Ae3D1E3b574c589Fc97": {
     "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved?",
     "description": "Auto-generated pool for futarchy governance norm prediction.",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0x1b12f43F30bcF9c7B9868Ae3D1E3b574c589Fc97",
     "openGraph": {
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -258,7 +258,7 @@
       "card": "summary_large_image",
       "title": "What will the impact on PNK price be if KIP-TEST – Futarchy-Based Governance Rule for PNK Minting is approved? | Futarchy",
       "description": "Auto-generated pool for futarchy governance norm prediction.",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -551,12 +551,12 @@
   "0x1F54f0312E85c5AFACe2bDF15AA2514BeFDB844F": {
     "title": "Futarchy: Predict SBUX impact if CEO exits before 2026",
     "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-    "image": "/assets/starbucks-market-card-1.png",
+    "image": "/assets/og-default.png",
     "path": "/markets/0x1F54f0312E85c5AFACe2bDF15AA2514BeFDB844F",
     "openGraph": {
       "title": "Futarchy: Predict SBUX impact if CEO exits before 2026 | Futarchy",
       "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-      "image": "/assets/starbucks-market-card-1.png",
+      "image": "/assets/og-default.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -564,7 +564,7 @@
       "card": "summary_large_image",
       "title": "Futarchy: Predict SBUX impact if CEO exits before 2026 | Futarchy",
       "description": "Will Starbucks CEO Brian Niccol be terminated or resign before 2026-01-01 00:00 UTC? Outcomes: 'Yes' (fired/resigned) or 'No' (still CEO). If unresolved by 2026-01-01 23:59 UTC, the outcome defaults to 'No'.\n\nTrade based on your prediction of what tokenized SBUX share price will be in each scenario, earning profits by accurately anticipating market sentiment around executive turnover.",
-      "image": "https://futarchy.seer.pm/assets/starbucks-market-card-1.png"
+      "image": "https://futarchy.seer.pm/assets/og-default.png"
     },
     "keywords": [
       "futarchy",
@@ -983,12 +983,12 @@
   "0xf36e2f05E8F45954d896b2ed72cD2a0bAB6A6Dd7": {
     "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact",
     "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-    "image": "/kip76",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xf36e2f05E8F45954d896b2ed72cD2a0bAB6A6Dd7",
     "openGraph": {
       "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact | Futarchy",
       "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-      "image": "/kip76",
+      "image": "/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -996,7 +996,7 @@
       "card": "summary_large_image",
       "title": "Futarchy Governance Market: KIP-76 Approval & PNK Price Impact | Futarchy",
       "description": "Predict KIP-76 approval before July 16, 2025. Stake PNK or sDAI to influence governance and forecast PNK price outcomes. Join and shape policy now!",
-      "image": "https://futarchy.seer.pm/kip76"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",
@@ -1028,12 +1028,12 @@
   "0xa6A71F5335447B1e711ab9c78c52a24BE6c9f997": {
     "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact",
     "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-    "image": "/assets/kleros-proposal-1.png",
+    "image": "/assets/kleros-market-card-1-bg.png",
     "path": "/markets/0xa6A71F5335447B1e711ab9c78c52a24BE6c9f997",
     "openGraph": {
       "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact | Futarchy",
       "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-      "image": "/assets/kleros-proposal-1.png",
+      "image": "/assets/kleros-market-card-1-bg.png",
       "type": "website",
       "siteName": "Futarchy"
     },
@@ -1041,7 +1041,7 @@
       "card": "summary_large_image",
       "title": "Futarchy Governance Prediction: KIP-76 Approval & PNK Impact | Futarchy",
       "description": "Predict KIP-76's approval for PNK minting by 2026. Trade with PNK & sDAI, shape governance, and influence DeFi policy outcomes now!",
-      "image": "https://futarchy.seer.pm/assets/kleros-proposal-1.png"
+      "image": "https://futarchy.seer.pm/assets/kleros-market-card-1-bg.png"
     },
     "keywords": [
       "futarchy",

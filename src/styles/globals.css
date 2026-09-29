@@ -143,17 +143,27 @@ html[data-theme="gradient"] .bg-futarchyDarkGrayBG {
     background: linear-gradient(to bottom right, #cd7f32, #a97142);
   }
 
+  /* Pulses opacity rather than the stroke colour: animating stroke forced a
+     style recalc every frame for each ring (~45ms/s of main thread on the
+     homepage), while opacity stays off the style path. */
   @keyframes pulsate-color {
     0%, 100% {
-      stroke: #7E38CA;
+      opacity: 1;
     }
     50% {
-      stroke: #A974FD;
+      opacity: 0.55;
     }
   }
 
   .animate-pulsate-color {
+    stroke: #7E38CA;
     animation: pulsate-color 2s infinite ease-in-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pulsate-color {
+      animation: none;
+    }
   }
 
   .text-balance {

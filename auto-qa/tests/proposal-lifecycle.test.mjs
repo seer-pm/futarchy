@@ -10,6 +10,7 @@ const source = await readFile(sourcePath, 'utf8');
 const lifecycle = await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
 const {
+    applyOnChainResolution,
     getProposalEndTime,
     hasResolutionOutcome,
     isClosedProposal,
@@ -124,4 +125,33 @@ test('hasResolutionOutcome treats null, undefined, and empty string as missing o
     assert.equal(hasResolutionOutcome({ resolution_outcome: '' }), false);
     assert.equal(hasResolutionOutcome({ resolution_outcome: 0 }), true);
     assert.equal(hasResolutionOutcome({ metadata: { finalOutcome: 'no' } }), true);
+});
+
+test('applyOnChainResolution marks a metadata-unresolved proposal resolved with its outcome', () => {
+    const proposal = { status: 'ongoing', resolutionStatus: 'unresolved', resolution_status: null, endTime: null };
+    applyOnChainResolution(proposal, { resolved: true, outcome: 'no' });
+
+    assert.equal(isResolvedProposal(proposal), true);
+    assert.equal(isClosedProposal(proposal, NOW), true);
+    assert.equal(hasResolutionOutcome(proposal), true);
+    assert.equal(proposal.resolutionOutcome, 'no');
+    assert.equal(proposal.finalOutcome, 'no');
+});
+
+test('applyOnChainResolution keeps an outcome metadata already recorded and ignores unresolved results', () => {
+    const recorded = { resolution_status: 'closed', resolutionOutcome: 'yes', resolution_outcome: 'yes' };
+    applyOnChainResolution(recorded, { resolved: true, outcome: 'no' });
+    assert.equal(recorded.resolution_outcome, 'yes');
+    assert.equal(recorded.resolution_status, 'resolved');
+
+    const open = { status: 'ongoing', endTime: FUTURE };
+    for (const result of [{ resolved: false, outcome: null }, null, undefined]) {
+        applyOnChainResolution(open, result);
+        assert.equal(isResolvedProposal(open), false);
+        assert.equal(isClosedProposal(open, NOW), false);
+    }
+});
+
+test('a proposal with no close time is never closed by time alone', () => {
+    assert.equal(isClosedProposal({ endTime: null }, NOW), false);
 });

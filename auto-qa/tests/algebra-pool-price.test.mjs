@@ -16,10 +16,10 @@
  *      This file targets the newer Algebra Integral shape. A regression
  *      that flips them silently mis-decodes globalState in production.
  *
- *   2. GNOSIS_RPCS — 4 endpoints, HTTPS-only, deduplicated. Cross-pin
- *      vs the canonical lists in getRpcUrl.js / providers.jsx (already
- *      covered in rpc-config.test.mjs but here as a third occurrence
- *      worth pinning so the duplication is visible).
+ *   2. GNOSIS_RPCS — since f2b0de2 this file no longer carries its own
+ *      4-entry list; it reads chain 100 from config/rpcEndpoints.js, whose
+ *      contents rpc-config.test.mjs pins. Pinned here that it stays that
+ *      way, so the duplication cannot creep back in.
  *
  *   3. Constants — CACHE_DURATION = 30s, BASE_RETRY_DELAY = 30s,
  *      RANDOM_RETRY_RANGE = 10s, MOCK_MODE = false.
@@ -121,32 +121,24 @@ test('cross-file divergence — algebraQuoter.js POOL_ABI uses the OLDER V3 7-fi
 });
 
 // ---------------------------------------------------------------------------
-// GNOSIS_RPCS — 4 endpoints, HTTPS-only, deduplicated
+// GNOSIS_RPCS — read from the shared config, not an inline list
 // ---------------------------------------------------------------------------
+// The old tests here pinned an inline 4-entry list. f2b0de2 moved every RPC
+// list into config/rpcEndpoints.js on purpose (the copies had drifted apart);
+// HTTPS-only / dedup / non-empty are now pinned once, in rpc-config.test.mjs.
 
-test('GNOSIS_RPCS — has exactly 4 entries (drift surfaces as more/fewer fallback options)', () => {
-    const m = SRC.match(/GNOSIS_RPCS\s*=\s*\[([\s\S]*?)\]/);
-    assert.ok(m);
-    const urls = [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map(x => x[1]);
-    assert.equal(urls.length, 4,
-        `GNOSIS_RPCS drifted from 4 entries; got ${urls.length}. ` +
-        `Compare against rpc-config.test.mjs canonical list.`);
+test('GNOSIS_RPCS — sourced from config/rpcEndpoints RPC_ENDPOINTS[100]', () => {
+    assert.match(SRC, /import\s*\{[^}]*\bRPC_ENDPOINTS\b[^}]*\}\s*from\s*["']\.\.\/config\/rpcEndpoints["']/);
+    assert.match(SRC, /const GNOSIS_RPCS\s*=\s*RPC_ENDPOINTS\[100\];/);
 });
 
-test('GNOSIS_RPCS — all entries are HTTPS', () => {
-    const m = SRC.match(/GNOSIS_RPCS\s*=\s*\[([\s\S]*?)\]/);
-    const urls = [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map(x => x[1]);
-    for (const url of urls) {
-        assert.match(url, /^https:\/\//,
-            `GNOSIS_RPCS entry ${url} is not HTTPS — would leak request headers`);
-    }
+test('GNOSIS_RPCS — no inline URL list creeps back in', () => {
+    assert.doesNotMatch(SRC, /GNOSIS_RPCS\s*=\s*\[/,
+        'getAlgebraPoolPrice.js declares its own RPC list again — use RPC_ENDPOINTS');
 });
 
-test('GNOSIS_RPCS — entries are deduplicated', () => {
-    const m = SRC.match(/GNOSIS_RPCS\s*=\s*\[([\s\S]*?)\]/);
-    const urls = [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map(x => x[1]);
-    assert.equal(new Set(urls).size, urls.length,
-        `GNOSIS_RPCS contains duplicates`);
+test('GNOSIS_RPCS — rotation still wraps around the shared list', () => {
+    assert.match(SRC, /currentRpcIndex\s*=\s*\(currentRpcIndex \+ 1\) % GNOSIS_RPCS\.length/);
 });
 
 // ---------------------------------------------------------------------------

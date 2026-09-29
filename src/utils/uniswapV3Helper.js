@@ -172,6 +172,7 @@ export const checkAndApproveTokenForUniswapV3 = async ({
   onApprovalComplete,
   publicClient = null,
   walletClient = null, // Add walletClient param
+  connector, // wagmi useAccount() connector, for Safe detection
   useUnlimitedApproval = false
 }) => {
   let checksummedTokenAddress;
@@ -321,7 +322,7 @@ export const checkAndApproveTokenForUniswapV3 = async ({
           console.log('Permit2 approval transaction:', tx.hash);
 
           // Check for Safe wallet
-          if (walletClient && isSafeWallet(walletClient)) {
+          if (walletClient && isSafeWallet(walletClient, connector)) {
             console.log('[checkAndApproveTokenForUniswapV3] Safe wallet detected (Permit2) - skipping wait() and throwing SAFE_TRANSACTION_SENT');
             throw new Error("SAFE_TRANSACTION_SENT");
           }
@@ -369,7 +370,7 @@ export const checkAndApproveTokenForUniswapV3 = async ({
     console.log('Approval transaction:', tx.hash);
 
     // Check for Safe wallet
-    if (walletClient && isSafeWallet(walletClient)) {
+    if (walletClient && isSafeWallet(walletClient, connector)) {
       console.log('[checkAndApproveTokenForUniswapV3] Safe wallet detected (ERC20) - skipping wait() and throwing SAFE_TRANSACTION_SENT');
       throw new Error("SAFE_TRANSACTION_SENT");
     }
@@ -407,7 +408,7 @@ export const checkAndApproveTokenForUniswapV3 = async ({
       console.log('Permit2 approval transaction:', permit2Tx.hash);
 
       // Check for Safe wallet
-      if (walletClient && isSafeWallet(walletClient)) {
+      if (walletClient && isSafeWallet(walletClient, connector)) {
         console.log('[checkAndApproveTokenForUniswapV3] Safe wallet detected (Permit2-2) - skipping wait() and throwing SAFE_TRANSACTION_SENT');
         throw new Error("SAFE_TRANSACTION_SENT");
       }

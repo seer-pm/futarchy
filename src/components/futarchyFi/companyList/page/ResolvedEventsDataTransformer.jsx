@@ -15,8 +15,11 @@ export const fetchResolvedEventHighlightData = async (_companyId = "all", limit 
   const { connectedWallet, aggregatorAddress: requestedAggregatorAddress } = options;
   const aggregatorAddress = requestedAggregatorAddress || DEFAULT_AGGREGATOR;
 
+  // A registry failure propagates so the carousel can offer a retry
+  // instead of claiming there are no closed markets.
+  const { proposals } = await fetchProposalsFromAggregator(aggregatorAddress, connectedWallet);
+
   try {
-    const { proposals } = await fetchProposalsFromAggregator(aggregatorAddress, connectedWallet);
 
     const nowSeconds = Date.now() / 1000;
 

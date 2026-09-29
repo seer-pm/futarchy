@@ -9,7 +9,7 @@
  * the org owner/editor — same convention used per proposal).
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { fetchRegistrySnapshot } from '../services/registrySnapshot';
 import { getFlmPathForOrg } from '../utils/flm';
@@ -115,6 +115,10 @@ export function useAggregatorCompanies(aggregatorAddress, connectedWallet = null
     const [aggregatorName, setAggregatorName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    // Bumped by refetch() to re-run the effect; failed requests are never
+    // cached (see services/requestCache.js), so a retry hits the network.
+    const [attempt, setAttempt] = useState(0);
+    const refetch = useCallback(() => setAttempt(n => n + 1), []);
 
     useEffect(() => {
         if (!aggregatorAddress) {
@@ -144,9 +148,9 @@ export function useAggregatorCompanies(aggregatorAddress, connectedWallet = null
         }
         run();
         return () => { cancelled = true; };
-    }, [aggregatorAddress, connectedWallet]);
+    }, [aggregatorAddress, connectedWallet, attempt]);
 
-    return { companies, aggregatorName, loading, error };
+    return { companies, aggregatorName, loading, error, refetch };
 }
 
 export async function fetchCompaniesFromAggregator(aggregatorAddress, connectedWallet = null) {

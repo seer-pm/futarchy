@@ -15,7 +15,7 @@ import CreateProposalModal from "../../../debug/CreateProposalModal";
 import OrganizationManagerModal from "../../../debug/OrganizationManagerModal";
 import EditProposalModal from "../../../debug/EditProposalModal";
 import { CONTRACT_ADDRESSES } from "../../marketPage/constants/contracts";
-import { ENABLE_V2_SUBGRAPH } from "../../../../config/featureFlags";
+import { ENABLE_V2_SUBGRAPH, DEBUG_MODE } from "../../../../config/featureFlags";
 import { useMediaQuery } from "../../../../hooks/useMediaQuery";
 
 // Configuration flags
@@ -37,12 +37,17 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
 
   // Fetch organizations for table view
   const effectiveAggregator = ENABLE_V2_SUBGRAPH ? DEFAULT_AGGREGATOR : aggregatorAddress;
-  const { companies: organizations, loading: orgsLoading } = useAggregatorCompanies(effectiveAggregator);
+  const {
+    companies: organizations,
+    loading: orgsLoading,
+    error: orgsError,
+    refetch: refetchOrgs,
+  } = useAggregatorCompanies(effectiveAggregator);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      setDebugMode(urlParams.get('debugMode') === 'true');
+      setDebugMode(DEBUG_MODE && urlParams.get('debugMode') === 'true');
 
       // Check for useAggregator param to load companies from subgraph
       const aggregator = urlParams.get('useAggregator');
@@ -112,6 +117,8 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
             organizations={organizations}
             connectedWallet={connectedWallet}
             loading={orgsLoading}
+            error={orgsError}
+            onRetry={refetchOrgs}
             onOrgClick={(org) => {
               // Navigate to milestones page
               const url = `/milestones?company_id=${org.companyID}`;

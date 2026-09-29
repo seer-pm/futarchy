@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 const CircularProgressBar = ({
   currentProgress,
@@ -9,26 +9,10 @@ const CircularProgressBar = ({
     const normalizedRadius = radius - strokeWidth / 2;
     const circumference = normalizedRadius * 2 * Math.PI;
 
-    const [progress, setProgress] = useState(currentProgress);
-
-    // Transitioning progress smoothly
-    useEffect(() => {
-        const progressDiff = currentProgress - progress;
-        const step = progressDiff / 50; // Adjust the denominator for faster or slower transitions
-        if (step !== 0) {
-            const interval = setInterval(() => {
-                setProgress(prevProgress => {
-                    const newProgress = prevProgress + step;
-                    if ((step > 0 && newProgress >= currentProgress) || (step < 0 && newProgress <= currentProgress)) {
-                        clearInterval(interval);
-                        return currentProgress;
-                    }
-                    return newProgress;
-                });
-            }, 20); // Control speed of transition with interval time
-            return () => clearInterval(interval);
-        }
-    }, [currentProgress, progress]);
+    // The stroke-dashoffset CSS transition below animates changes. A JS
+    // tween here used to step 1/50 of the remaining gap every 20ms, which
+    // never quite converges and kept every card re-rendering.
+    const progress = currentProgress;
 
     const strokeDashoffset = circumference - (progress / totalProgress) * circumference;
 

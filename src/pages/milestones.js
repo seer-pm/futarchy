@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
+import Router, { useRouter } from "next/router";
+import Link from "next/link";
 import Proposals from "../components/futarchyFi/proposalsList/page/proposalsPage/ProposalsPage";
 import dynamic from 'next/dynamic';
 
@@ -29,6 +30,8 @@ export default function MilestonesPage() {
   const [hash, setHash] = useState('');
   // Store the effective company ID
   const [effectiveCompanyId, setEffectiveCompanyId] = useState(null);
+  // company_id that matches no known organization
+  const [unknownCompanyId, setUnknownCompanyId] = useState(null);
 
   useEffect(() => {
     // Wait for router to be ready
@@ -45,19 +48,26 @@ export default function MilestonesPage() {
       // surface it as `?proposalId=0x...`, since useContractConfig only reads the proposal
       // ID from the path or query string — without it the swap quoter falls back to v1
       // defaults and shows "Insufficient liquidity".
-      if (currentHash.includes('milestone') || currentHash.includes('market')) {
-        setShowMarket(true);
-
-        const hashAddrMatch = currentHash.match(/0x[a-fA-F0-9]{40}/);
+      //
+      // Shallow router.replace (not history.replaceState) keeps Next's router
+      // state in step with the URL.
+      const syncProposalIdFromHash = (targetHash, { overwrite }) => {
+        const hashAddrMatch = targetHash.match(/0x[a-fA-F0-9]{40}/);
         const urlParams = new URLSearchParams(window.location.search);
-        if (hashAddrMatch && !urlParams.get('proposalId')) {
+        const current = urlParams.get('proposalId');
+        if (hashAddrMatch && (overwrite ? current !== hashAddrMatch[0] : !current)) {
           urlParams.set('proposalId', hashAddrMatch[0]);
-          window.history.replaceState(
-            {},
-            '',
-            window.location.pathname + '?' + urlParams.toString() + currentHash
+          Router.replace(
+            window.location.pathname + '?' + urlParams.toString() + targetHash,
+            undefined,
+            { shallow: true, scroll: false }
           );
         }
+      };
+
+      if (currentHash.includes('milestone') || currentHash.includes('market')) {
+        setShowMarket(true);
+        syncProposalIdFromHash(currentHash, { overwrite: false });
       }
 
       // Map legacy numeric/slug company IDs to the on-chain Organization
@@ -75,6 +85,7 @@ export default function MilestonesPage() {
       const DEFAULT_COMPANY_ID = LEGACY_ID_TO_ORG_ADDRESS.gnosis;
 
       let companyIdToUse = company_id;
+      setUnknownCompanyId(null);
 
       if (!companyIdToUse) {
         console.warn('No company_id provided, defaulting to Gnosis');
@@ -93,8 +104,9 @@ export default function MilestonesPage() {
           console.log(`[Milestones] Mapped legacy ID "${companyIdToUse}" → ${mapped}`);
           companyIdToUse = mapped;
         } else {
-          console.warn(`[Milestones] Unknown company_id "${companyIdToUse}", falling back to Gnosis`);
-          companyIdToUse = DEFAULT_COMPANY_ID;
+          console.warn(`[Milestones] Unknown company_id "${companyIdToUse}"`);
+          setUnknownCompanyId(String(companyIdToUse));
+          companyIdToUse = null;
         }
       }
 
@@ -107,20 +119,6 @@ export default function MilestonesPage() {
         showMarket: currentHash.includes('milestone') || currentHash.includes('market')
       });
 
-      // Override the ProposalsPage's URL modification to preserve our hash
-      const originalPushState = window.history.pushState;
-      window.history.pushState = function () {
-        // Call the original method
-        const result = originalPushState.apply(this, arguments);
-
-        // Check if our hash was removed and add it back
-        if (currentHash && !window.location.hash) {
-          window.history.pushState({}, '', window.location.pathname + window.location.search + currentHash);
-        }
-
-        return result;
-      };
-
       // Listen for hash changes
       const handleHashChange = () => {
         const newHash = window.location.hash;
@@ -129,37 +127,41 @@ export default function MilestonesPage() {
         setShowMarket(isMilestone);
 
         if (isMilestone) {
-          const hashAddrMatch = newHash.match(/0x[a-fA-F0-9]{40}/);
-          const urlParams = new URLSearchParams(window.location.search);
-          if (hashAddrMatch && urlParams.get('proposalId') !== hashAddrMatch[0]) {
-            urlParams.set('proposalId', hashAddrMatch[0]);
-            window.history.replaceState(
-              {},
-              '',
-              window.location.pathname + '?' + urlParams.toString() + newHash
-            );
-          }
+          syncProposalIdFromHash(newHash, { overwrite: true });
         }
       };
 
       window.addEventListener('hashchange', handleHashChange);
 
       // Set loading to false after a brief delay
-      setTimeout(() => {
+      const loadingTimer = setTimeout(() => {
         setIsLoading(false);
       }, 300);
 
       // Clean up
       return () => {
-        // Restore the original pushState function
-        window.history.pushState = originalPushState;
+        clearTimeout(loadingTimer);
         window.removeEventListener('hashchange', handleHashChange);
       };
     }
   }, [router.isReady, company_id]);
 
+  if (unknownCompanyId !== null && !showMarket) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-futarchyDarkGray2 text-gray-800 dark:text-white px-6">
+        <div className="text-center max-w-md">
+          <h1 className="text-3xl font-bold mb-3">Organization not found</h1>
+          <p className="text-gray-600 dark:text-futarchyGray11 mb-6">
+            There is no organization with the id &quot;{unknownCompanyId}&quot;.
+          </p>
+          <Link href="/companies" className="text-futarchyBlue9 underline">See all organizations</Link>
+        </div>
+      </div>
+    );
+  }
+
   // Show loading state initially or while router is not ready
-  if (isLoading || !router.isReady || effectiveCompanyId === null) {
+  if (isLoading || !router.isReady || (effectiveCompanyId === null && !showMarket)) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-white dark:bg-futarchyDarkGray2">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>

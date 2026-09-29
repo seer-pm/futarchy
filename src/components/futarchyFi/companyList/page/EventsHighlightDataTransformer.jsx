@@ -46,7 +46,9 @@ export const fetchEventHighlightData = async (_companyId = "all", options = {}) 
       console.log(`[🔗 REGISTRY-FETCH] Found ${subgraphEvents.length} visible proposals (${validProposals.length - subgraphEvents.length} hidden)`);
     } catch (subgraphError) {
       console.warn("[🔗 REGISTRY-FETCH] Failed to fetch from aggregator:", subgraphError.message);
-      return [];
+      // Let the carousel tell "registry down" apart from "no events"
+      subgraphError.isRegistryError = true;
+      throw subgraphError;
     }
 
     const nowSeconds = Date.now() / 1000;
@@ -74,6 +76,7 @@ export const fetchEventHighlightData = async (_companyId = "all", options = {}) 
 
     return activeSubgraphEvents;
   } catch (error) {
+    if (error?.isRegistryError) throw error;
     console.error("Error fetching event highlights:", error);
     return [];
   }

@@ -40,6 +40,24 @@ const appMetadata = {
   }
 };
 
+// RainbowKit's MetaMask entry drives window.ethereum through the MetaMask SDK
+// whenever that object claims `isMetaMask`, and other extensions claim it too
+// (Rabby does, and then answers every request meant for MetaMask). On desktop
+// the MetaMask extension announces itself over EIP-6963 (rdns io.metamask) and
+// wagmi builds a connector for exactly that provider, so the SDK connector is
+// dropped there. It stays on mobile, where it deep-links into the MetaMask app,
+// and on desktops with nothing claiming MetaMask, where it shows the QR flow.
+const isMobileDevice = () => typeof navigator !== 'undefined' && (
+  /android|iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
+const eip6963MetaMaskWallet = (params) => {
+  const wallet = metaMaskWallet(params);
+  if (wallet.qrCode || isMobileDevice()) return wallet;
+  return { ...wallet, hidden: () => true };
+};
+
 // Configure wallets with better mobile support
 const connectors = connectorsForWallets([
   {
@@ -51,7 +69,7 @@ const connectors = connectorsForWallets([
         allowedDomains: [/gnosis-safe.io$/, /app.safe.global$/, /.*\.trycloudflare\.com$/, /.*\.ngrok-free\.app$/, /.*\.ngrok\.io$/],
         debug: true,
       }),
-      metaMaskWallet,
+      eip6963MetaMaskWallet,
       walletConnectWallet,
       trustWallet,
       rainbowWallet,
@@ -148,7 +166,7 @@ const Providers = ({ children }) => {
               </div>
             ),
           }}
-          initialChain={mainnet}
+          initialChain={gnosis}
           coolMode={false}
         >
           <SafeAutoConnector />

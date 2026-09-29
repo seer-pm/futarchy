@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { STEPS_CONFIG } from './constants/swapSteps';
 import { ethers } from 'ethers';
@@ -28,15 +28,14 @@ import {
   MARKET_ADDRESS,
   WXDAI_ADDRESS
 } from './constants/contracts';
-import { getTokenBytecode } from '1155-to-20-helper/src';
-import { fetchSushiSwapRoute, executeSushiSwapRoute } from '../../../utils/sushiswapHelper';
 import { formatBalance, formatPercentage } from '../../../utils/formatters';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
 import { getUniswapV3QuoteWithPriceImpact, getPoolSqrtPrice, sqrtPriceX96ToPrice } from '../../../utils/uniswapSdk';
 import { usePublicClient, useChainId } from 'wagmi';
-import { approvalAmountFor } from '../../../utils/approvalAmount';
+import { describeQuoteError } from '../../../utils/txErrors';
+import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMath';
 
 // Opens only from the native-swap action — load it on demand.
 const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
@@ -102,7 +101,7 @@ const FUTARCHY_ROUTER_ABI = [
   }
 ];
 
-const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBalances, account, isConnected, onConnectWallet, proposalId, marketHasClosed }) => {
+const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBalances, account, isConnected, onConnectWallet, proposalId, marketHasClosed, refetchBalances }) => {
   // Use contract config for dynamic token symbols
   const { config } = useContractConfig(proposalId);
 
@@ -146,6 +145,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     error: null
   });
   const [showPriceInfo, setShowPriceInfo] = useState(false);
+  // Id of the latest quote request; a response for an older one is dropped
+  const quoteRequestIdRef = useRef(0);
   const [tradeAnywayAcknowledged, setTradeAnywayAcknowledged] = useState(false);
   const publicClient = usePublicClient();
   const walletChainId = useChainId();
@@ -201,6 +202,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
   // Debounced QuoterV2/Swapr SDK preview - for Ethereum (chainId === 1) and Gnosis (chainId === 100)
   useEffect(() => {
+    // Wait for the market config: before it loads chainId is the wallet's
+    // (mainnet by default), which sent Gnosis markets to Uniswap lookups.
+    if (!config?.chainId) return;
+
     // Only run on Ethereum mainnet or Gnosis Chain
     if (chainId !== 1 && chainId !== 100) {
       setQuoterPreview({ isLoading: false, amountOut: null, error: null });
@@ -217,6 +222,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     setQuoterPreview(prev => ({ ...prev, isLoading: true }));
 
     let isActive = true;
+    const requestId = ++quoteRequestIdRef.current;
+    const isCurrent = () => isActive && requestId === quoteRequestIdRef.current;
 
     // Debounce: wait 500ms after user stops typing
     const timer = setTimeout(async () => {
@@ -282,6 +289,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
             try {
               const quote = await getSwapQuote(quoteParams, ethersProvider);
+              if (quote?.partialFill) {
+                // The pool stops at its price limit before taking the whole amount
+                const partialError = new Error('Pool can only fill part of this amount');
+                partialError.partialFill = true;
+                throw partialError;
+              }
               if (quote) {
                 quoteResult = {
                   amountOut: quote.expectedReceive, // String already
@@ -384,7 +397,14 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             currentPrice = sqrtPriceX96ToPrice(poolData.sqrtPriceX96);
           }
 
-          executionPrice = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
+          // Average price actually paid, already in currency per company
+          executionPrice = executionPriceFor({
+            amountIn: amount,
+            amountOut: quoteResult.amountOutFormatted,
+            isBuy: selectedAction === 'Buy'
+          });
+          // Pool spot price after the swap (token1/token0; inverted below)
+          quoteResult.priceAfter = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
         }
 
         // Determine if we need to invert based on action (Buy/Sell)
@@ -407,7 +427,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
           if (shouldInvert) {
             currentPrice = 1 / currentPrice;
-            executionPrice = 1 / executionPrice;
+            quoteResult.priceAfter = 1 / quoteResult.priceAfter;
           }
 
           console.log('[QUOTER SHOWCASE] Uniswap Prices:', {
@@ -430,7 +450,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
 
-        if (isActive) {
+        if (isCurrent()) {
           const afterPrice = quoteResult.priceAfter ?? executionPrice;
           const priceImpactPct = Number.isFinite(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
             ? Math.abs(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
@@ -457,8 +477,13 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
       } catch (error) {
-        if (isActive) {
+        if (isCurrent()) {
           console.error('[QUOTER SHOWCASE] Error:', error);
+          // A partial fill or a reverted simulation means the pool cannot take
+          // this amount; RPC and other failures are reported as they are.
+          const { kind, message } = error?.partialFill
+            ? { kind: 'partial', message: 'Pool can only fill part of this amount' }
+            : describeQuoteError(error);
 
           // Even when the quoter fails (e.g. no liquidity in sell direction),
           // try to show the current pool price so More Info still works
@@ -484,13 +509,15 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             console.warn('[QUOTER SHOWCASE] Could not get fallback pool price:', poolErr.message);
           }
 
+          if (!isCurrent()) return; // a newer quote started while the fallback price loaded
+
           setQuoterPreview({
             isLoading: false,
             amountOut: null,
             currentPrice: fallbackPrice,
             chainId: chainId,
-            insufficientLiquidity: true, // Quoter failure means pool can't handle this trade
-            error: error.message
+            insufficientLiquidity: kind === 'partial' || kind === 'reverted',
+            error: message
           });
         }
       }
@@ -649,6 +676,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       console.error("Invalid amount entered");
       return;
     }
+    if (insufficientBalance) {
+      console.error('Amount exceeds the available balance');
+      return;
+    }
     if ((chainId === 1 || chainId === 100) && (quoterPreview.isLoading || quoterPreview.quotedAmountIn !== amount || !quoterPreview.amountOut)) {
       console.error('A current on-chain pool quote is required');
       return;
@@ -721,13 +752,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
         priceAfter: (USING_FUTARCHY_QUOTER && quoterPreview?.priceAfter) ? quoterPreview.priceAfter : null,
         minimumReceived: (USING_FUTARCHY_QUOTER && quoterPreview?.minimumReceived) ? quoterPreview.minimumReceived : null,
         amountOutRaw: (USING_FUTARCHY_QUOTER && quoterPreview?.amountOutRaw) ? quoterPreview.amountOutRaw : null,
-        // Price Impact: Change in Pool Spot Price (Price After vs Current Price)
+        // Price impact of this trade, already included in the quoted output
         priceImpact: quoterPreview?.priceImpactPct ?? null,
-
-        // Slippage: Execution Price (Avg) vs Current Spot Price
-        slippage: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice && quoterPreview?.executionPrice)
-          ? ((Math.abs(parseFloat(quoterPreview.currentPrice) - parseFloat(quoterPreview.executionPrice)) / parseFloat(quoterPreview.currentPrice)) * 100).toFixed(4)
-          : null,
 
         currentPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice) ? quoterPreview.currentPrice : null,
         executionPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.executionPrice) ? quoterPreview.executionPrice : null,
@@ -743,440 +769,18 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     }
   };
 
+  // Called by ConfirmSwapModal on every successful swap. The modal stays open
+  // on its "complete" state (the user closes it); the balances refresh now
+  // rather than on the parent's next poll.
   const handleTransactionComplete = () => {
-    // Balance refresh is handled by parent component's useBalanceManager
-    setIsConfirmModalOpen(false);
+    refetchBalances?.();
     setIsNativeSwapModalOpen(false);
   };
 
-  // Add these handlers from the working modal
-  const handleTokenApproval = async (tokenAddress, spenderAddress, amount, symbol) => {
-    console.log(`Approving ${symbol} token...`);
-    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-    const allowance = await tokenContract.allowance(account, spenderAddress);
-
-    if (allowance.lt(amount)) {
-      const tx = await tokenContract.approve(spenderAddress, approvalAmountFor(amount));
-      await tx.wait();
-    }
-  };
-
-  const handleCollateralAction = async (tokenType, amount, action = 'add') => {
-    if (!window.ethereum) {
-      alert("Please install MetaMask!");
-      return;
-    }
-
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-      const userAddress = await signer.getAddress();
-
-      // Convert amount to Wei
-      const amountInWei = ethers.utils.parseEther(amount);
-
-      // Get configs based on token type
-      const configs = tokenType === 'currency'
-        ? {
-          yes: MERGE_CONFIG.currencyPositions.yes,
-          no: MERGE_CONFIG.currencyPositions.no
-        }
-        : {
-          yes: MERGE_CONFIG.companyPositions.yes,
-          no: MERGE_CONFIG.companyPositions.no
-        };
-
-      const baseToken = tokenType === 'currency'
-        ? BASE_TOKENS_CONFIG.currency
-        : BASE_TOKENS_CONFIG.company;
-
-      // 1. First check base token balance
-      const baseTokenContract = new ethers.Contract(baseToken.address, ERC20_ABI, signer);
-      const balance = await baseTokenContract.balanceOf(userAddress);
-
-      console.log('handleCollateralAction balance check:', {
-        baseToken: baseToken.symbol,
-        userBalance: ethers.utils.formatEther(balance),
-        requestedAmount: amount,
-        requestedAmountWei: ethers.utils.formatEther(amountInWei),
-        hasEnough: balance.gte(amountInWei)
-      });
-
-      if (balance.lt(amountInWei)) {
-        throw new Error(`Insufficient ${baseToken.symbol} balance. You have ${ethers.utils.formatEther(balance)} ${baseToken.symbol} but need ${amount} ${baseToken.symbol}`);
-      }
-
-      // 2. Check and approve base token for ConditionalTokens contract
-      setCurrentSubstep({ step: 1, substep: 0 });
-      await handleTokenApproval(
-        baseToken.address,
-        CONDITIONAL_TOKENS_ADDRESS,
-        amountInWei,
-        baseToken.symbol
-      );
-
-      const conditionalTokens = new ethers.Contract(
-        CONDITIONAL_TOKENS_ADDRESS,
-        CONDITIONAL_TOKENS_ABI,
-        signer
-      );
-
-      // 3. Check if the contract is approved to handle tokens for wrapping
-      setCurrentSubstep({ step: 1, substep: 1 });
-      const isApproved = await conditionalTokens.isApprovedForAll(
-        userAddress,
-        WRAPPER_SERVICE_ADDRESS
-      );
-
-      if (!isApproved) {
-        console.log('Approving conditional tokens contract...');
-        const approveTx = await conditionalTokens.setApprovalForAll(
-          WRAPPER_SERVICE_ADDRESS,
-          true,
-          { gasLimit: 300000 }
-        );
-        await approveTx.wait();
-      }
-
-      // 4. Split position
-      setCurrentSubstep({ step: 1, substep: 2 });
-      console.log('Splitting position...', ethers.utils.formatEther(amountInWei));
-      const partition = [1, 2].map(i => ethers.BigNumber.from(i));
-      const splitTx = await conditionalTokens.splitPosition(
-        baseToken.address,
-        ethers.constants.HashZero,
-        SPLIT_CONFIG.conditionId,
-        partition,
-        amountInWei,
-        { gasLimit: 700000 }
-      );
-      await splitTx.wait();
-
-      // 5. Wrap YES position
-      setCurrentSubstep({ step: 1, substep: 3 });
-      console.log('Wrapping YES position...', ethers.utils.formatEther(amountInWei));
-      const yesTokenBytes = getTokenBytecode(
-        configs.yes.wrap.tokenName,
-        configs.yes.wrap.tokenSymbol,
-        18,
-        configs.yes.wrap.wrappedCollateralTokenAddress
-      );
-
-      const wrapYesTx = await conditionalTokens.safeTransferFrom(
-        userAddress,
-        WRAPPER_SERVICE_ADDRESS,
-        configs.yes.positionId,
-        amountInWei,
-        yesTokenBytes,
-        { gasLimit: 700000 }
-      );
-      await wrapYesTx.wait();
-
-      // 6. Wrap NO position
-      setCurrentSubstep({ step: 1, substep: 4 });
-      console.log('Wrapping NO position...', ethers.utils.formatEther(amountInWei));
-      const noTokenBytes = getTokenBytecode(
-        configs.no.wrap.tokenName,
-        configs.no.wrap.tokenSymbol,
-        18,
-        configs.no.wrap.wrappedCollateralTokenAddress
-      );
-
-      const wrapNoTx = await conditionalTokens.safeTransferFrom(
-        userAddress,
-        WRAPPER_SERVICE_ADDRESS,
-        configs.no.positionId,
-        amountInWei,
-        noTokenBytes,
-        { gasLimit: 700000 }
-      );
-      await wrapNoTx.wait();
-
-    } catch (error) {
-      console.error(`${action === 'add' ? 'Split-Wrap' : 'Unwrap-Merge'} failed:`, error);
-      throw error;
-    }
-  };
-
-  const handleConfirmSwap = async () => {
-    console.log('handleConfirmSwap called');
-    if (!window.ethereum) {
-      alert("Please install MetaMask!");
-      return;
-    }
-
-    try {
-      setIsProcessing(true);
-      setCurrentStep(1); // Start with Adding Collateral step
-      setCurrentSubstep({ step: 1, substep: 0 });
-
-      // Check if the tab is active and MetaMask is ready
-      if (!document.hasFocus()) {
-        throw new Error("Please make sure this tab is active and try again");
-      }
-
-      // Ensure we're connected to MetaMask and on the correct chain
-      let provider = new ethers.providers.Web3Provider(window.ethereum);
-
-      // Check and switch to Gnosis Chain (Chain ID 100)
-      const network = await provider.getNetwork();
-      if (network.chainId !== 100) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x64' }], // 100 in hex
-          });
-        } catch (switchError) {
-          // This error code indicates that the chain has not been added to MetaMask
-          if (switchError.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: '0x64',
-                  chainName: 'Gnosis Chain',
-                  nativeCurrency: {
-                    name: 'xDAI',
-                    symbol: 'xDAI',
-                    decimals: 18
-                  },
-                  rpcUrls: ['https://rpc.gnosischain.com'],
-                  blockExplorerUrls: ['https://gnosisscan.io']
-                }],
-              });
-            } catch (addError) {
-              throw new Error('Failed to add Gnosis Chain to MetaMask');
-            }
-          } else {
-            throw new Error('Failed to switch to Gnosis Chain');
-          }
-        }
-        // Refresh provider after chain switch
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-      }
-
-      // Request accounts
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-      const userAddress = await signer.getAddress();
-
-      // Verify we have a valid signer and address
-      if (!signer || !userAddress) {
-        throw new Error("Failed to get signer or user address. Please check your MetaMask connection.");
-      }
-
-      // Convert amount to wei
-      const amountInWei = ethers.utils.parseEther(amount);
-
-      // Determine which token to split based on selectedAction
-      const tokenType = selectedAction === 'Buy' ? 'currency' : 'company';
-      const baseToken = tokenType === 'currency'
-        ? BASE_TOKENS_CONFIG.currency
-        : BASE_TOKENS_CONFIG.company;
-
-      // Determine which outcome token we need
-      const outcomeConfig = tokenType === 'currency'
-        ? selectedOutcome === 'approved'
-          ? MERGE_CONFIG.currencyPositions.yes
-          : MERGE_CONFIG.currencyPositions.no
-        : selectedOutcome === 'approved'
-          ? MERGE_CONFIG.companyPositions.yes
-          : MERGE_CONFIG.companyPositions.no;
-
-      // Check existing balance of the outcome token
-      const outcomeTokenContract = new ethers.Contract(
-        outcomeConfig.wrap.wrappedCollateralTokenAddress,
-        ERC20_ABI,
-        signer
-      );
-
-      const existingBalance = await outcomeTokenContract.balanceOf(userAddress);
-      console.log('=== BALANCE CALCULATION DEBUG ===');
-      console.log('Existing outcome token balance:', {
-        token: outcomeConfig.wrap.tokenSymbol,
-        balance: ethers.utils.formatEther(existingBalance),
-        balanceWei: existingBalance.toString(),
-        required: ethers.utils.formatEther(amountInWei),
-        requiredWei: amountInWei.toString()
-      });
-
-      // Calculate how much more we need to split
-      const additionalAmountNeeded = amountInWei.sub(existingBalance);
-      console.log('Additional amount calculation:', {
-        additionalNeeded: ethers.utils.formatEther(additionalAmountNeeded),
-        additionalNeededWei: additionalAmountNeeded.toString(),
-        isPositive: additionalAmountNeeded.gt(0),
-        alreadyHaveEnough: existingBalance.gte(amountInWei)
-      });
-
-      // If we need to split more tokens
-      if (additionalAmountNeeded.gt(0)) {
-        console.log('Need to split additional tokens:', ethers.utils.formatEther(additionalAmountNeeded));
-
-        // STEP 1: ADDING COLLATERAL
-        // Substep 1: Approve base token for Futarchy Router
-        setCurrentSubstep({ step: 1, substep: 1 });
-        setProcessingStep('baseTokenApproval');
-        console.log('Starting approval step...');
-
-        const tokenContract = new ethers.Contract(
-          baseToken.address,
-          ERC20_ABI,
-          signer
-        );
-
-        // Check token balance first - only check if we actually need additional tokens
-        const balance = await tokenContract.balanceOf(userAddress);
-        console.log('Balance check:', {
-          baseTokenBalance: ethers.utils.formatEther(balance),
-          additionalNeeded: ethers.utils.formatEther(additionalAmountNeeded),
-          hasEnough: balance.gte(additionalAmountNeeded)
-        });
-
-        if (balance.lt(additionalAmountNeeded)) {
-          const tokenSymbol = tokenType === 'currency' ? getCurrencySymbol() : getCompanySymbol();
-          throw new Error(`Insufficient ${tokenSymbol} balance. You have ${ethers.utils.formatEther(balance)} ${tokenSymbol} but need ${ethers.utils.formatEther(additionalAmountNeeded)} ${tokenSymbol} additional.`);
-        }
-
-        const currentAllowance = await tokenContract.allowance(
-          userAddress,
-          FUTARCHY_ROUTER_ADDRESS
-        );
-
-        console.log('Allowance check:', {
-          currentAllowance: ethers.utils.formatEther(currentAllowance),
-          requiredAmount: ethers.utils.formatEther(additionalAmountNeeded),
-          hasEnoughAllowance: currentAllowance.gte(additionalAmountNeeded)
-        });
-
-        if (currentAllowance.lt(additionalAmountNeeded)) {
-          console.log('Need to approve token...');
-          const approveTx = await tokenContract.approve(
-            FUTARCHY_ROUTER_ADDRESS,
-            approvalAmountFor(additionalAmountNeeded)
-          );
-          console.log('Waiting for approval confirmation...');
-          await approveTx.wait();
-          console.log('Token approved successfully');
-        } else {
-          console.log('Token already approved');
-        }
-
-        // Add small delay to ensure UI updates
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Substep 2: Split Position
-        console.log('Starting mint step...');
-        setProcessingStep('mint');
-        setCurrentSubstep({ step: 1, substep: 2 });
-
-        const futarchyRouter = new ethers.Contract(
-          FUTARCHY_ROUTER_ADDRESS,
-          FUTARCHY_ROUTER_ABI,
-          signer
-        );
-
-        console.log('Executing split position...', {
-          market: MARKET_ADDRESS,
-          tokenAddress: baseToken.address,
-          amount: ethers.utils.formatEther(additionalAmountNeeded),
-          tokenType: tokenType
-        });
-
-        const splitTx = await futarchyRouter.splitPosition(
-          MARKET_ADDRESS,
-          baseToken.address,
-          additionalAmountNeeded,
-          { gasLimit: 700000 }
-        );
-
-        console.log('Split position transaction sent:', splitTx.hash);
-        console.log('Waiting for transaction confirmation...');
-
-        const receipt = await splitTx.wait();
-
-        if (receipt.status !== 1) {
-          throw new Error('Split position transaction failed');
-        }
-
-        console.log('Split position completed successfully');
-        // Add small delay before showing completion
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } else {
-        console.log('Already have enough outcome tokens, skipping split step');
-        setCurrentStep(2); // Skip to swap step
-      }
-
-      // STEP 2: PROCESSING SWAP
-      setCurrentStep(2);
-
-      // Determine which tokens to swap
-      let tokenIn, tokenOut;
-      if (selectedAction === 'Buy') {
-        tokenIn = selectedOutcome === 'approved'
-          ? MERGE_CONFIG.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-          : MERGE_CONFIG.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-
-        tokenOut = selectedOutcome === 'approved'
-          ? MERGE_CONFIG.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-          : MERGE_CONFIG.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-      } else {
-        tokenIn = selectedOutcome === 'approved'
-          ? MERGE_CONFIG.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-          : MERGE_CONFIG.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-
-        tokenOut = selectedOutcome === 'approved'
-          ? MERGE_CONFIG.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-          : MERGE_CONFIG.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-      }
-
-      // Substep 1: Approve token for SushiSwap
-      setCurrentSubstep({ step: 2, substep: 1 });
-      await handleTokenApproval(
-        tokenIn,
-        SUSHISWAP_V2_ROUTER,
-        amountInWei,
-        `${selectedAction === 'Buy' ? 'Currency' : 'Company'} ${selectedOutcome === 'approved' ? 'YES' : 'NO'}`
-      );
-
-      // Substep 2: Execute swap
-      setCurrentSubstep({ step: 2, substep: 2 });
-      const routeData = await fetchSushiSwapRoute({
-        tokenIn,
-        tokenOut,
-        amount: amountInWei,
-        userAddress,
-        feeReceiver: "0xca226bd9c754F1283123d32B2a7cF62a722f8ADa"
-      });
-
-      const swapTx = await executeSushiSwapRoute({
-        signer,
-        routerAddress: SUSHISWAP_V2_ROUTER,
-        routeData,
-        options: {
-          gasLimit: 400000,
-          gasPrice: ethers.utils.parseUnits("0.97", "gwei")
-        }
-      });
-
-      await swapTx.wait();
-      setCurrentStep('completed');
-
-      setTimeout(() => {
-        setIsProcessing(false);
-        setCurrentStep(null);
-        setCurrentSubstep({ step: 1, substep: 0 });
-        setIsConfirmModalOpen(false);
-      }, 2000);
-
-    } catch (error) {
-      console.error('Swap failed:', error);
-      setIsProcessing(false);
-      setCurrentStep(null);
-      setCurrentSubstep({ step: 1, substep: 0 });
-      setError(error.message);
-    }
+  const handleConfirmModalClose = () => {
+    setIsConfirmModalOpen(false);
+    // Safe transactions close the modal without a completion callback
+    refetchBalances?.();
   };
 
   // Add this effect to handle tab visibility changes
@@ -1231,6 +835,105 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       // Optionally show an error
     }
   };
+
+  // "Available" in the panel: wallet collateral plus the conditional tokens
+  // already held for the selected side. value is the exact decimal string
+  // (null while unknown) — the Confirm button compares the amount with it.
+  const computeAvailableBalance = () => {
+    if (!account) return { display: '-', value: null };
+    if (!positions || isLoadingBalances) return { display: 'Loading...', value: null }; // Show loading when positions or balances are loading
+
+    // Calculate available balance based on selected outcome and action
+    let calculatedValueStr, symbol;
+
+    if (selectedAction === 'Buy') {
+      // For Buy action, determine balance based on selected currency mode
+      if (selectedCurrency === getCurrencySymbol()) {
+        // Currency mode: Sum position tokens + currency balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = balances?.sdaiBalance || '0';
+        symbol = getCurrencySymbol();
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating currency balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      } else if (selectedCurrency === 'WXDAI') {
+        if (redirectToCOW) {
+          // When redirectToCOW is true: Show currency + position tokens (like currency mode)
+          const outcomeBalance = selectedOutcome === 'approved'
+            ? (positions?.currencyYes?.total || '0')
+            : (positions?.currencyNo?.total || '0');
+          const baseBalance = balances?.sdaiBalance || '0';
+          symbol = getCurrencySymbol();
+
+          try {
+            const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+            const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+            const totalBN = outcomeBN.add(baseBN);
+            calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+          } catch (calcError) {
+            console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
+            calculatedValueStr = outcomeBalance || '-';
+          }
+        } else {
+          // Original behavior: Show ONLY native xDAI balance (no position tokens)
+          calculatedValueStr = balances?.nativeBalance || '0';
+          symbol = 'xDAI';
+        }
+      } else {
+        // Fallback mode: Sum position tokens + WXDAI balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = positions?.wxdai || '0';
+        symbol = 'WXDAI';
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating fallback balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      }
+    } else { // Sell
+      // For Sell action: Always sum position tokens + base token balance
+      const outcomeBalance = selectedOutcome === 'approved'
+        ? (positions?.companyYes?.total || '0')
+        : (positions?.companyNo?.total || '0');
+      const baseBalance = positions?.faot || '0'; // Company token balance from positions
+      symbol = getCompanySymbol();
+
+      try {
+        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+        const totalBN = outcomeBN.add(baseBN);
+        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+      } catch (calcError) {
+        console.error('Error calculating sell balance:', calcError);
+        calculatedValueStr = outcomeBalance || '-';
+      }
+    }
+
+    // If we don't have a valid calculated value, show dash
+    if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
+      return { display: '-', value: calculatedValueStr === '-' ? null : '0' };
+    }
+
+    return { display: `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`, value: calculatedValueStr };
+  };
+  const availableBalance = computeAvailableBalance();
+  const insufficientBalance = Boolean(account) && availableBalance.value !== null && exceedsAvailable(amount, availableBalance.value);
 
   const displayedPriceImpact = Number(quoterPreview.priceImpactPct);
   const hasPriceImpact = Number.isFinite(displayedPriceImpact);
@@ -1368,107 +1071,72 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           </div>
 
           {/* Balance Section */}
-          <div className="flex justify-between text-xs mt-1">
-            <span className="text-futarchyGray11 dark:text-futarchyGray112">Available</span>
-            <span
-              onClick={account ? handleMaxClick : undefined}
-              className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
-            >
-              {(() => {
-                if (!account) return '-';
-                if (!positions || isLoadingBalances) return 'Loading...'; // Show loading when positions or balances are loading
+          {(() => {
+            // "Available" = wallet balance + the selected side's conditional
+            // tokens. Show both parts so the sum isn't a silent surprise.
+            const outcomePrefix = selectedOutcome === 'approved' ? 'YES' : 'NO';
+            let baseBalance = '0';
+            let outcomeBalance = '0';
+            let symbol;
+            let outcomeSymbol;
 
-                // Calculate available balance based on selected outcome and action
-                let calculatedValueStr, symbol;
+            if (selectedAction === 'Buy') {
+              const currencyOutcome = (selectedOutcome === 'approved'
+                ? positions?.currencyYes?.total
+                : positions?.currencyNo?.total) || '0';
+              outcomeSymbol = `${outcomePrefix}_${getCurrencySymbol()}`;
+              if (selectedCurrency === getCurrencySymbol() || (selectedCurrency === 'WXDAI' && redirectToCOW)) {
+                // Currency mode (or WXDAI routed through CoW): currency + position tokens
+                baseBalance = balances?.sdaiBalance || '0';
+                outcomeBalance = currencyOutcome;
+                symbol = getCurrencySymbol();
+              } else if (selectedCurrency === 'WXDAI') {
+                // Native xDAI only (no position tokens)
+                baseBalance = balances?.nativeBalance || '0';
+                symbol = 'xDAI';
+              } else {
+                // Fallback mode: WXDAI + position tokens
+                baseBalance = positions?.wxdai || '0';
+                outcomeBalance = currencyOutcome;
+                symbol = 'WXDAI';
+              }
+            } else {
+              // Sell: company token + position tokens
+              baseBalance = positions?.faot || '0';
+              outcomeBalance = (selectedOutcome === 'approved'
+                ? positions?.companyYes?.total
+                : positions?.companyNo?.total) || '0';
+              symbol = getCompanySymbol();
+              outcomeSymbol = `${outcomePrefix}_${getCompanySymbol()}`;
+            }
 
-                if (selectedAction === 'Buy') {
-                  // For Buy action, determine balance based on selected currency mode
-                  if (selectedCurrency === getCurrencySymbol()) {
-                    // Currency mode: Sum position tokens + currency balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = balances?.sdaiBalance || '0';
-                    symbol = getCurrencySymbol();
+            // The total shown is availableBalance.display, the same value the
+            // insufficient-balance check reads; only the breakdown is computed here.
+            let breakdownText = null;
+            if (account && positions && !isLoadingBalances && parseFloat(outcomeBalance) > 0) {
+              breakdownText = `${formatWith(parseFloat(baseBalance), 'balance')} ${symbol} + ${formatWith(parseFloat(outcomeBalance), 'balance')} ${outcomeSymbol}`;
+            }
 
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating currency balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  } else if (selectedCurrency === 'WXDAI') {
-                    if (redirectToCOW) {
-                      // When redirectToCOW is true: Show currency + position tokens (like currency mode)
-                      const outcomeBalance = selectedOutcome === 'approved'
-                        ? (positions?.currencyYes?.total || '0')
-                        : (positions?.currencyNo?.total || '0');
-                      const baseBalance = balances?.sdaiBalance || '0';
-                      symbol = getCurrencySymbol();
-
-                      try {
-                        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                        const totalBN = outcomeBN.add(baseBN);
-                        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                      } catch (calcError) {
-                        console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
-                        calculatedValueStr = outcomeBalance || '-';
-                      }
-                    } else {
-                      // Original behavior: Show ONLY native xDAI balance (no position tokens)
-                      calculatedValueStr = balances?.nativeBalance || '0';
-                      symbol = 'xDAI';
-                    }
-                  } else {
-                    // Fallback mode: Sum position tokens + WXDAI balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = positions?.wxdai || '0';
-                    symbol = 'WXDAI';
-
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating fallback balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  }
-                } else { // Sell
-                  // For Sell action: Always sum position tokens + base token balance
-                  const outcomeBalance = selectedOutcome === 'approved'
-                    ? (positions?.companyYes?.total || '0')
-                    : (positions?.companyNo?.total || '0');
-                  const baseBalance = positions?.faot || '0'; // Company token balance from positions
-                  symbol = getCompanySymbol();
-
-                  try {
-                    const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                    const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                    const totalBN = outcomeBN.add(baseBN);
-                    calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                  } catch (calcError) {
-                    console.error('Error calculating sell balance:', calcError);
-                    calculatedValueStr = outcomeBalance || '-';
-                  }
-                }
-
-                // If we don't have a valid calculated value, show dash
-                if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
-                  return '-';
-                }
-
-                return `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`;
-              })()}
-            </span>
-          </div>
+            return (
+              <div className="mt-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-futarchyGray11 dark:text-futarchyGray112">Available</span>
+                  <span
+                    onClick={account ? handleMaxClick : undefined}
+                    title={breakdownText ? `Wallet ${symbol} + ${outcomeSymbol} you already hold: ${breakdownText}` : undefined}
+                    className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
+                  >
+                    {availableBalance.display}
+                  </span>
+                </div>
+                {breakdownText && (
+                  <div className="flex justify-end text-[10px] text-futarchyGray11 dark:text-futarchyGray112">
+                    {breakdownText}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* GET MORE SDAI Button - Show when redirectToCOW is true, in WXDAI mode, and in Buy mode */}
           {redirectToCOW && selectedCurrency === 'WXDAI' && selectedAction === 'Buy' && (
@@ -1535,7 +1203,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1634,7 +1307,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1736,9 +1414,9 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             <button
               onClick={handleConfirmClick}
               className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors text-sm bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
+              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || insufficientBalance || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
             >
-              <span className="relative z-10">{quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
+              <span className="relative z-10">{insufficientBalance ? 'Insufficient balance' : quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
               {(amount && parseFloat(amount) > 0 && !marketHasClosed) && (
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
               )}
@@ -1757,7 +1435,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
       {isConfirmModalOpen && (
         <ConfirmSwapModal
-          onClose={() => setIsConfirmModalOpen(false)}
+          onClose={handleConfirmModalClose}
           transactionData={confirmModalData}
           proposalId={proposalId}
           existingBalance={(() => {

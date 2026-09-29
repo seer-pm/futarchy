@@ -1,55 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ethers } from 'ethers';
 import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/contracts';
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
 import { invalidateCache } from '../services/requestCache';
-import { getRpcProvider } from '../utils/getBestRpc';
+import { fetchOnChainResolution } from '../utils/onChainResolution';
+import { resolveProposalId } from '../utils/marketPageUtils.mjs';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
-
-/**
- * Check resolution directly on-chain via ConditionalTokens payouts.
- * Registry metadata can lag behind the actual on-chain resolution (e.g. Kleros KIP-88
- * resolved on-chain but its metadata was never updated with resolution_status),
- * which hid the Redeem tab. payoutDenominator > 0 is the authoritative signal that
- * redemption is possible.
- * @param {string} proposalAddress - FutarchyProposal contract address
- * @param {string} conditionalTokensAddress - ConditionalTokens contract address
- * @param {number|string} chainId - Chain the proposal lives on
- * @returns {Promise<{resolved: boolean, outcome: string|null}|null>} null when the check fails
- */
-async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress, chainId) {
-  try {
-    // Shared provider — see utils/getBestRpc.js. Building one here would
-    // cost a network-detection round trip before the read.
-    const provider = getRpcProvider(Number(chainId) === 1 ? 1 : 100);
-    // URL-sourced addresses may carry a bad EIP-55 checksum; lowercase so
-    // ethers doesn't throw before the read.
-    const proposal = new ethers.Contract(
-      proposalAddress.toLowerCase(),
-      ['function conditionId() view returns (bytes32)'],
-      provider
-    );
-    const conditionId = await proposal.conditionId();
-    const conditionalTokens = new ethers.Contract(
-      conditionalTokensAddress.toLowerCase(),
-      [
-        'function payoutDenominator(bytes32) view returns (uint256)',
-        'function payoutNumerators(bytes32, uint256) view returns (uint256)'
-      ],
-      provider
-    );
-    const denominator = await conditionalTokens.payoutDenominator(conditionId);
-    if (denominator.isZero()) {
-      return { resolved: false, outcome: null };
-    }
-    // Outcome slot 0 = Yes, slot 1 = No for futarchy proposals
-    const yesNumerator = await conditionalTokens.payoutNumerators(conditionId, 0);
-    return { resolved: true, outcome: yesNumerator.gt(0) ? 'Yes' : 'No' };
-  } catch (error) {
-    console.warn('[Config] On-chain resolution check failed:', error?.message);
-    return null;
-  }
-}
 
 /**
  * Hook to fetch and manage contract configuration data from the Registry/subgraph
@@ -66,30 +21,13 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
   useEffect(() => {
     const fetchContractConfig = async () => {
       try {
-        // Get proposal ID from URL parameters using native browser API
-        let extractedProposalId = proposalId;
-
-        // Try to get proposalId from URL search parameters
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const proposalFromUrl = urlParams.get('proposalId');
-          console.log('📊 Full URL:', window.location.href);
-          console.log('📊 Window location search:', window.location.search);
-          console.log('📊 URL search params:', Object.fromEntries(urlParams.entries()));
-          console.log('📊 proposalFromUrl:', proposalFromUrl);
-          console.log('📊 proposalId param:', proposalId);
-
-          if (proposalFromUrl) {
-            extractedProposalId = proposalFromUrl;
-            console.log('📊 Using proposalId from URL:', extractedProposalId);
-          } else if (proposalId) {
-            console.log('📊 Using proposalId from parameter:', extractedProposalId);
-          } else {
-            console.log('📊 No proposalId found in URL or parameters');
-          }
-        } else {
-          console.log('📊 Server-side rendering - using passed proposalId:', proposalId);
-        }
+        // The prop (or the /markets/<address> path) decides which proposal
+        // loads. ?proposalId= is only read on the legacy /market route, so
+        // /markets/0xA?proposalId=0xB can't show A's page while trading B.
+        const extractedProposalId = resolveProposalId(
+          proposalId,
+          typeof window !== 'undefined' ? window.location : null
+        );
 
         // If no proposal ID found, return null config (graceful handling for non-proposal pages)
         if (!extractedProposalId) {

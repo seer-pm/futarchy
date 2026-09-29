@@ -202,13 +202,10 @@ const EventTimestamp = ({ countdownFinish, timestamp, endTime, resolutionStatus 
           setRemainingTime(`Open until: ${timeString}`);
         }
       } else {
-        // Fallback to start date if no end time
-        const startDate = new Date(timestamp * 1000).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        });
-        setRemainingTime(`Started: ${startDate}`);
+        // No close time in the registry: the market has no deadline to count
+        // down to, and the registry has no creation time either, so say only
+        // that it is open rather than inventing a date.
+        setRemainingTime('Open');
       }
     };
 
@@ -254,17 +251,6 @@ const EventHighlightCard = ({
 
   console.log('[EventHighlight Open]', { eventId, resolutionStatus });
 
-  if (currentStatus === 'pending_review' && !debugMode) {
-    return null;
-  }
-
-  // Extract display titles from metadata (similar to MarketPageShowcase)
-  const displayTitle0 = metadata?.display_title_0 || null;
-  const displayTitle1 = metadata?.display_title_1 || null;
-
-  // If we have both display titles, use them; otherwise fall back to proposalTitle
-  const shouldUseSplitTitles = displayTitle0 && displayTitle1;
-
   // Use the simplified hook instead of complex price fetching
   // Pass prefetchedPrices to hook - if available, it will skip Supabase fetch
   const { prices, loading: isLoadingPrices } = useLatestPoolPrices(poolAddresses, eventId, metadata, prefetchedPrices);
@@ -290,6 +276,19 @@ const EventHighlightCard = ({
     }
   }, [prices.yes, prices.no]);
 
+  // Hidden until approved; the early return must come after every hook call
+  // so the hook order stays stable when status or debugMode changes.
+  if (currentStatus === 'pending_review' && !debugMode) {
+    return null;
+  }
+
+  // Extract display titles from metadata (similar to MarketPageShowcase)
+  const displayTitle0 = metadata?.display_title_0 || null;
+  const displayTitle1 = metadata?.display_title_1 || null;
+
+  // If we have both display titles, use them; otherwise fall back to proposalTitle
+  const shouldUseSplitTitles = displayTitle0 && displayTitle1;
+
   // Extract base token symbol from metadata
   const baseTokenSymbol = metadata?.currencyTokens?.base?.tokenSymbol ||
     metadata?.BASE_TOKENS_CONFIG?.currency?.symbol ||
@@ -300,8 +299,9 @@ const EventHighlightCard = ({
     (prices.yes !== null && prices.yes < 1);
   const precision = shouldUseHighPrecision ? 4 : 2;
 
-  const formattedYesPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.yes !== null ? `${prices.yes.toFixed(precision)} ${baseTokenSymbol}` : `0.00 ${baseTokenSymbol}`);
-  const formattedNoPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.no !== null ? `${prices.no.toFixed(precision)} ${baseTokenSymbol}` : `0.00 ${baseTokenSymbol}`);
+  // A missing price (indexer down or no trades yet) is unknown, not zero.
+  const formattedYesPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.yes !== null ? `${prices.yes.toFixed(precision)} ${baseTokenSymbol}` : '—');
+  const formattedNoPrice = isLoadingPrices ? <LoadingSpinner /> : (prices.no !== null ? `${prices.no.toFixed(precision)} ${baseTokenSymbol}` : '—');
   const impactDisplay = isLoadingPrices ? <LoadingSpinner /> : calculatedImpact;
 
   // Determine the link URL based on feature flag
