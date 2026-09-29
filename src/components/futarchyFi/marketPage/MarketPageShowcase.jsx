@@ -4840,14 +4840,15 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               />
 
               <AggregatedStatDisplay
-                label="Liquidity"
+                label="TVL"
                 yesValue={liquiditySummary.yes?.total ?? null}
                 noValue={liquiditySummary.no?.total ?? null}
                 Icon={LiquidityIcon}
                 isLoading={poolDataLoading || configLoading}
                 formatFunction={formatLiquidity}
-                tooltipLabels={{ yes: 'YES Liquidity', no: 'NO Liquidity' }}
+                tooltipLabels={{ yes: 'YES TVL', no: 'NO TVL' }}
                 tooltipBreakdown={liquiditySummary.breakdown}
+                tooltipNote="Total value locked in the YES/NO pools across all price ranges. This is not tradable depth: liquidity parked far from the current price doesn't absorb trades, so check the price impact in the trade panel before sizing a trade."
                 normalize={poolData?.source !== 'subgraph'}
               />
 

@@ -59,5 +59,8 @@ test('market stat classifies reserve sides and applies the pool price', () => {
     assert.match(MARKET_PAGE_SRC, /entry\.kind === 'currency'/);
     assert.match(MARKET_PAGE_SRC, /entry\.kind === 'company'/);
     assert.match(MARKET_PAGE_SRC, /companyTokenAmount \* price/);
-    assert.match(MARKET_PAGE_SRC, /label="Liquidity"/);
+    // Reserves across all ranges are TVL, not tradable depth near the price:
+    // the stat is labelled TVL and its tooltip says so.
+    assert.match(MARKET_PAGE_SRC, /label="TVL"/);
+    assert.match(MARKET_PAGE_SRC, /tooltipNote="[^"]*not tradable depth/);
 });
