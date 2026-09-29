@@ -13,8 +13,11 @@ import { useState, useEffect } from 'react';
 import { getSubgraphEndpoint } from '../config/subgraphEndpoints';
 import { fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
 import { cachedOnce } from '../services/requestCache';
+import { fetchOnChainResolutions, resolutionKey } from '../utils/onChainResolution';
 import {
+    applyOnChainResolution,
     getProposalCloseTimestamp,
+    hasResolutionOutcome,
     isProposalArchived,
     isProposalClosed,
     isProposalResolved,
@@ -75,9 +78,11 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     // Start time - no createdAt in subgraph, use current time as placeholder
     const startTimeSeconds = Math.floor(Date.now() / 1000);
 
-    // End time: prioritize closeTimestamp from metadata JSON.
+    // End time: closeTimestamp from metadata JSON, or null when there is none.
+    // Don't invent one — a "now + 7 days" default moved with every render and
+    // showed a perpetual countdown on markets that had long since settled.
     const closeTimestamp = getProposalCloseTimestamp(proposalMeta);
-    let endTimeSeconds = closeTimestamp || startTimeSeconds + 7 * 24 * 60 * 60; // Default 7 days
+    const endTimeSeconds = closeTimestamp || null;
     if (closeTimestamp) {
         console.log(`[🔗 CLOSE-TIME] Proposal "${proposal.displayNameEvent?.slice(0, 30)}..." closeTimestamp:`, {
             raw: proposalMeta.closeTimestamp,
@@ -127,7 +132,7 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
 
         // Time info (seconds, not milliseconds)
         startTime: startTimeSeconds,
-        endTime: endTimeSeconds,  // Uses closeTimestamp from metadata if available
+        endTime: endTimeSeconds,  // closeTimestamp from metadata, null if none
         closeTimestamp,
         isClosed: closed,
         timeProgress: 0,
@@ -165,15 +170,13 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     };
 }
 
-// Candles checkpoint indexer — single endpoint serves both chains;
-// IDs use the form "<chainId>-<address>" so we can query in one shot.
-const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
-
 /**
  * Bulk fetch CONDITIONAL pool addresses for a list of proposals.
  *
- * Issues a single query against the candles indexer:
- *   pools(where: { proposal_in: ["100-0x…", "1-0x…"] })
+ * The candles indexer is routed per chain (getSubgraphEndpoint: Gnosis
+ * at /candles/graphql, Ethereum at ?chainId=1), so proposals are grouped
+ * by chain and each group gets one query:
+ *   pools(where: { proposal_in: ["0x…", …] })
  * The Checkpoint schema has no reverse Proposal.pools field, so we
  * query Pool directly and group by proposal id.
  *
@@ -181,27 +184,38 @@ const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
  * so callers don't need to know the ID format.
  */
 async function bulkFetchPoolsByChain(proposals) {
-    const ids = [];
+    const idsByChain = new Map();
     for (const p of proposals) {
         if (!p.proposalAddress) continue;
-        ids.push(p.proposalAddress.toLowerCase());
+        const chainId = Number(p.chainId) === 1 ? 1 : 100;
+        if (!idsByChain.has(chainId)) idsByChain.set(chainId, []);
+        idsByChain.get(chainId).push(p.proposalAddress.toLowerCase());
     }
-
-    if (ids.length === 0) return {};
 
     // Both homepage transformers ask for the same proposal set, so share
     // the request rather than hitting the candles indexer twice. Failures
-    // are handled here so they never land in the cache.
-    try {
-        return await cachedOnce(`pools:${ids.slice().sort().join(',')}`, () => fetchPoolsByIds(ids));
-    } catch (e) {
-        console.warn('[🔗 REGISTRY-POOLS] candles fetch failed:', e.message);
-        return {};
-    }
+    // are handled per chain so one index outage doesn't blank the other,
+    // and so they never land in the cache.
+    const maps = await Promise.all([...idsByChain.entries()].map(async ([chainId, ids]) => {
+        try {
+            return await cachedOnce(
+                `pools:${chainId}:${ids.slice().sort().join(',')}`,
+                () => fetchPoolsByIds(ids, chainId)
+            );
+        } catch (e) {
+            console.warn(`[🔗 REGISTRY-POOLS] candles fetch failed for chain ${chainId}:`, e.message);
+            return {};
+        }
+    }));
+
+    return Object.assign({}, ...maps);
 }
 
-async function fetchPoolsByIds(ids) {
-    console.log(`[🔗 REGISTRY-POOLS] Bulk-fetching pools for ${ids.length} proposals`);
+async function fetchPoolsByIds(ids, chainId) {
+    const endpoint = getSubgraphEndpoint(chainId);
+    if (!endpoint) return {};
+
+    console.log(`[🔗 REGISTRY-POOLS] Bulk-fetching pools for ${ids.length} proposals on chain ${chainId}`);
 
     const query = `
         query GetProposalPools($ids: [String!]!) {
@@ -214,7 +228,7 @@ async function fetchPoolsByIds(ids) {
         }
     `;
 
-    const response = await fetch(CANDLES_GRAPHQL_URL, {
+    const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { ids } }),
@@ -240,6 +254,36 @@ async function fetchPoolsByIds(ids) {
 
     console.log(`[🔗 REGISTRY-POOLS] Got CONDITIONAL pools for ${Object.keys(poolMap).length} proposals`);
     return poolMap;
+}
+
+async function applyOnChainResolutions(proposals) {
+    const unsettled = proposals.filter(p =>
+        p.proposalAddress && !(p.status === 'resolved' && hasResolutionOutcome(p))
+    );
+    if (unsettled.length === 0) return;
+
+    const targets = unsettled.map(p => ({
+        proposalAddress: p.proposalAddress,
+        chainId: p.chainId,
+        conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
+    }));
+    const cacheKey = `resolutions:${targets.map(t => resolutionKey(t.chainId, t.proposalAddress)).sort().join(',')}`;
+
+    let resolutions;
+    try {
+        resolutions = await cachedOnce(cacheKey, () => fetchOnChainResolutions(targets));
+    } catch (e) {
+        console.warn('[🔗 ON-CHAIN-RESOLUTION] check failed:', e.message);
+        return;
+    }
+
+    for (const proposal of unsettled) {
+        const result = resolutions.get(resolutionKey(proposal.chainId, proposal.proposalAddress));
+        if (result?.resolved) {
+            applyOnChainResolution(proposal, result);
+            console.log(`[🔗 ON-CHAIN-RESOLUTION] "${proposal.eventTitle}" resolved on-chain: ${result.outcome}`);
+        }
+    }
 }
 
 /**
@@ -372,6 +416,11 @@ export async function fetchProposalsFromAggregator(aggregatorAddress, connectedW
             }
         }
     }
+
+    // Step 4: Registry resolution metadata lags the chain, so read the
+    // ConditionalTokens payout state for every proposal the metadata doesn't
+    // already settle. Batched: two RPC POSTs per chain for the whole list.
+    await applyOnChainResolutions(allProposals);
 
     return {
         proposals: allProposals.sort((a, b) => b.startTime - a.startTime),
