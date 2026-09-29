@@ -1406,20 +1406,6 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
 });
 
 // PriceHeader component for mobile price display
-const PriceHeader = ({ yesPrice, noPrice, currencySymbol }) => (
-  <div className="fixed top-20 left-0 right-0 z-40 lg:hidden h-12">
-    <div className="hidden bg-futarchyDarkGray3/95 backdrop-blur-sm h-full flex items-center">
-      <div className="container mx-auto px-5 flex justify-between items-center">
-        <h2 className="text-sm text-white font-semibold pr-4">Market Prices</h2>
-        <div className="flex gap-3 text-sm flex-shrink-0">
-          <span className="text-futarchyBlue9">YES: {yesPrice === null || yesPrice === undefined ? 'N/A' : `${yesPrice.toFixed(4)} ${currencySymbol}`}</span>
-          <span className="text-futarchyGold8">NO: {noPrice === null || noPrice === undefined ? 'N/A' : `${noPrice.toFixed(4)} ${currencySymbol}`}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
 const YourViewCard = ({ subject }) => (
   <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
     <div className="px-4 py-3 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70">
@@ -3490,7 +3476,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
         onClose={() => chainValidation.setShowModal(false)}
       />
 
-      <PriceHeader yesPrice={newYesPrice} noPrice={newNoPrice} currencySymbol={currencySymbol} />
       <RootLayout headerConfig="app" footerConfig="main" useSnapScroll={false} heroContent={marketHero}>
         <PageLayout>
           {/* Holds the height the sticky hero gives up when it collapses */}
