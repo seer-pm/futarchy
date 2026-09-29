@@ -522,7 +522,7 @@ const RedemptionModal = ({
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
-  const requiredChain = useRequiredChain(config?.chainId || 100);
+  const requiredChain = useRequiredChain(config?.chainId);
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -701,6 +701,10 @@ const RedemptionModal = ({
   const handleRedemption = async () => {
     if (!isConnected || !account || !signer) {
       setLocalError("Please connect your wallet first");
+      return;
+    }
+    if (requiredChain.isChainUnknown) {
+      setLocalError('Market details are still loading. Try again in a moment.');
       return;
     }
     if (requiredChain.isWrongChain) {
