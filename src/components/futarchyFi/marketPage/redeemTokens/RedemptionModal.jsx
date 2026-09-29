@@ -13,6 +13,7 @@ import {
 } from "../constants/contracts";
 import FutarchyCartridge from "futarchy-sdk/executors/FutarchyCartridge";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
+import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { isSafeWallet } from "../../../../utils/ethersAdapters";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
@@ -519,6 +520,7 @@ const RedemptionModal = ({
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
+  const requiredChain = useRequiredChain(config?.chainId || 100);
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -697,6 +699,10 @@ const RedemptionModal = ({
   const handleRedemption = async () => {
     if (!isConnected || !account || !signer) {
       setLocalError("Please connect your wallet first");
+      return;
+    }
+    if (requiredChain.isWrongChain) {
+      setLocalError(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
       return;
     }
 
@@ -947,6 +953,12 @@ const RedemptionModal = ({
     buttonContent = "Processing Redemption...";
     buttonIsEnabled = false;
     buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+  } else if (requiredChain.isWrongChain) {
+    // Redemption goes through this market's router, which only exists on its chain
+    buttonContent = requiredChain.isSwitching ? "Switching network..." : `Switch to ${requiredChain.requiredChainName}`;
+    buttonAction = requiredChain.switchToRequiredChain;
+    buttonIsEnabled = !requiredChain.isSwitching;
+    buttonClasses += " bg-black hover:bg-black/80 text-white dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
   } else {
     buttonContent = "Redeem Winning Tokens";
     buttonAction = handleRedemption;
@@ -1076,6 +1088,12 @@ const RedemptionModal = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {requiredChain.isWrongChain && !localIsProcessing && localProcessingStep !== "completed" && (
+          <div className="p-2 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+            This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || "another network"}.
+          </div>
+        )}
 
         {/* Action Button */}
         <div className="">

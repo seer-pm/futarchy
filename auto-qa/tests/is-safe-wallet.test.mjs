@@ -218,3 +218,43 @@ test('isSafeWallet — all three paths false → returns false', () => {
     );
     assert.equal(r, false);
 });
+
+// ---------------------------------------------------------------------------
+// Connector from useAccount() (the real module, not the mirror above)
+// ---------------------------------------------------------------------------
+//
+// wagmi v2 wallet clients have no `.connector`, so callers pass the one from
+// useAccount() as the second argument. Without it, path 1 never fired.
+
+const adapters = await import(new URL('../../src/utils/ethersAdapters.js', import.meta.url));
+
+test('isSafeWallet — connector passed separately is used (wagmi v2 wallet client has none)', () => {
+    const walletClient = { account: { address: '0x1' } };
+    const r = withGlobals({}, () => adapters.isSafeWallet(walletClient, { id: 'safe', name: 'Safe' }));
+    assert.equal(r, true);
+});
+
+test('isSafeWallet — passed connector wins over walletClient.connector', () => {
+    const r = withGlobals({}, () => adapters.isSafeWallet(
+        { connector: { name: 'Safe' } },
+        { id: 'io.metamask', name: 'MetaMask' }
+    ));
+    assert.equal(r, false);
+});
+
+test('isSafeWallet — plain WalletConnect connector is not a Safe on its own', () => {
+    const r = withGlobals({}, () => adapters.isSafeWallet({}, { id: 'walletConnect', name: 'WalletConnect' }));
+    assert.equal(r, false);
+});
+
+test('isSafePeerMetadata — Safe{Wallet} over WalletConnect is recognised by name or url', () => {
+    assert.equal(adapters.isSafePeerMetadata({ name: 'Safe{Wallet}', url: 'https://app.safe.global' }), true);
+    assert.equal(adapters.isSafePeerMetadata({ name: 'Wallet', url: 'https://app.safe.global' }), true);
+    assert.equal(adapters.isSafePeerMetadata({ name: 'Gnosis Safe', url: 'https://gnosis-safe.io' }), true);
+});
+
+test('isSafePeerMetadata — other WalletConnect peers and missing metadata → false', () => {
+    assert.equal(adapters.isSafePeerMetadata({ name: 'MetaMask Wallet', url: 'https://metamask.io' }), false);
+    assert.equal(adapters.isSafePeerMetadata(undefined), false);
+    assert.equal(adapters.isSafePeerMetadata({}), false);
+});

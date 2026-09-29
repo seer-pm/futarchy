@@ -46,11 +46,13 @@ import {
     MARKET_ADDRESS,
 } from './constants/contracts';
 import { useContractConfig } from '../../../hooks/useContractConfig';
+import { useRequiredChain } from '../../../hooks/useChainValidation';
 import DebugToast from './DebugToast';
 import { formatBalance, formatPrice, formatPercentage } from '../../../utils/formatters';
 import { Decimal } from 'decimal.js';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
-import { getEthersSigner, getEthersProvider, isSafeWallet } from '../../../utils/ethersAdapters';
+import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
+import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
@@ -647,6 +649,7 @@ const ConfirmSwapModal = memo(({
     const { address: account, isConnected, chain } = useAccount();
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
+    const isSafeConnection = useSafeConnection();
 
     // Effect to update swap method when chain changes
     useEffect(() => {
@@ -851,6 +854,8 @@ const ConfirmSwapModal = memo(({
 
     // Use the contract config hook - get proposal ID from props or URL
     const { config, loading: configLoading, error: configError } = useContractConfig(proposalIdFromProps);
+    // The swap route, quotes and token addresses all come from this market's chain
+    const requiredChain = useRequiredChain(config?.chainId || 100);
 
     // Get currency symbol from config (no hardcoded chain-based logic)
     const currencySymbol = config?.BASE_TOKENS_CONFIG?.currency?.symbol || 'sDAI';
@@ -1102,7 +1107,7 @@ const ConfirmSwapModal = memo(({
                     // Wait for confirmation
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             throw new Error("SAFE_TRANSACTION_SENT");
@@ -1150,7 +1155,7 @@ const ConfirmSwapModal = memo(({
 
                         let receipt;
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                                 throw new Error("SAFE_TRANSACTION_SENT");
@@ -1377,7 +1382,7 @@ const ConfirmSwapModal = memo(({
                     { gasLimit: 2000000 }
                 );
                 // Check for Safe wallet
-                if (isSafeWallet(walletClient)) {
+                if (isSafeConnection(walletClient)) {
                     if (!useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         throw new Error("SAFE_TRANSACTION_SENT");
@@ -1413,7 +1418,7 @@ const ConfirmSwapModal = memo(({
                 try {
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             throw new Error("SAFE_TRANSACTION_SENT");
@@ -1499,6 +1504,10 @@ const ConfirmSwapModal = memo(({
         }
         if (!isConnected || !account || !walletClient) {
             alert('Please connect your wallet first!');
+            return;
+        }
+        if (requiredChain.isWrongChain) {
+            setError(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
             return;
         }
 
@@ -1853,7 +1862,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -1982,7 +1991,7 @@ const ConfirmSwapModal = memo(({
                     markSubstepCompleted(2, 3);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2099,7 +2108,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2181,7 +2190,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(redeemTx.hash); // Store Tx Hash
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2260,7 +2269,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(swapTx.hash);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2321,7 +2330,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2444,7 +2453,7 @@ const ConfirmSwapModal = memo(({
                     let receipt;
                     try {
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                                 setOrderStatus('fulfilled');
@@ -2579,7 +2588,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2667,7 +2676,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -4450,6 +4459,12 @@ const ConfirmSwapModal = memo(({
                             </div>
                         )}
 
+                        {requiredChain.isWrongChain && !isProcessing && !isFinalStateForCloseButton && (
+                            <div className="mb-6 p-4 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+                                This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || 'another network'}.
+                            </div>
+                        )}
+
                         {/* Error Display */}
                         {error && (
                             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm flex overflow-y-auto">
@@ -4764,6 +4779,14 @@ const ConfirmSwapModal = memo(({
                                         Close
                                     </button>
                                 </div>
+                            ) : requiredChain.isWrongChain && !isProcessing && !isFinalStateForCloseButton ? (
+                                <button
+                                    onClick={requiredChain.switchToRequiredChain}
+                                    disabled={requiredChain.isSwitching}
+                                    className="w-full mb-4 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80"
+                                >
+                                    {requiredChain.isSwitching ? 'Switching network...' : `Switch to ${requiredChain.requiredChainName}`}
+                                </button>
                             ) : (
                                 <button
                                     onClick={
