@@ -198,8 +198,15 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
     console.log(`[SubgraphAdapter] Fetching from chain ${chainId}: ${proposalAddress.toLowerCase()}`);
 
     // One shared request per proposal, also serving usePoolData — see
-    // services/proposalMarketData.js.
-    const data = await fetchProposalMarketData(chainId, proposalAddress);
+    // services/proposalMarketData.js. A failed request falls through to the
+    // on-chain fallback in fetchMarketEventData, like an unindexed proposal.
+    let data;
+    try {
+        data = await fetchProposalMarketData(chainId, proposalAddress);
+    } catch (error) {
+        console.error('[SubgraphAdapter] Proposal market data unavailable:', error);
+        return null;
+    }
 
     const proposal = data?.proposal;
     if (!proposal) return null;

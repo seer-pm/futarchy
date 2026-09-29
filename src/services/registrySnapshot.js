@@ -21,6 +21,7 @@
 
 import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL } from '../config/subgraphEndpoints';
 import { cachedOnce, invalidateCache } from './requestCache';
+import { readGraphqlData } from '../utils/graphqlResponse';
 
 const SNAPSHOT_QUERY = `
   query RegistrySnapshot($aggregatorId: String!) {
@@ -86,12 +87,7 @@ export function fetchRegistrySnapshot(aggregatorAddress) {
             }),
         });
 
-        const result = await response.json();
-        if (result.errors) {
-            throw new Error(result.errors[0]?.message || 'GraphQL query failed');
-        }
-
-        const data = result.data || {};
+        const data = await readGraphqlData(response, 'Registry request');
         return {
             aggregator: data.aggregator || null,
             organizations: data.organizations || [],

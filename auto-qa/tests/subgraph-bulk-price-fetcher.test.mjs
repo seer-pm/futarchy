@@ -229,12 +229,14 @@ test('source — poolMap key is LOWERCASED pool.id (defensive re-lowercase)', ()
 // fetchPoolsBatch error semantics
 // ---------------------------------------------------------------------------
 
-test('source — fetchPoolsBatch returns empty Map (NOT throw) on errors', () => {
-    // Pinned: callers chain results into a single priceMap. Throwing
-    // would break the whole chain on any one-chain failure.
+test('source — one chain failing does not blank the others (orchestrator catches per chain)', () => {
+    // Pinned: callers chain results into a single priceMap. fetchPoolsBatch
+    // now throws on failure, so the per-chain call in collectAndFetchPoolPrices
+    // must catch it and drop only that chain; its cards fall back to their
+    // per-pool fetch.
     assert.match(SRC,
-        /catch\s*\(error\)\s*\{[\s\S]*?return\s+new Map\(\)/,
-        `fetchPoolsBatch must return new Map() on catch (NOT throw)`);
+        /try\s*\{\s*const result = await fetchPoolsBatch\(filtered,\s*Number\(chainId\)\);\s*return \{ chainId, result \};\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?return null;/,
+        `collectAndFetchPoolPrices must catch a failed chain and skip it`);
 });
 
 test('source — fetchPoolsBatch returns empty Map when no endpoint OR no addresses', () => {
@@ -244,14 +246,17 @@ test('source — fetchPoolsBatch returns empty Map when no endpoint OR no addres
         `fetchPoolsBatch missing-endpoint/no-addresses guard shape drifted`);
 });
 
-test('source — fetchPoolsBatch GraphQL errors → empty Map (silent return, NOT throw)', () => {
-    // Pinned: same shape as the catch path. result.errors → empty Map.
-    // Different design choice from candles-adapter (which throws on
-    // GraphQL errors). Both are deliberate — this file is best-effort
-    // for many-pool batches; one error shouldn't break the page.
+test('source — fetchPoolsBatch throws on HTTP / GraphQL errors (outage is not "no prices")', () => {
+    // Pinned (changed deliberately): a 502 with { errors } used to come
+    // back as an empty Map, indistinguishable from pools without a price.
+    // It now goes through readGraphqlData, which throws, and nothing in
+    // fetchPoolsBatch swallows it.
     assert.match(SRC,
-        /if\s*\(result\.errors\)\s*\{[\s\S]*?return\s+new Map\(\)/,
-        `GraphQL-errors path must return new Map() (best-effort, no throw)`);
+        /const data = await readGraphqlData\(response,/,
+        `fetchPoolsBatch must read the response through readGraphqlData`);
+    const body = SRC.slice(SRC.indexOf('async function fetchPoolsBatch'), SRC.indexOf('export async function collectAndFetchPoolPrices'));
+    assert.doesNotMatch(body, /catch\s*\(/,
+        `fetchPoolsBatch must not swallow request failures`);
 });
 
 // ---------------------------------------------------------------------------

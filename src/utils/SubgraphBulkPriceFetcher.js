@@ -10,6 +10,7 @@
  */
 
 import { SUBGRAPH_ENDPOINTS, getSubgraphEndpoint } from '../config/subgraphEndpoints';
+import { readGraphqlData } from './graphqlResponse';
 
 /**
  * Fetch multiple pools in a single GraphQL query
@@ -17,6 +18,8 @@ import { SUBGRAPH_ENDPOINTS, getSubgraphEndpoint } from '../config/subgraphEndpo
  * @param {string[]} poolAddresses - Array of pool addresses
  * @param {number} chainId - Chain ID (1 or 100)
  * @returns {Promise<Map<string, { price: number, name: string, outcomeSide: string }>>}
+ * @throws when the request fails (HTTP error or GraphQL `errors`) — an
+ *   outage is not the same as "these pools have no price"
  */
 async function fetchPoolsBatch(poolAddresses, chainId) {
     const endpoint = getSubgraphEndpoint(chainId);
@@ -43,46 +46,35 @@ async function fetchPoolsBatch(poolAddresses, chainId) {
         }
     }`;
 
-    try {
-        console.log(`[BulkPriceFetcher] 🔍 Chain ${chainId}: Querying ${uniqueAddresses.length} pools`);
-        console.log(`[BulkPriceFetcher] Addresses:`, uniqueAddresses.slice(0, 5), uniqueAddresses.length > 5 ? `...+${uniqueAddresses.length - 5} more` : '');
-        console.log(`[BulkPriceFetcher] Endpoint:`, endpoint);
+    console.log(`[BulkPriceFetcher] 🔍 Chain ${chainId}: Querying ${uniqueAddresses.length} pools`);
+    console.log(`[BulkPriceFetcher] Addresses:`, uniqueAddresses.slice(0, 5), uniqueAddresses.length > 5 ? `...+${uniqueAddresses.length - 5} more` : '');
+    console.log(`[BulkPriceFetcher] Endpoint:`, endpoint);
 
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+    });
+
+    const data = await readGraphqlData(response, `Pool prices (chain ${chainId})`);
+
+    const pools = data.pools || [];
+    const poolMap = new Map();
+
+    for (const pool of pools) {
+        const price = parseFloat(pool.price);
+        poolMap.set(pool.id.toLowerCase(), {
+            price: isNaN(price) ? null : price,
+            name: pool.name,
+            type: pool.type,
+            outcomeSide: pool.outcomeSide
         });
-
-        const result = await response.json();
-
-        if (result.errors) {
-            console.error('[BulkPriceFetcher] GraphQL errors:', result.errors);
-            return new Map();
-        }
-
-        const pools = result.data?.pools || [];
-        const poolMap = new Map();
-
-        for (const pool of pools) {
-            const price = parseFloat(pool.price);
-            poolMap.set(pool.id.toLowerCase(), {
-                price: isNaN(price) ? null : price,
-                name: pool.name,
-                type: pool.type,
-                outcomeSide: pool.outcomeSide
-            });
-        }
-
-        console.log(`[BulkPriceFetcher] ✅ Chain ${chainId}: Got ${poolMap.size}/${uniqueAddresses.length} pools`);
-        console.log(`[BulkPriceFetcher] Found pools:`, pools.map(p => ({ id: p.id.slice(0, 10), name: p.name })));
-
-        return poolMap;
-
-    } catch (error) {
-        console.error(`[BulkPriceFetcher] Fetch error for chain ${chainId}:`, error);
-        return new Map();
     }
+
+    console.log(`[BulkPriceFetcher] ✅ Chain ${chainId}: Got ${poolMap.size}/${uniqueAddresses.length} pools`);
+    console.log(`[BulkPriceFetcher] Found pools:`, pools.map(p => ({ id: p.id.slice(0, 10), name: p.name })));
+
+    return poolMap;
 }
 
 /**
@@ -142,8 +134,16 @@ export async function collectAndFetchPoolPrices(proposals) {
             const filtered = addresses.filter(Boolean);
             if (filtered.length === 0) return null;
 
-            const result = await fetchPoolsBatch(filtered, Number(chainId));
-            return { chainId, result };
+            // One chain's outage should not blank the other chain's prices.
+            // Its pools are simply absent from the map, so the cards fall
+            // back to their per-pool fetch and show "—" if that fails too.
+            try {
+                const result = await fetchPoolsBatch(filtered, Number(chainId));
+                return { chainId, result };
+            } catch (error) {
+                console.error(`[BulkPriceFetcher] Prices unavailable for chain ${chainId}:`, error);
+                return null;
+            }
         })
     );
 
