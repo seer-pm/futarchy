@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import SafeDetector from "../../../debug/SafeDetector";
 import PropTypes from "prop-types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,6 +21,7 @@ import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
+import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, describeTxError } from "../../../../utils/txErrors";
 
 const toBN = (value) => ethers.BigNumber.from(value.toString());
 
@@ -386,6 +387,15 @@ const CollateralModal = ({
   });
   const [localProcessingStep, setLocalProcessingStep] = useState(undefined);
   const [localError, setLocalError] = useState(null);
+  const errorRef = useRef(null);
+
+  // The modal scrolls; bring a new error into view so the button does not
+  // just look unresponsive
+  useEffect(() => {
+    if ((error || localError) && errorRef.current?.scrollIntoView) {
+      errorRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [error, localError]);
   const [currentSubstepState, setCurrentSubstep] = useState(currentSubstep);
 
   // Helper functions for dynamic token symbols
@@ -494,7 +504,7 @@ const CollateralModal = ({
             console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
             onSafeTransaction?.(); // Trigger toast
             handleClose(); // Auto-close for Safe
-            throw new Error("SAFE_TRANSACTION_SENT"); // Signal to stop execution
+            throw new Error(SAFE_TRANSACTION_SENT); // Signal to stop execution
           } else {
             console.log('[CollateralModal] Safe wallet detected - waiting for execution via Safe API');
             const chainId = await walletClient.getChainId();
@@ -1127,6 +1137,8 @@ const CollateralModal = ({
 
   // Update handleCollateralAction to handle errors gracefully
   const handleCollateralAction = async (tokenType, amount) => {
+    // A new attempt starts clean: no error from the previous one
+    setLocalError(null);
     // Check if wallet is properly connected before proceeding
     if (!isConnected || !account || !signer) {
       setLocalError("Please connect your wallet first");
@@ -1175,6 +1187,10 @@ const CollateralModal = ({
 
           for await (const status of iterator) {
             console.log('[CollateralModal] SDK Status:', status);
+            // The SDK reports failures (e.g. a reverted receipt) as an error status
+            if (status.status === 'error') {
+              throw new Error(status.message || status.error);
+            }
 
             // Map SDK steps to UI steps
             if (status.step.includes('approv')) {
@@ -1228,6 +1244,10 @@ const CollateralModal = ({
 
           for await (const status of iterator) {
             console.log('[CollateralModal] SDK Status:', status);
+            // The SDK reports failures (e.g. a reverted receipt) as an error status
+            if (status.status === 'error') {
+              throw new Error(status.message || status.error);
+            }
 
             // Map SDK steps to UI steps
             if (status.step.includes('yes_approv')) {
@@ -1371,17 +1391,13 @@ const CollateralModal = ({
         // Use market address from config with fallback
         const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
 
-        // Use a high hardcoded gas limit
+        // No gas or fee overrides: the wallet estimates both for the current
+        // chain. Fixed fees (1.5 gwei max) left transactions stuck on mainnet
+        // whenever the base fee rose above them.
         const splitTx = await futarchyRouter.splitPosition(
           marketAddress,
           baseToken.address,
-          amountInWei,
-          {
-            gasLimit: 2000000, // High fixed gas limit of 2M
-            type: 2, // Ensure EIP-1559 transaction type
-            maxFeePerGas: ethers.utils.parseUnits("1.5", "gwei"), // 1.5 Gwei
-            maxPriorityFeePerGas: ethers.utils.parseUnits("1", "gwei"), // 1 Gwei
-          }
+          amountInWei
         );
 
         // Always update debug info with detection result
@@ -1399,7 +1415,7 @@ const CollateralModal = ({
         };
         updateDebugInfo(debugData);
 
-        if (isSafe) {
+        if (isSafe || isSafeConnection(walletClient)) {
           if (!useBlockExplorer) {
             console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
             markSubstepCompleted(1, 1);
@@ -1533,8 +1549,8 @@ const CollateralModal = ({
 
         if (yesBalanceBN.lt(amountInWei) || noBalanceBN.lt(amountInWei)) {
           console.error('[CollateralModal] Insufficient balance detected:', {
-            yesBalance: ethers.utils.formatUnits(yesBalance, 18),
-            noBalance: ethers.utils.formatUnits(noBalance, 18),
+            yesBalance: ethers.utils.formatUnits(yesBalanceBN, 18),
+            noBalance: ethers.utils.formatUnits(noBalanceBN, 18),
             amountRequested: amount,
             shortfall: {
               yes: yesBalanceBN.lt(amountInWei)
@@ -1607,16 +1623,11 @@ const CollateralModal = ({
           ? baseTokensConfig.currency
           : baseTokensConfig.company;
 
+        // No gas or fee overrides: the wallet estimates both (see splitPosition)
         const mergeTx = await futarchyRouter.mergePositions(
           marketAddress,
           baseToken.address, // Use base token address for merge
-          amountInWei,
-          {
-            gasLimit: 2000000,
-            type: 2,
-            maxFeePerGas: ethers.utils.parseUnits("1.5", "gwei"),
-            maxPriorityFeePerGas: ethers.utils.parseUnits("1", "gwei"),
-          }
+          amountInWei
         );
 
         // Check for Safe wallet
@@ -1669,18 +1680,13 @@ const CollateralModal = ({
 
     } catch (error) {
       // Ignore Safe transaction sent "error" as it's just a control flow signal
-      if (error.message === "SAFE_TRANSACTION_SENT") {
+      if (isSafeTransactionSent(error)) {
         return;
       }
 
       console.error("Collateral action failed:", error);
-      let errorMessage = error.message || "Unknown error occurred.";
-      if (error.code === 4001 || error.code === "ACTION_REJECTED") {
-        errorMessage = "Transaction rejected by the user.";
-      } else if (error.message?.includes("user rejected")) {
-        errorMessage = "Transaction rejected by the user.";
-      }
-      setLocalError(errorMessage);
+      // "Transaction cancelled" for a declined signature, otherwise one short line
+      setLocalError(describeTxError(error, "Unknown error occurred."));
       setLocalProcessingStep(undefined);
     }
   };
@@ -1698,11 +1704,7 @@ const CollateralModal = ({
       await handleCollateralAction(selectedTokenType, amount);
     } catch (error) {
       console.error("Error in action button click:", error);
-      let errorMessage = error.message || "Unknown error occurred.";
-      if (error.code === 4001 || error.code === "ACTION_REJECTED") {
-        errorMessage = "Transaction rejected by the user.";
-      }
-      setLocalError(errorMessage);
+      setLocalError(describeTxError(error, "Unknown error occurred."));
       setLocalProcessingStep(undefined);
     }
   };
@@ -2012,6 +2014,17 @@ const CollateralModal = ({
         </div>
       )}
 
+      {/* Errors sit right above the button so they are on screen when it is pressed */}
+      {(error || localError) && (
+        <div
+          ref={errorRef}
+          role="alert"
+          className="p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm break-words max-h-32 overflow-y-auto"
+        >
+          {error || localError}
+        </div>
+      )}
+
       {/* Unified Action Button */}
       <div className="" > {/* Ensures button is at the bottom, mt-auto pushes it down if content is short, pt-4 for spacing */}
         < button
@@ -2022,12 +2035,6 @@ const CollateralModal = ({
           {buttonContent}
         </button >
       </div>
-
-      {(error || localError) && (
-        <div className="mb-2 p-1 bg-red-50 border border-red-200 rounded-lg text-red-400 text-sm">
-          {error || localError}
-        </div>
-      )}
 
       {/* Debug Info */}
       {debugInfo && (
