@@ -38,14 +38,10 @@
  *
  * HAZARDS pinned (leave-as-is per /loop directive):
  *
- *   H1. CALLER BUG in src/futarchyJS/futarchy.js:1238 — calls
- *       fetchSushiSwapRoute(fromToken, toToken, parsedAmount)
- *       POSITIONALLY, but the helper expects a destructured
- *       {tokenIn, tokenOut, amount, ...} object. Destructuring a
- *       string gives undefined for all keys → "Invalid amount" error.
- *       The other call site (ShowcaseSwapComponent.jsx:1125) uses the
- *       correct destructured form. Pinned via grep so a fix to either
- *       side flags the test.
+ *   H1. (resolved) The positional caller lived in the dead
+ *       src/futarchyJS/futarchy.js, now deleted. The remaining call site
+ *       (ShowcaseSwapComponent.jsx) uses the destructured form; pinned
+ *       via grep so a refactor that breaks it flags the test.
  *
  *   H2. Hardcoded feeReceiver leak in console.log — line 91 logs
  *       `0xca226bd9c754F1283123d32B2a7cF62a722f8ADa` regardless of
@@ -266,26 +262,9 @@ test('source — allowance check uses .lt() (strictly less than amount)', () => 
 });
 
 // ---------------------------------------------------------------------------
-// HAZARD H1: positional-args caller bug in futarchy.js:1238
+// HAZARD H1: the positional-args caller in src/futarchyJS/futarchy.js was
+// deleted with that dead module; only the correct call site remains.
 // ---------------------------------------------------------------------------
-
-test('hazard H1 — futarchy.js:1238 still calls fetchSushiSwapRoute POSITIONALLY (BUG)', async () => {
-    // PINNED HAZARD: src/futarchyJS/futarchy.js calls
-    //   fetchSushiSwapRoute(fromToken, toToken, parsedAmount)
-    // but the helper expects:
-    //   fetchSushiSwapRoute({tokenIn, tokenOut, amount, ...})
-    // Destructuring a string (fromToken) gives undefined for tokenIn,
-    // tokenOut, amount → "Invalid amount provided" error.
-    //
-    // The other call site (ShowcaseSwapComponent.jsx) uses the correct
-    // destructured form. This may be dead code, or a latent bug.
-    // Per /loop directive: leave the bug, pin it.
-    const cmd = `grep -n 'fetchSushiSwapRoute(fromToken,\\s*toToken,\\s*parsedAmount)' ${JSON.stringify(resolve(REPO_ROOT, 'src/futarchyJS/futarchy.js'))} || true`;
-    const out = execSync(cmd, { encoding: 'utf8' }).trim();
-    assert.ok(out.length > 0,
-        `futarchy.js no longer has the positional-args bug — either fixed (good — delete this test) ` +
-        `or the call site moved (re-pin under new location).`);
-});
 
 test('hazard H1 — ShowcaseSwapComponent.jsx still uses the CORRECT destructured form', async () => {
     // Sanity-pin the working call site so a refactor that breaks it
