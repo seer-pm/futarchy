@@ -63,6 +63,13 @@ const SRC = readFileSync(
     new URL('../../src/utils/subgraphTradesClient.js', import.meta.url),
     'utf8',
 );
+// Since 0240c3d fetchPoolsForProposal delegates to services/conditionalPools.js,
+// which the chart shares, so the pool query (and its lowercasing and type
+// filter) now lives there.
+const POOLS_SRC = readFileSync(
+    new URL('../../src/services/conditionalPools.js', import.meta.url),
+    'utf8',
+);
 
 // ───── spec mirrors (private functions in source) ─────
 
@@ -164,8 +171,15 @@ test('EXPLORERS table source-pin matches the reference', () => {
 
 // ───── 2. Address lowercasing ─────
 
+test('fetchPoolsForProposal delegates to the shared fetchConditionalPools', () => {
+    assert.match(SRC, /fetchConditionalPools\(chainId,\s*proposalId\)/);
+});
+
 test('proposalId is lowercased before embedding in fetchPoolsForProposal query', () => {
-    assert.match(SRC, /proposal:\s*"\$\{proposalId\.toLowerCase\(\)\}"/);
+    // The query builder inlines its argument; the caller lowercases first.
+    assert.match(POOLS_SRC, /proposal:\s*"\$\{proposalId\}"/);
+    assert.match(POOLS_SRC, /const id = proposalId\.toLowerCase\(\);/);
+    assert.match(POOLS_SRC, /buildQuery\(id\)/);
 });
 
 test('pool addresses are lowercased via .map(p => p.toLowerCase())', () => {
@@ -206,11 +220,13 @@ test('the origin field name (not from/sender) is the indexer convention', () => 
 // ───── 4. Conditional pool filter ─────
 
 test('fetchPoolsForProposal filters on type: "CONDITIONAL" literal', () => {
-    assert.match(SRC, /type:\s*"CONDITIONAL"/);
+    assert.match(POOLS_SRC, /type:\s*"CONDITIONAL"/);
 });
 
 test('only ONE type-filter literal in source — adding another would split logic', () => {
-    const matches = SRC.match(/type:\s*"CONDITIONAL"/g) || [];
+    assert.equal((SRC.match(/type:\s*"CONDITIONAL"/g) || []).length, 0,
+        'subgraphTradesClient should not grow its own pool query again');
+    const matches = POOLS_SRC.match(/type:\s*"CONDITIONAL"/g) || [];
     assert.equal(matches.length, 1, 'exactly one CONDITIONAL filter');
 });
 
