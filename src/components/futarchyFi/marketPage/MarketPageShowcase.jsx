@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import Image from "next/image";
 import RootLayout from "../../../components/layout/RootLayout";
-import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS, SHOW_DATA_DEBUG } from '../../../config/featureFlags';
+import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS, SHOW_DATA_DEBUG, DEBUG_MODE } from '../../../config/featureFlags';
 import { StatDisplay, AggregatedStatDisplay, formatVolume, formatLiquidity, normalizeTokenAmount } from './page/Formatter';
 import ImpactIcon from './page/icons/ImpactIcon';
 import LiquidityIcon from './page/icons/LiquidityIcon';
@@ -2390,7 +2390,9 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     normalizedDebugParam === 'on' ||
     normalizedDebugParam === 't' ||
     debugMode;
-  const debugAddress = searchParams.get('debugAddress');
+  // ?debugAddress= shows another wallet's positions as if it were connected;
+  // developer builds only.
+  const debugAddress = DEBUG_MODE ? searchParams.get('debugAddress') : null;
   const address = useMemo(() => debugAddress || connectedAddress, [debugAddress, connectedAddress]);
   const isConnected = useMemo(() => debugAddress ? true : walletConnected, [debugAddress, walletConnected]);
 
