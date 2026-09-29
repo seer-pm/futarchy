@@ -1931,7 +1931,6 @@ const SnapshotWidget = ({
     return colorMap[colorKey] || colorMap.neutral;
   };
 
-  const colorClasses = currentResult ? getColorClasses(currentResult.colorKey) : getColorClasses('neutral');
 
   // Generate Snapshot proposal URL
   const snapshotProposalUrl = useMemo(() => {
@@ -1962,17 +1961,84 @@ const SnapshotWidget = ({
     buttonBorderColor = currentResult ? getColorClasses(currentResult.colorKey).border : 'border-futarchyGray11 dark:border-white';
   }
 
+  const BoltIcon = (
+    <svg className="flex-shrink-0 w-3.5 h-3.5" viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
+    </svg>
+  );
+
+  // Rendered inline in the hero badge row (it used to float fixed over the
+  // chart axis and the tab labels). Styled to sit next to the MarketBadges.
+  const pillClasses = `h-7 py-1 pl-2 pr-1 text-sm font-semibold rounded-lg border-2 ${buttonBorderColor} bg-transparent text-white flex items-center gap-2 whitespace-nowrap transition-colors duration-200 hover:bg-white/10`;
+  const chipClasses = 'rounded-md px-1.5 py-0.5 flex items-center gap-1 text-xs font-bold tabular-nums';
+  // The hero is always dark, so use the dark-theme result colours here.
+  const heroChipColors = (colorKey) => ({
+    success: 'bg-futarchyTeal7/20 text-futarchyTeal7',
+    danger: 'bg-futarchyCrimson7/20 text-futarchyCrimson9',
+  }[colorKey] || 'bg-white/10 text-white');
+
+  const debugDot = SHOW_DATA_DEBUG && snapshotSource === 'api' && (
+    <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
+  );
+
   return (
-    <div
-      className="fixed z-50 transition-all duration-300 ease-in-out left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0"
-      style={{
-        bottom: '24px',
-        ...(typeof window !== 'undefined' && window.innerWidth >= 768 ? { left: '24px' } : {}),
-      }}
-    >
-      {/* Expanded Container - Only show if proposal is still active */}
+    <div className="relative">
+      {isProposalClosed ? (
+        <a
+          href={snapshotProposalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={pillClasses}
+          aria-label="View final results on Snapshot"
+        >
+          {BoltIcon}
+          <span>Final Result{debugDot}</span>
+          {!snapshotLoading && snapshotData && (
+            snapshotData.proposalApproved === true ? (
+              <span className={`${chipClasses} bg-futarchyTeal7/20 text-futarchyTeal7`}>
+                {CheckIcon}
+                APPROVED
+              </span>
+            ) : snapshotData.proposalApproved === false ? (
+              <span className={`${chipClasses} bg-futarchyCrimson7/20 text-futarchyCrimson9`}>
+                {XIcon}
+                REJECTED
+              </span>
+            ) : snapshotHighestResult ? (
+              <span className={`${chipClasses} ${heroChipColors(snapshotHighestResult.colorKey)}`}>
+                {renderIcon(snapshotHighestResult.iconType)}
+                {snapshotHighestResult.percentage}
+              </span>
+            ) : null
+          )}
+        </a>
+      ) : (
+        <button
+          onClick={() => setIsWidgetExpanded(!isWidgetExpanded)}
+          className={pillClasses}
+          aria-expanded={isWidgetExpanded}
+          aria-label={isWidgetExpanded ? 'Close snapshot results' : 'Open snapshot results'}
+        >
+          {BoltIcon}
+          <span>Snapshot Results{debugDot}</span>
+          {snapshotLoading && (
+            <span className="h-3 w-3 rounded-full border-2 border-futarchyViolet7/40 border-t-futarchyViolet7 animate-spin" />
+          )}
+          {!snapshotLoading && currentResult && (
+            <span key={`${currentResult.key}-${currentResultIndex}`} className={`${chipClasses} ${heroChipColors(currentResult.colorKey)} animate-fadeIn`}>
+              {renderIcon(currentResult.iconType)}
+              {currentResult.percentage}
+            </span>
+          )}
+          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isWidgetExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      )}
+
+      {/* Results dropdown - only while the proposal is still active */}
       {isWidgetExpanded && !isProposalClosed && (
-        <div className="bg-futarchyGray2 dark:bg-futarchyDarkGray2 rounded-3xl shadow-2xl backdrop-blur-sm border-2 border-futarchyGray62 dark:border-futarchyGray11/70 w-[95vw] md:w-[90vw] max-w-md animate-fadeIn mb-2 md:mb-3">
+        <div className="absolute left-0 top-full z-40 mt-2 bg-futarchyGray2 dark:bg-futarchyDarkGray2 rounded-3xl shadow-2xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 w-[calc(100vw-2.5rem)] max-w-md animate-fadeIn">
           <div className="p-3 md:p-4 max-h-[75vh] md:max-h-[70vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-2 md:mb-3">
               <div className="flex items-center gap-2">
@@ -2019,107 +2085,6 @@ const SnapshotWidget = ({
         </div>
       )}
 
-      {/* Floating Button */}
-      {/* If proposal is closed, clicking goes to Snapshot page; if active, expands widget */}
-      {isProposalClosed ? (
-        <a
-          href={snapshotProposalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`bg-futarchyGray2 dark:bg-futarchyDarkGray2 dark:text-white text-futarchyDarkGray3 font-oxanium font-semibold rounded-full transition-all duration-300 ease-in-out flex items-center justify-center border-2 ${buttonBorderColor} h-[48px] md:h-[52px] w-full md:w-[320px] px-3 pr-4 md:px-5 md:pr-6 gap-2 md:gap-3 hover:scale-105 active:scale-95`}
-          aria-label="View final results on Snapshot"
-        >
-          <svg className="flex-shrink-0 transition-all duration-300 w-4 h-4 md:w-5 md:h-5" viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg">
-            <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
-          </svg>
-
-          <span className="text-xs md:text-sm whitespace-nowrap flex-shrink-0">
-            Final Result
-            {SHOW_DATA_DEBUG && snapshotSource === 'api' && (
-              <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
-            )}
-          </span>
-
-          {/* Show winning result - use proposalApproved to determine color */}
-          {!snapshotLoading && snapshotData && (
-            <div className="ml-auto flex items-center gap-1.5 md:gap-2">
-              {snapshotData.proposalApproved === true ? (
-                // APPROVED - Futarchy Green
-                <div className="bg-futarchyTeal7/20 dark:bg-futarchyTeal7/10 rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300">
-                  <span className="flex items-center justify-center text-futarchyTeal11 dark:text-futarchyTeal7">
-                    {CheckIcon}
-                  </span>
-                  <span className="text-xs md:text-sm font-bold tabular-nums text-futarchyTeal11 dark:text-futarchyTeal9">
-                    APPROVED
-                  </span>
-                </div>
-              ) : snapshotData.proposalApproved === false ? (
-                // REJECTED - Futarchy Red
-                <div className="bg-futarchyCrimson7/20 dark:bg-futarchyCrimson7/10 rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300">
-                  <span className="flex items-center justify-center text-futarchyCrimson11 dark:text-futarchyCrimson7">
-                    {XIcon}
-                  </span>
-                  <span className="text-xs md:text-sm font-bold tabular-nums text-futarchyCrimson11 dark:text-futarchyCrimson9">
-                    REJECTED
-                  </span>
-                </div>
-              ) : snapshotHighestResult ? (
-                // Fallback to highest result if proposalApproved is null
-                <div className={`${getColorClasses(snapshotHighestResult.colorKey).bg} rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300`}>
-                  <span className={`flex items-center justify-center ${getColorClasses(snapshotHighestResult.colorKey).icon}`}>
-                    {renderIcon(snapshotHighestResult.iconType)}
-                  </span>
-                  <span className={`text-xs md:text-sm font-bold tabular-nums ${getColorClasses(snapshotHighestResult.colorKey).text}`}>
-                    {snapshotHighestResult.percentage}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </a>
-      ) : (
-        <button
-          onClick={() => setIsWidgetExpanded(!isWidgetExpanded)}
-          className={`bg-futarchyGray2 dark:bg-futarchyDarkGray2 dark:text-white text-futarchyDarkGray3 font-oxanium font-semibold rounded-full transition-all duration-300 ease-in-out flex items-center justify-center border-2 ${buttonBorderColor} ${isWidgetExpanded ? 'w-[48px] h-[48px] md:w-[52px] md:h-[52px] p-0 mt-2 md:mt-3' : 'h-[48px] md:h-[52px] w-full md:w-[320px] px-3 pr-4 md:px-5 md:pr-6 gap-2 md:gap-3'}`}
-          aria-label={isWidgetExpanded ? 'Close snapshot results' : 'Open snapshot results'}
-        >
-          <svg className={`flex-shrink-0 transition-all duration-300 ${isWidgetExpanded ? 'rotate-180 w-5 h-5 md:w-6 md:h-6' : 'w-4 h-4 md:w-5 md:h-5'}`} viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg">
-            <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
-          </svg>
-
-          {!isWidgetExpanded && (
-            <>
-              <span className="text-xs md:text-sm whitespace-nowrap flex-shrink-0">
-                Snapshot Results
-                {SHOW_DATA_DEBUG && snapshotSource === 'api' && (
-                  <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
-                )}
-              </span>
-
-              {/* Loading State */}
-              {snapshotLoading && (
-                <div className="ml-auto flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full border-2 border-futarchyViolet9/40 dark:border-futarchyViolet7/40 border-t-futarchyViolet9 dark:border-t-futarchyViolet7 animate-spin" />
-                </div>
-              )}
-
-              {/* Cycling Results Preview */}
-              {!snapshotLoading && currentResult && (
-                <div key={`${currentResult.key}-${currentResultIndex}`} className="ml-auto flex items-center gap-1.5 md:gap-2 animate-fadeIn">
-                  <div className={`${colorClasses.bg} rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300`}>
-                    <span className={`flex items-center justify-center ${colorClasses.icon}`}>
-                      {renderIcon(currentResult.iconType)}
-                    </span>
-                    <span className={`text-xs md:text-sm font-bold tabular-nums ${colorClasses.text}`}>
-                      {currentResult.percentage}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </button>
-      )}
     </div>
   );
 };
@@ -4910,7 +4875,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               />
             </div>
 
-            <div className={`flex items-center gap-3 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
+            <div className={`flex flex-wrap items-center gap-3 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               {marketData.isLoading && (
                 <span className="flex gap-2" aria-label="Loading badges">
@@ -5047,6 +5012,14 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               {!marketData.isLoading && marketData.error && (
                 <span className="text-xs text-red-400/80">Badges unavailable</span>
               )}
+              {/* Snapshot result - part of the badge row instead of a floating pill */}
+              <SnapshotWidget
+                snapshotData={snapshotData}
+                snapshotLoading={snapshotLoading}
+                snapshotSource={snapshotSource}
+                snapshotProposalId={snapshotProposalId}
+                snapshotHighestResult={snapshotHighestResult}
+              />
             </div>
           </div>
 
@@ -5670,15 +5643,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               setMergeAmount('');
               setMergeTokenType('currency');
             }}
-          />
-
-          {/* Snapshot Results Widget */}
-          <SnapshotWidget
-            snapshotData={snapshotData}
-            snapshotLoading={snapshotLoading}
-            snapshotSource={snapshotSource}
-            snapshotProposalId={snapshotProposalId}
-            snapshotHighestResult={snapshotHighestResult}
           />
 
           {/* Snapshot Debug Console - Shows when debug mode is active */}
