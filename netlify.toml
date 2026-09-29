@@ -68,15 +68,32 @@
   status = 301
   force = true
 
-# Security headers
+# Security headers. Framing is limited with CSP frame-ancestors rather than
+# X-Frame-Options, which can't name another origin: the app must load inside
+# the Safe{Wallet} Safe Apps iframe.
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
+    Content-Security-Policy = "frame-ancestors 'self' https://app.safe.global"
     X-Content-Type-Options = "nosniff"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Safe{Wallet} fetches <app url>/manifest.json cross-origin to list the app.
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, Content-Type, Authorization"
+
+[[headers]]
+  for = "/safe-app-manifest.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, Content-Type, Authorization"
 
 # Cache static assets
 [[headers]]
