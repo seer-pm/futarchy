@@ -99,26 +99,32 @@ const SubgraphChart = ({
         }
     }, [chartRefreshKey]);
 
-    // Auto-resync countdown effect - uses stable ref to avoid recreating interval
+    // Auto-resync. The per-second countdown only feeds the debug Resync
+    // button; without it, one timer per resync period avoids re-rendering
+    // the chart every second.
     useEffect(() => {
-        // Clear any existing interval
         if (countdownRef.current) {
             clearInterval(countdownRef.current);
         }
 
-        // Start countdown timer - only depends on autoResyncInterval
-        countdownRef.current = setInterval(() => {
-            setCountdown(prev => {
-                if (prev <= 1) {
-                    // Time to resync! Use silent=true for smooth update without flicker
-                    if (refetchRef.current) {
-                        refetchRef.current(true);
+        if (!SHOW_DATA_DEBUG) {
+            countdownRef.current = setInterval(() => {
+                if (refetchRef.current) refetchRef.current(true);
+            }, autoResyncInterval * 1000);
+        } else {
+            countdownRef.current = setInterval(() => {
+                setCountdown(prev => {
+                    if (prev <= 1) {
+                        // Time to resync! Use silent=true for smooth update without flicker
+                        if (refetchRef.current) {
+                            refetchRef.current(true);
+                        }
+                        return autoResyncInterval;
                     }
-                    return autoResyncInterval;
-                }
-                return prev - 1;
-            });
-        }, 1000);
+                    return prev - 1;
+                });
+            }, 1000);
+        }
 
         return () => {
             if (countdownRef.current) {
@@ -528,6 +534,10 @@ const SubgraphChart = ({
     }
     const impactColorClass = impact >= 0 ? '!text-futarchyTeal7' : '!text-futarchyCrimson7';
 
+    // A failed fetch leaves prices null: show a dash instead of spinning forever.
+    const fetchFailed = !!error && !loading;
+    const pendingValue = () => (fetchFailed ? '—' : <LoadingSpinner />);
+
     // Get currency from config
     const currency = config?.BASE_TOKENS_CONFIG?.currency?.symbol ||
         config?.metadata?.currencyTokens?.base?.tokenSymbol ||
@@ -554,7 +564,7 @@ const SubgraphChart = ({
                     {/* Yes Price - SAME BLUE color as ChartParameters */}
                     <ParameterCard
                         label="Yes Price"
-                        value={yesPrice === null ? <LoadingSpinner /> : `${formatWith(yesPrice, 'price', precisionConfig)} ${currency}`}
+                        value={yesPrice === null ? pendingValue() : `${formatWith(yesPrice, 'price', precisionConfig)} ${currency}`}
                         valueClassName="!text-futarchyBlue9 dark:!text-futarchyBlue8"
                         onClick={() => toggleLine('yes')}
                         isDisabled={!lineVisibility.yes}
@@ -563,7 +573,7 @@ const SubgraphChart = ({
                     {/* No Price - SAME YELLOW color as ChartParameters */}
                     <ParameterCard
                         label="No Price"
-                        value={noPrice === null ? <LoadingSpinner /> : `${formatWith(noPrice, 'price', precisionConfig)} ${currency}`}
+                        value={noPrice === null ? pendingValue() : `${formatWith(noPrice, 'price', precisionConfig)} ${currency}`}
                         valueClassName="!text-yellow-500 dark:!text-yellow-400"
                         onClick={() => toggleLine('no')}
                         isDisabled={!lineVisibility.no}
@@ -598,7 +608,7 @@ const SubgraphChart = ({
                     <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 last:border-r-0 last:rounded-tr-3xl px-1">
                         <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact (spot)</span>
                         <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${impactColorClass}`}>
-                            {(yesPrice === null || noPrice === null) ? <LoadingSpinner /> : formatImpactPercent(impact)}
+                            {(yesPrice === null || noPrice === null) ? pendingValue() : formatImpactPercent(impact)}
                         </span>
                     </div>
 
