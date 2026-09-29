@@ -6,5 +6,5 @@
 
 export const ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS = true;
 export const ENABLE_V2_SUBGRAPH = true;
-export const USE_QUERY_PARAM_URLS = true;
+export const USE_QUERY_PARAM_URLS = false;
 export const SHOW_DATA_DEBUG = process.env.NEXT_PUBLIC_SHOW_DATA_DEBUG === 'true';
