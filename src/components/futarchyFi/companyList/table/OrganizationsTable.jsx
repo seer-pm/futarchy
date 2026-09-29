@@ -34,6 +34,8 @@ const OrganizationsTable = ({
     connectedWallet = null,
     onOrgClick,
     loading = false,
+    error = null,
+    onRetry = null,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sort, setSort] = useState({ field: 'proposalsCount', direction: 'desc' });
@@ -79,6 +81,29 @@ const OrganizationsTable = ({
         return (
             <div className="flex justify-center items-center h-40">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyViolet7"></div>
+            </div>
+        );
+    }
+
+    // A failed registry request is not an empty registry: say so, and let
+    // the user try again instead of reading "No organizations found".
+    if (error) {
+        return (
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 h-40 rounded-xl border-2 border-futarchyGray4 dark:border-futarchyGray112/40 text-center">
+                <p className="text-sm font-semibold text-futarchyGray12 dark:text-white">
+                    Couldn&apos;t load organizations
+                </p>
+                <p className="text-xs text-futarchyGray11">
+                    The registry did not respond. Check your connection and try again.
+                </p>
+                {onRetry && (
+                    <button
+                        onClick={onRetry}
+                        className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-futarchyGray4 dark:border-futarchyGray112/40 text-futarchyGray12 dark:text-white hover:border-futarchyViolet7 transition-colors"
+                    >
+                        Retry
+                    </button>
+                )}
             </div>
         );
     }
