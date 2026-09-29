@@ -116,11 +116,11 @@ export const describeQuoteError = (error) => {
     const chain = errorChain(error);
     const texts = chain.map((e) => `${e.shortMessage || ''} ${e.message || ''}`);
     const codes = chain.map((e) => e.code);
-    const reverted = codes.includes('CALL_EXCEPTION') || texts.some((t) => QUOTE_REVERT_PATTERN.test(t));
-    const network = !reverted && (
-        codes.some((c) => c === 'NETWORK_ERROR' || c === 'SERVER_ERROR' || c === 'TIMEOUT') ||
-        texts.some((t) => QUOTE_NETWORK_PATTERN.test(t))
-    );
+    // Checked first: ethers v5 reports an RPC failure during eth_call as a
+    // CALL_EXCEPTION ("missing revert data") with the SERVER_ERROR nested
+    const network = codes.some((c) => c === 'NETWORK_ERROR' || c === 'SERVER_ERROR' || c === 'TIMEOUT') ||
+        texts.some((t) => QUOTE_NETWORK_PATTERN.test(t));
+    const reverted = !network && (codes.includes('CALL_EXCEPTION') || texts.some((t) => QUOTE_REVERT_PATTERN.test(t)));
 
     if (network) return { kind: 'network', message: 'Quote failed: RPC unavailable, try again' };
 
