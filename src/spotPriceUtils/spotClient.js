@@ -16,6 +16,8 @@
 import { ethers } from 'ethers';
 import { fetchBalancerHopCandles } from './balancerHopClient';
 import { fetchSpotFromBalancer } from '../lib/clients/balancerClient';
+import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
+import { pickSearchPool } from './searchPoolMatch.mjs';
 
 
 // ==============================================================
@@ -24,12 +26,14 @@ import { fetchSpotFromBalancer } from '../lib/clients/balancerClient';
 
 const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 
+// rpcs: endpoints tried in order for rate-provider reads. Gnosis and
+// mainnet share the app-wide list in config/rpcEndpoints.js.
 const NETWORK_MAP = {
-    xdai: { gecko: 'xdai', chainId: 100, rpc: 'https://rpc.gnosischain.com' },
-    gnosis: { gecko: 'xdai', chainId: 100, rpc: 'https://rpc.gnosischain.com' },
-    eth: { gecko: 'eth', chainId: 1, rpc: 'https://eth.llamarpc.com' },
-    ethereum: { gecko: 'eth', chainId: 1, rpc: 'https://eth.llamarpc.com' },
-    base: { gecko: 'base', chainId: 8453, rpc: 'https://mainnet.base.org' },
+    xdai: { gecko: 'xdai', chainId: 100, rpcs: RPC_ENDPOINTS[100] },
+    gnosis: { gecko: 'xdai', chainId: 100, rpcs: RPC_ENDPOINTS[100] },
+    eth: { gecko: 'eth', chainId: 1, rpcs: RPC_ENDPOINTS[1] },
+    ethereum: { gecko: 'eth', chainId: 1, rpcs: RPC_ENDPOINTS[1] },
+    base: { gecko: 'base', chainId: 8453, rpcs: ['https://mainnet.base.org'] },
 };
 
 const KNOWN_RATE_PROVIDERS = {
@@ -112,11 +116,16 @@ function parseConfig(input) {
 
 /**
  * Search for pool on GeckoTerminal
+ *
+ * Matches on the pool's base/quote token symbols, not its name: a name
+ * match also accepts the reversed pair (USDC / WETH for WETH/USDC), whose
+ * candles are the reciprocal price. A reversed pool is only used when no
+ * pool has the requested orientation, and is flagged so the caller inverts.
  */
 async function searchPool(network, base, quote) {
     const geckoNetwork = NETWORK_MAP[network]?.gecko || network;
     const query = `${base} ${quote}`;
-    const url = `${GECKO_API}/search/pools?query=${encodeURIComponent(query)}&network=${geckoNetwork}`;
+    const url = `${GECKO_API}/search/pools?query=${encodeURIComponent(query)}&network=${geckoNetwork}&include=base_token,quote_token`;
 
     console.log('[spotClient] Searching:', url);
 
@@ -124,20 +133,15 @@ async function searchPool(network, base, quote) {
     if (!res.ok) throw new Error(`Search failed: ${res.status}`);
 
     const data = await res.json();
-    const pools = data.data || [];
-
-    // Find matching pool
-    const match = pools.find(p => {
-        const name = p.attributes?.name?.toLowerCase() || '';
-        return name.includes(base.toLowerCase()) && name.includes(quote.toLowerCase());
-    });
+    const match = pickSearchPool(data, base, quote);
 
     if (!match) throw new Error(`Pool not found: ${base}/${quote}`);
 
     return {
-        address: match.attributes?.address,
-        name: match.attributes?.name,
-        network: match.relationships?.network?.data?.id || geckoNetwork,
+        address: match.pool.attributes?.address,
+        name: match.pool.attributes?.name,
+        network: match.pool.relationships?.network?.data?.id || geckoNetwork,
+        reversed: match.reversed,
     };
 }
 
@@ -180,20 +184,26 @@ async function fetchCandles(poolInfo, interval, limit, closeTimestamp = null) {
 
 /**
  * Get rate from ERC-4626 rate provider
+ *
+ * Returns null when no endpoint answers, so the caller can drop the spot
+ * price instead of silently showing it unscaled.
  */
 async function getRate(rateProvider, chainId) {
     const networkInfo = Object.values(NETWORK_MAP).find(n => n.chainId === chainId);
-    if (!networkInfo) return 1;
+    if (!networkInfo) return null;
 
-    try {
-        const provider = new ethers.providers.JsonRpcProvider(networkInfo.rpc);
-        const contract = new ethers.Contract(rateProvider, RATE_ABI, provider);
-        const rate = await contract.getRate();
-        return parseFloat(ethers.utils.formatEther(rate));
-    } catch (e) {
-        console.error('[spotClient] Rate fetch failed:', e.message);
-        return 1;
+    for (const url of networkInfo.rpcs) {
+        try {
+            const provider = new ethers.providers.StaticJsonRpcProvider(url, chainId);
+            const contract = new ethers.Contract(rateProvider, RATE_ABI, provider);
+            const rate = await contract.getRate();
+            return parseFloat(ethers.utils.formatEther(rate));
+        } catch (e) {
+            console.warn(`[spotClient] Rate fetch failed on ${url}:`, e.message);
+        }
     }
+    console.error('[spotClient] Rate fetch failed on every endpoint for', rateProvider);
+    return null;
 }
 
 /**
@@ -330,6 +340,9 @@ async function fetchCompositeCandles(configString, closeTimestamp = null) {
     if (config.rateProvider) {
         const networkInfo = NETWORK_MAP[config.network] || NETWORK_MAP.xdai;
         rate = await getRate(config.rateProvider, networkInfo.chainId);
+        if (rate === null) {
+            return { candles: [], price: null, rate: null, pool: null, error: 'Rate provider unavailable' };
+        }
         rateInfo = { provider: config.rateProvider, rate };
         console.log('[spotClient] Applied composite explicit rate (divided by):', rate);
     }
@@ -445,6 +458,12 @@ export async function fetchSpotCandles(configString, closeTimestamp = null) {
         let candles = await fetchCandles(pool, config.interval, config.limit, closeTimestamp);
         console.log('[spotClient] Fetched', candles.length, 'candles');
 
+        // A search that only found the reversed pair (quote / base) returns
+        // the reciprocal price; flip it before any rate is applied.
+        if (pool.reversed) {
+            candles = candles.map(c => ({ ...c, value: 1 / c.value }));
+        }
+
         // Filter candles by closeTimestamp if provided
         if (closeTimestamp && typeof closeTimestamp === 'number') {
             candles = candles.filter(c => c.time <= closeTimestamp);
@@ -457,6 +476,9 @@ export async function fetchSpotCandles(configString, closeTimestamp = null) {
 
         if (config.rateProvider) {
             rate = await getRate(config.rateProvider, networkInfo.chainId);
+            if (rate === null) {
+                return { candles: [], price: null, rate: null, pool, error: 'Rate provider unavailable' };
+            }
             rateInfo = { provider: config.rateProvider, rate };
 
             // Apply rate to candles (DIVIDE by rate: sDAI rate 1.22 means 1 DAI = 1.22 shares)

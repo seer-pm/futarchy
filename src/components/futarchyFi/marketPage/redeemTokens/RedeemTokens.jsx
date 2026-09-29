@@ -25,7 +25,7 @@ const RedeemButton = ({ onClick, disabled = false, isConnected = false, isWinnin
   );
 };
 
-export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = false, onBalancesChanged }) => {
+export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = false, onBalancesChanged, balanceError = null, onRetryBalances = null }) => {
   const { address, isConnected } = useAccount();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -114,6 +114,30 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-futarchyGray11"></div>
             <span>Loading positions...</span>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Balances failed to load (e.g. RPC down): zero balances would read as
+  // "nothing to redeem", so say so instead.
+  if (balanceError) {
+    return (
+      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
+        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+          Redeem Tokens
+        </h3>
+        <div className="flex flex-col items-center gap-3 text-center py-8 text-futarchyGray11 dark:text-white/70">
+          <span>Your balances couldn&apos;t be loaded, so redeemable tokens can&apos;t be shown.</span>
+          {onRetryBalances && (
+            <button
+              type="button"
+              onClick={onRetryBalances}
+              className="px-3 py-1.5 text-xs rounded-lg border border-futarchyGray62 dark:border-futarchyGray11/70 hover:text-futarchyGray12 dark:hover:text-white transition-colors"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     );

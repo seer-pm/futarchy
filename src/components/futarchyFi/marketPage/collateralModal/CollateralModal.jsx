@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import SafeDetector from "../../../debug/SafeDetector";
+import { DEBUG_MODE } from "../../../../config/featureFlags";
 import PropTypes from "prop-types";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatBalance } from "../../../../utils/formatters";
@@ -320,7 +321,6 @@ const CollateralModal = ({
   title,
   supportText,
   handleClose,
-  handleActionButtonClick,
   connectedWalletAddress,
   walletIcon = <MetamaskIcon />,
   alertContainerTitle,
@@ -2037,7 +2037,7 @@ const CollateralModal = ({
       </div>
 
       {/* Debug Info */}
-      {debugInfo && (
+      {DEBUG_MODE && debugInfo && (
         <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
           <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
             Safe Transaction Tracker
@@ -2085,6 +2085,7 @@ const CollateralModal = ({
       )}
 
       {/* Config Debug Info */}
+      {DEBUG_MODE && <>
       <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
         <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
           Config Debug
@@ -2098,6 +2099,7 @@ const CollateralModal = ({
         </div>
       </div>
       <SafeDetector />
+      </>}
     </div>
   );
 };
@@ -2106,7 +2108,6 @@ CollateralModal.propTypes = {
   title: PropTypes.string.isRequired,
   supportText: PropTypes.string,
   handleClose: PropTypes.func.isRequired,
-  handleActionButtonClick: PropTypes.func.isRequired,
   connectedWalletAddress: PropTypes.string,
   walletIcon: PropTypes.element,
   alertContainerTitle: PropTypes.string.isRequired,

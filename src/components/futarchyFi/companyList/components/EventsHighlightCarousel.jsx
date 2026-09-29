@@ -39,6 +39,8 @@ const EventsHighlightCarousel = ({ companyId, useNewCard = false, aggregatorAddr
   const [swiper, setSwiper] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const searchParams = useSearchParams();
   const debugMode = searchParams.get('debugMode') === 'true';
   const [filteredEvents, setFilteredEvents] = useState([]);
@@ -47,6 +49,8 @@ const EventsHighlightCarousel = ({ companyId, useNewCard = false, aggregatorAddr
 
   useEffect(() => {
     const loadEvents = async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         // Pass aggregator and wallet for subgraph integration
         const data = await fetchEventHighlightData(companyId, {
@@ -56,13 +60,14 @@ const EventsHighlightCarousel = ({ companyId, useNewCard = false, aggregatorAddr
         setEvents(data);
       } catch (error) {
         console.error('Error loading event highlights:', error);
+        setLoadError(error);
       } finally {
         setLoading(false);
       }
     };
 
     loadEvents();
-  }, [companyId, aggregatorAddress, connectedWallet]);
+  }, [companyId, aggregatorAddress, connectedWallet, reloadKey]);
 
   useEffect(() => {
     const newFilteredEvents = debugMode
@@ -110,6 +115,22 @@ const EventsHighlightCarousel = ({ companyId, useNewCard = false, aggregatorAddr
     return (
       <div className="flex justify-center items-center h-[200px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
+      </div>
+    );
+  }
+
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col justify-center items-center gap-3 h-[200px] text-futarchyGray11">
+        <div className="text-sm">Event data is unavailable right now.</div>
+        <button
+          type="button"
+          onClick={() => setReloadKey(k => k + 1)}
+          className="px-3 py-1.5 text-xs rounded-lg border border-futarchyGray62 dark:border-futarchyGray112/40 hover:text-futarchyGray12 dark:hover:text-white transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }

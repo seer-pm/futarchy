@@ -14,6 +14,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   reactStrictMode: true,
+  // Strip console.log/info/debug from production bundles; errors and
+  // warnings stay so real failures still reach the console.
+  compiler: process.env.NODE_ENV === 'production'
+    ? { removeConsole: { exclude: ['error', 'warn'] } }
+    : {},
   rewrites: process.env.NODE_ENV === 'development' ? async () => {
     return [
       {

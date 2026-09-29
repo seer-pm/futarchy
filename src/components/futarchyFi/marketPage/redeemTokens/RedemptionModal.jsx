@@ -14,6 +14,7 @@ import {
 import FutarchyCartridge from "futarchy-sdk/executors/FutarchyCartridge";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
+import { DEBUG_MODE } from "../../../../config/featureFlags";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { isSafeWallet } from "../../../../utils/ethersAdapters";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
@@ -109,7 +110,7 @@ const TransactionParamsCollapse = ({ params, isWinningOutcomeYes }) => {
   const [copied, setCopied] = useState(false);
 
   // Check if debugMode is enabled in URL
-  const isDebugMode = typeof window !== 'undefined' &&
+  const isDebugMode = DEBUG_MODE && typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('debugMode') === 'true';
 
   if (!params || !isDebugMode) return null;
@@ -1113,7 +1114,7 @@ const RedemptionModal = ({
         )}
 
         {/* Debug Info */}
-        {debugInfo && (
+        {DEBUG_MODE && debugInfo && (
           <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
             <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
               Safe Transaction Tracker
