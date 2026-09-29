@@ -51,7 +51,8 @@ import DebugToast from './DebugToast';
 import { formatBalance, formatPrice, formatPercentage } from '../../../utils/formatters';
 import { Decimal } from 'decimal.js';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
-import { getEthersSigner, getEthersProvider, isSafeWallet } from '../../../utils/ethersAdapters';
+import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
+import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
@@ -648,6 +649,7 @@ const ConfirmSwapModal = memo(({
     const { address: account, isConnected, chain } = useAccount();
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
+    const isSafeConnection = useSafeConnection();
 
     // Effect to update swap method when chain changes
     useEffect(() => {
@@ -1105,7 +1107,7 @@ const ConfirmSwapModal = memo(({
                     // Wait for confirmation
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             throw new Error("SAFE_TRANSACTION_SENT");
@@ -1153,7 +1155,7 @@ const ConfirmSwapModal = memo(({
 
                         let receipt;
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                                 throw new Error("SAFE_TRANSACTION_SENT");
@@ -1380,7 +1382,7 @@ const ConfirmSwapModal = memo(({
                     { gasLimit: 2000000 }
                 );
                 // Check for Safe wallet
-                if (isSafeWallet(walletClient)) {
+                if (isSafeConnection(walletClient)) {
                     if (!useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         throw new Error("SAFE_TRANSACTION_SENT");
@@ -1416,7 +1418,7 @@ const ConfirmSwapModal = memo(({
                 try {
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             throw new Error("SAFE_TRANSACTION_SENT");
@@ -1860,7 +1862,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -1989,7 +1991,7 @@ const ConfirmSwapModal = memo(({
                     markSubstepCompleted(2, 3);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2106,7 +2108,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2188,7 +2190,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(redeemTx.hash); // Store Tx Hash
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2267,7 +2269,7 @@ const ConfirmSwapModal = memo(({
                     setTransactionResultHash(swapTx.hash);
 
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient) && !useBlockExplorer) {
+                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2328,7 +2330,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2451,7 +2453,7 @@ const ConfirmSwapModal = memo(({
                     let receipt;
                     try {
                         // Check for Safe wallet
-                        if (isSafeWallet(walletClient)) {
+                        if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                                 setOrderStatus('fulfilled');
@@ -2586,7 +2588,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');
@@ -2674,7 +2676,7 @@ const ConfirmSwapModal = memo(({
 
                     let receipt;
                     // Check for Safe wallet
-                    if (isSafeWallet(walletClient)) {
+                    if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                             setOrderStatus('fulfilled');

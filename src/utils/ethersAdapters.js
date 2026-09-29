@@ -75,8 +75,7 @@ export const getEthersSigner = (walletClient, publicClient) => {
     console.log('[DEBUG] getEthersSigner called with:', {
         walletClient: !!walletClient,
         walletClientAccount: walletClient?.account?.address,
-        publicClient: !!publicClient,
-        connectorType: walletClient?.connector?.name || 'unknown'
+        publicClient: !!publicClient
     });
 
     if (!walletClient) {
@@ -84,34 +83,11 @@ export const getEthersSigner = (walletClient, publicClient) => {
         return null;
     }
 
-    // Only use Web3Provider if the user actually connected via MetaMask injected wallet
-    // Don't override their wallet choice with MetaMask if they chose WalletConnect, etc.
-    const isMetaMaskConnector = walletClient?.connector?.name?.toLowerCase().includes('metamask') ||
-        walletClient?.connector?.name?.toLowerCase().includes('injected');
-
-    if (isMetaMaskConnector && typeof window !== 'undefined' && window.ethereum) {
-        try {
-            console.log('[DEBUG] User connected via MetaMask, attempting Web3Provider signer...');
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const connectedAddr = walletClient?.account?.address;
-            const providerSigner = connectedAddr ? provider.getSigner(connectedAddr) : provider.getSigner();
-
-            // Override getAddress to return the known connected address
-            providerSigner.getAddress = async function () {
-                console.log('[DEBUG] getAddress called on Web3Provider signer, returning:', connectedAddr);
-                return connectedAddr;
-            };
-
-            console.log('[DEBUG] Web3Provider signer setup complete for MetaMask connection');
-            return providerSigner;
-        } catch (error) {
-            console.warn('[DEBUG] Failed to create Web3Provider signer, falling back to custom implementation:', error);
-        }
-    } else {
-        console.log('[DEBUG] User connected via non-MetaMask wallet, using viem-based signer for:', walletClient?.connector?.name);
-    }
-
-    // Create a viem-based signer that respects the user's wallet choice
+    // Sign through the wallet client, which wagmi binds to the provider of the
+    // connector the user picked. A MetaMask branch here used to sign through
+    // window.ethereum instead; it keyed off walletClient.connector, which wagmi
+    // v2 wallet clients do not have, so it never ran. It must not: with Rabby
+    // installed, window.ethereum is Rabby even when the user picked MetaMask.
     console.log('[DEBUG] Creating viem-based signer...');
     const customSigner = {
         // Required ethers.js signer properties
@@ -265,9 +241,12 @@ export const getEthersSigner = (walletClient, publicClient) => {
     return customSigner;
 };
 
-export const isSafeWallet = (walletClient) => {
-    const connectorName = walletClient?.connector?.name?.toLowerCase() || '';
-    const connectorId = walletClient?.connector?.id?.toLowerCase() || '';
+// `connector` is the one from wagmi's useAccount(). wagmi v2 wallet clients do
+// not carry their connector, so `walletClient.connector` is only a fallback for
+// callers that have not been given one.
+export const isSafeWallet = (walletClient, connector = walletClient?.connector) => {
+    const connectorName = connector?.name?.toLowerCase() || '';
+    const connectorId = connector?.id?.toLowerCase() || '';
 
     // 1. Check Wagmi connector
     if (connectorName.includes('safe') || connectorId.includes('safe') || connectorName.includes('gnosis')) {
@@ -288,4 +267,13 @@ export const isSafeWallet = (walletClient) => {
     }
 
     return false;
+};
+
+// A Safe connected over WalletConnect uses the generic WalletConnect connector;
+// only the session's peer metadata says it is a Safe ("Safe{Wallet}",
+// app.safe.global).
+export const isSafePeerMetadata = (metadata) => {
+    const name = metadata?.name?.toLowerCase() || '';
+    const url = metadata?.url?.toLowerCase() || '';
+    return name.includes('safe') || url.includes('safe.global') || url.includes('gnosis-safe.io');
 };

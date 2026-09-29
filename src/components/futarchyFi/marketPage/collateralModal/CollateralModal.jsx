@@ -14,7 +14,8 @@ import {
   FUTARCHY_ROUTER_ABI,
   MARKET_ADDRESS
 } from "../constants/contracts";
-import { getEthersSigner, isSafeWallet } from "../../../../utils/ethersAdapters";
+import { getEthersSigner } from "../../../../utils/ethersAdapters";
+import { useSafeConnection } from "../../../../hooks/useSafeConnection";
 // import { useContractConfig } from "../../../../hooks/useContractConfig";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { useSafeDetection } from "../../../../hooks/useSafeDetection";
@@ -339,6 +340,7 @@ const CollateralModal = ({
 }) => {
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
+  const isSafeConnection = useSafeConnection();
   const { address: account, isConnected } = useAccount();
   // const { config, isLoading: configLoading } = useContractConfig();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
@@ -487,7 +489,7 @@ const CollateralModal = ({
         console.log(`[CollateralModal] ${tokenSymbol} approval transaction sent:`, approveTx.hash);
 
         // Check for Safe wallet
-        if (isSafeWallet(walletClient)) {
+        if (isSafeConnection(walletClient)) {
           if (!useBlockExplorer) {
             console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
             onSafeTransaction?.(); // Trigger toast
@@ -1618,7 +1620,7 @@ const CollateralModal = ({
         );
 
         // Check for Safe wallet
-        if (isSafeWallet(walletClient)) {
+        if (isSafeConnection(walletClient)) {
           if (!useBlockExplorer) {
             console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
             markSubstepCompleted(1, 3);
