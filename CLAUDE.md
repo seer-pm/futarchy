@@ -66,7 +66,7 @@ npm run merge <proposalAddr>  # Merge conditional tokens back to collateral
 - **Blockchain**: Ethers.js v5 (main app), v6 (swapr CLI), Wagmi v2, RainbowKit
 - **Styling**: Tailwind CSS, CSS Modules, PrimeReact components
 - **State Management**: React Context API, TanStack Query
-- **Package Manager**: npm (`package-lock.json`; Netlify runs `npm install --legacy-peer-deps`). The `packageManager: pnpm` field in package.json is stale — there is no pnpm lockfile.
+- **Package Manager**: npm (`package-lock.json`; Netlify runs `npm install --legacy-peer-deps`).
 
 ### Key Directories
 
