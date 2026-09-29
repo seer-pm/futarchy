@@ -4965,4 +4965,6 @@ const ConfirmSwapModal = memo(({
     return ReactDOM.createPortal(modalContent, portalRoot);
 });
 
+ConfirmSwapModal.displayName = 'ConfirmSwapModal';
+
 export default ConfirmSwapModal;

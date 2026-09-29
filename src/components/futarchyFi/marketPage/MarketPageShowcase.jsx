@@ -1406,6 +1406,8 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
     JSON.stringify(prevProps.config) === JSON.stringify(nextProps.config);
 });
 
+TradeHistoryTable.displayName = 'TradeHistoryTable';
+
 // PriceHeader component for mobile price display
 const YourViewCard = ({ subject }) => (
   <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">

@@ -67,7 +67,6 @@ const connectors = connectorsForWallets([
         chains,
         projectId,
         allowedDomains: [/gnosis-safe.io$/, /app.safe.global$/, /.*\.trycloudflare\.com$/, /.*\.ngrok-free\.app$/, /.*\.ngrok\.io$/],
-        debug: true,
       }),
       eip6963MetaMaskWallet,
       walletConnectWallet,
