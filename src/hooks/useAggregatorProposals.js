@@ -165,15 +165,13 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     };
 }
 
-// Candles checkpoint indexer — single endpoint serves both chains;
-// IDs use the form "<chainId>-<address>" so we can query in one shot.
-const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
-
 /**
  * Bulk fetch CONDITIONAL pool addresses for a list of proposals.
  *
- * Issues a single query against the candles indexer:
- *   pools(where: { proposal_in: ["100-0x…", "1-0x…"] })
+ * The candles indexer is routed per chain (getSubgraphEndpoint: Gnosis
+ * at /candles/graphql, Ethereum at ?chainId=1), so proposals are grouped
+ * by chain and each group gets one query:
+ *   pools(where: { proposal_in: ["0x…", …] })
  * The Checkpoint schema has no reverse Proposal.pools field, so we
  * query Pool directly and group by proposal id.
  *
@@ -181,27 +179,38 @@ const CANDLES_GRAPHQL_URL = getSubgraphEndpoint(100);
  * so callers don't need to know the ID format.
  */
 async function bulkFetchPoolsByChain(proposals) {
-    const ids = [];
+    const idsByChain = new Map();
     for (const p of proposals) {
         if (!p.proposalAddress) continue;
-        ids.push(p.proposalAddress.toLowerCase());
+        const chainId = Number(p.chainId) === 1 ? 1 : 100;
+        if (!idsByChain.has(chainId)) idsByChain.set(chainId, []);
+        idsByChain.get(chainId).push(p.proposalAddress.toLowerCase());
     }
-
-    if (ids.length === 0) return {};
 
     // Both homepage transformers ask for the same proposal set, so share
     // the request rather than hitting the candles indexer twice. Failures
-    // are handled here so they never land in the cache.
-    try {
-        return await cachedOnce(`pools:${ids.slice().sort().join(',')}`, () => fetchPoolsByIds(ids));
-    } catch (e) {
-        console.warn('[🔗 REGISTRY-POOLS] candles fetch failed:', e.message);
-        return {};
-    }
+    // are handled per chain so one index outage doesn't blank the other,
+    // and so they never land in the cache.
+    const maps = await Promise.all([...idsByChain.entries()].map(async ([chainId, ids]) => {
+        try {
+            return await cachedOnce(
+                `pools:${chainId}:${ids.slice().sort().join(',')}`,
+                () => fetchPoolsByIds(ids, chainId)
+            );
+        } catch (e) {
+            console.warn(`[🔗 REGISTRY-POOLS] candles fetch failed for chain ${chainId}:`, e.message);
+            return {};
+        }
+    }));
+
+    return Object.assign({}, ...maps);
 }
 
-async function fetchPoolsByIds(ids) {
-    console.log(`[🔗 REGISTRY-POOLS] Bulk-fetching pools for ${ids.length} proposals`);
+async function fetchPoolsByIds(ids, chainId) {
+    const endpoint = getSubgraphEndpoint(chainId);
+    if (!endpoint) return {};
+
+    console.log(`[🔗 REGISTRY-POOLS] Bulk-fetching pools for ${ids.length} proposals on chain ${chainId}`);
 
     const query = `
         query GetProposalPools($ids: [String!]!) {
@@ -214,7 +223,7 @@ async function fetchPoolsByIds(ids) {
         }
     `;
 
-    const response = await fetch(CANDLES_GRAPHQL_URL, {
+    const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { ids } }),
