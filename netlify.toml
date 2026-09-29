@@ -46,6 +46,28 @@
   status = 301
   force = true
 
+# Retired routes. /gnosis/milestones was a Gnosis-only proposal list (its
+# pages are gone) and bare /markets has no market to show; send both to the
+# company list. Bare /market can't be matched here (rules ignore whether a
+# query is present), so src/pages/market.js redirects it client-side.
+[[redirects]]
+  from = "/gnosis/milestones"
+  to = "/companies"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/gnosis/milestones/*"
+  to = "/companies"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/markets"
+  to = "/companies"
+  status = 301
+  force = true
+
 # Security headers
 [[headers]]
   for = "/*"

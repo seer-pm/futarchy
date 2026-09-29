@@ -6,11 +6,20 @@ import Link from 'next/link';
 // and preserve any query string / hash.
 const MARKET_PATH = /^\/markets?\/(0x[0-9a-fA-F]{40})\/?$/;
 
+// Retired routes that should land on the company list. netlify.toml 301s
+// these on the deployed site; this covers any other static host.
+const LEGACY_COMPANY_LIST_PATH = /^\/gnosis\/milestones(\/.*)?$/;
+
 export default function Custom404() {
   const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (LEGACY_COMPANY_LIST_PATH.test(window.location.pathname)) {
+      setRedirecting(true);
+      window.location.replace('/companies');
+      return;
+    }
     const m = window.location.pathname.match(MARKET_PATH);
     if (!m) return;
 

@@ -2,8 +2,7 @@ import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { DEFAULT_PROPOSAL_ID } from '../components/futarchyFi/marketPage/constants/contracts';
-import { getStaticMarketAddresses } from '../config/markets';
+import { STATIC_MARKET_ADDRESSES } from '../config/marketAddresses';
 
 // This route almost always redirects to /markets/:address — it only renders
 // the showcase for a market that is not in the static config. Loading the
@@ -15,7 +14,7 @@ const MarketPageShowcase = dynamic(
 );
 
 const CONFIGURED_MARKETS = new Set(
-  getStaticMarketAddresses().map((address) => (address || '').toLowerCase())
+  STATIC_MARKET_ADDRESSES.map((address) => (address || '').toLowerCase())
 );
 
 const SUPERSEDED_MARKETS = {
@@ -79,13 +78,13 @@ const MarketPage = () => {
     // Check if no query parameters are provided
     if (!router.isReady) return;
 
-    const hasQueryParams = Object.keys(router.query || {}).length > 0;
     const proposalId = proposalIdFromQuery ? String(proposalIdFromQuery).trim() : '';
     const canonicalProposalId = SUPERSEDED_MARKETS[proposalId.toLowerCase()] || proposalId;
 
-    if (!hasQueryParams) {
-      // Redirect to market page with default proposal ID
-      router.replace(`/markets/${DEFAULT_PROPOSAL_ID}`);
+    if (!proposalId) {
+      // No market selected: the old default proposal resolved long ago, so
+      // send visitors to the company list instead.
+      router.replace('/companies');
       return;
     }
 
@@ -105,7 +104,7 @@ const MarketPage = () => {
   }, [router, proposalIdFromQuery]);
   
   // Don't render the component if we're redirecting
-  if (!router.isReady || Object.keys(router.query || {}).length === 0) {
+  if (!router.isReady || !proposalIdFromQuery) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>
