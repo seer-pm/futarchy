@@ -84,7 +84,7 @@ export const MOCK_MARKETS = [
             "description": "Auto-generated pool for futarchy governance norm prediction.",
             "numOutcomes": 4,
             "openingTime": 1763164800,
-            "questionLink": "https://reality.eth.limo/app/#!/network/100/question/0xe78996a233895be74a66f451f1019ca9734205cc-0x61cdde8a313fdb5f61f09e7e327400debdf0dd38656e5ee9a2b4491b5cc5bfcf/token/XDAI",
+            "questionLink": "https://reality.eth.limo/#!/network/100/question/0xe78996a233895be74a66f451f1019ca9734205cc-0x61cdde8a313fdb5f61f09e7e327400debdf0dd38656e5ee9a2b4491b5cc5bfcf",
             "companyTokens": {
                 "no": {
                     "tokenName": "NO_GNO",
@@ -236,7 +236,7 @@ export const MOCK_MARKETS = [
             "description": "Predict whether Gnosis (GNO) will trade at or above 130 sDAI (Savings xDAI) by December 28, 2025, at 11:59 PM. Join the market to forecast GNO’s long-term price movement, stake your opinion with sDAI, and see where traders think GNO is headed.",
             "numOutcomes": 4,
             "openingTime": 1766966340,
-            "questionLink": "https://reality.eth.limo/app/#!/network/100/question/0xe78996a233895be74a66f451f1019ca9734205cc-0x8bd52d71cebe9643931254061d93960caafa1053dacd940396df021917df6df0/token/XDAI",
+            "questionLink": "https://reality.eth.limo/#!/network/100/question/0xe78996a233895be74a66f451f1019ca9734205cc-0x8bd52d71cebe9643931254061d93960caafa1053dacd940396df021917df6df0",
             "companyTokens": {
                 "no": {
                     "tokenName": "NO_GNO",

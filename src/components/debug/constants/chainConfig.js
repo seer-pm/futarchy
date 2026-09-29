@@ -1,3 +1,5 @@
+import { buildRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
+
 // Multi-chain configuration for Create Proposal and Pool features
 // Supports Ethereum (1) and Gnosis (100)
 
@@ -143,7 +145,7 @@ export const getRealityQuestionUrl = async (chainId, proposalAddress) => {
     const questionId = await fetchQuestionId(chainId, proposalAddress);
     if (!questionId) return null;
 
-    return `https://reality.eth.limo/app/#!/network/${chainId}/token/${config.token}/question/${config.contract}-${questionId}`;
+    return buildRealityQuestionUrl(chainId, config.contract, questionId);
 };
 
 /**
@@ -156,7 +158,7 @@ export const getRealityQuestionUrlSync = (chainId, questionId) => {
     const config = REALITY_CONFIG[chainId];
     if (!config || !questionId) return null;
 
-    return `https://reality.eth.limo/app/#!/network/${chainId}/token/${config.token}/question/${config.contract}-${questionId}`;
+    return buildRealityQuestionUrl(chainId, config.contract, questionId);
 };
 
 // Default chain

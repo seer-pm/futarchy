@@ -47,6 +47,7 @@ import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from "../../../const
 import { useContractConfig } from "../../../hooks/useContractConfig";
 import { useChainValidation } from "../../../hooks/useChainValidation";
 import { getRealityQuestionUrl } from '../../debug/constants/chainConfig';
+import { computeImpactPercent, formatImpactPercent, normalizeRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
 import WrongNetworkModal from "../../common/WrongNetworkModal";
 import { retryRpcCall } from '../../../utils/retryWithBackoff';
 import CreatePoolModal from './CreatePoolModal';
@@ -2983,7 +2984,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
         title: marketInfo.title || "Market Event",
         description: marketInfo.description || "This conditional market on Gnosis Chain evaluates whether Circle will will deploy native USDC on gnosis chain before December 31 2025",
         question_title: marketInfo.title || null,
-        question_link: marketInfo.questionLink || null,
+        question_link: normalizeRealityQuestionUrl(marketInfo.questionLink, config?.chainId) || null,
         isLoading: false,
         error: null
       };
