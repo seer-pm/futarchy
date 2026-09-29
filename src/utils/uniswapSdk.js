@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { isSafeWallet } from './ethersAdapters';
+import { SAFE_TRANSACTION_SENT, assertReceiptSucceeded } from './txErrors.js';
 import { approvalAmountFor } from './approvalAmount';
 import { quoteUniswapV3ExactInput } from './uniswapV3Quote.mjs';
 
@@ -344,7 +345,7 @@ async function checkPermit2Approval(tokenAddress, ownerAddress, provider, chainI
 /**
  * Approve token to Permit2 (Step 1 of cartridge flow)
  */
-export async function approveTokenToPermit2(tokenAddress, signer, walletClient = null, publicClient = null, amount) {
+export async function approveTokenToPermit2(tokenAddress, signer, walletClient = null, publicClient = null, amount, connector) {
   if (amount == null) throw new Error('Required approval amount is missing');
   const isEthersSigner = signer && signer.getChainId && typeof signer.getChainId === 'function' && !signer._isSigner;
 
@@ -378,9 +379,9 @@ export async function approveTokenToPermit2(tokenAddress, signer, walletClient =
     });
 
     // Check for Safe wallet
-    if (walletClient && isSafeWallet(walletClient)) {
+    if (walletClient && isSafeWallet(walletClient, connector)) {
       console.log('[approveTokenToPermit2] Safe wallet detected - skipping wait() and throwing SAFE_TRANSACTION_SENT');
-      throw new Error("SAFE_TRANSACTION_SENT");
+      throw new Error(SAFE_TRANSACTION_SENT);
     }
 
     return { hash };
@@ -390,7 +391,7 @@ export async function approveTokenToPermit2(tokenAddress, signer, walletClient =
 /**
  * Approve Permit2 to Universal Router (Step 2 of cartridge flow)
  */
-export async function approvePermit2ToRouter(tokenAddress, signer, amount, duration = 'max', walletClient = null, publicClient = null, chainId = null) {
+export async function approvePermit2ToRouter(tokenAddress, signer, amount, duration = 'max', walletClient = null, publicClient = null, chainId = null, connector) {
   if (amount == null) throw new Error('Required Permit2 approval amount is missing');
   const isEthersSigner = signer && signer.getChainId && typeof signer.getChainId === 'function' && !signer._isSigner;
 
@@ -440,9 +441,9 @@ export async function approvePermit2ToRouter(tokenAddress, signer, amount, durat
     tx = { hash };
 
     // Check for Safe wallet
-    if (walletClient && isSafeWallet(walletClient)) {
+    if (walletClient && isSafeWallet(walletClient, connector)) {
       console.log('[approvePermit2ToRouter] Safe wallet detected - skipping wait() and throwing SAFE_TRANSACTION_SENT');
-      throw new Error("SAFE_TRANSACTION_SENT");
+      throw new Error(SAFE_TRANSACTION_SENT);
     }
   }
 
@@ -462,7 +463,8 @@ export async function executeUniswapV3Swap({
   signer,
   walletClient = null,
   publicClient = null,
-  account = null
+  account = null,
+  connector // wagmi useAccount() connector, for Safe detection
 }) {
   const isEthersSigner = signer && signer.getChainId && typeof signer.getChainId === 'function' && !signer._isSigner;
 
@@ -490,24 +492,24 @@ export async function executeUniswapV3Swap({
 
   if (erc20Allowance.lt(approvalAmount)) {
       console.log('[UniswapSDK] ERC20 approval to Permit2 needed, approving...');
-      const approveTx = await approveTokenToPermit2(tokenIn, signer, walletClient, publicClient, approvalAmount);
+      const approveTx = await approveTokenToPermit2(tokenIn, signer, walletClient, publicClient, approvalAmount, connector);
 
       if (isEthersSigner) {
         await approveTx.wait();
       } else {
-        await publicClient.waitForTransactionReceipt({ hash: approveTx.hash });
+        assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash: approveTx.hash }), approveTx.hash);
       }
       console.log('[UniswapSDK] ERC20 approval to Permit2 completed');
   }
 
   if (!permit2Status.isApproved || permit2Status.amount.lt(approvalAmount)) {
     console.log('[UniswapSDK] Approving Permit2 to Universal Router...');
-    const permit2Tx = await approvePermit2ToRouter(tokenIn, signer, approvalAmount, 'max', walletClient, publicClient, chainId);
+    const permit2Tx = await approvePermit2ToRouter(tokenIn, signer, approvalAmount, 'max', walletClient, publicClient, chainId, connector);
 
     if (isEthersSigner) {
       await permit2Tx.wait();
     } else {
-      await publicClient.waitForTransactionReceipt({ hash: permit2Tx.hash });
+      assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash: permit2Tx.hash }), permit2Tx.hash);
     }
     console.log('[UniswapSDK] Permit2 approval to Router completed');
   } else {
@@ -601,9 +603,9 @@ export async function executeUniswapV3Swap({
     tx = { hash };
 
     // Check for Safe wallet
-    if (walletClient && isSafeWallet(walletClient)) {
+    if (walletClient && isSafeWallet(walletClient, connector)) {
       console.log('[executeUniswapV3Swap] Safe wallet detected - skipping wait() and throwing SAFE_TRANSACTION_SENT');
-      throw new Error("SAFE_TRANSACTION_SENT");
+      throw new Error(SAFE_TRANSACTION_SENT);
     }
   }
 
@@ -841,7 +843,8 @@ export async function checkAndApproveForUniswapSDK(
   useUnlimitedApproval = false, // New parameter: false = exact amount, true = unlimited
   walletClient = null, // viem wallet client for mobile support
   publicClient = null, // viem public client for reading
-  account = null // user address for viem
+  account = null, // user address for viem
+  connector // wagmi useAccount() connector, for Safe detection
 ) {
   // Detect if we're using viem or ethers
   const isEthersSigner = signer && signer.getChainId && typeof signer.getChainId === 'function' && !signer._isSigner;
@@ -907,7 +910,11 @@ export async function checkAndApproveForUniswapSDK(
           functionName: 'approve',
           args: [permit2Address, approvalAmount.toString()]
         });
-        await publicClient.waitForTransactionReceipt({ hash });
+        if (isSafeWallet(walletClient, connector)) {
+          console.log('[UniswapSDK] Safe wallet detected - skipping wait() and throwing SAFE_TRANSACTION_SENT');
+          throw new Error(SAFE_TRANSACTION_SENT);
+        }
+        assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
       }
 
       console.log(`[UniswapSDK] ERC20 approval completed (amount: ${approvalAmount.toString()})`);
@@ -923,12 +930,12 @@ export async function checkAndApproveForUniswapSDK(
       if (onStepComplete) onStepComplete(2, false); // Step 2 starting
 
       const permit2Amount = approvalAmountFor(amountToApprove, useUnlimitedApproval, MAX_UINT160);
-      const permit2Tx = await approvePermit2ToRouter(tokenAddress, signer, permit2Amount, 'max', walletClient, publicClient, chainId);
+      const permit2Tx = await approvePermit2ToRouter(tokenAddress, signer, permit2Amount, 'max', walletClient, publicClient, chainId, connector);
 
       if (isEthersSigner) {
         await permit2Tx.wait();
       } else {
-        await publicClient.waitForTransactionReceipt({ hash: permit2Tx.hash });
+        assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash: permit2Tx.hash }), permit2Tx.hash);
       }
 
       console.log('[UniswapSDK] Permit2 approval completed');
@@ -959,7 +966,8 @@ export async function executeSwapForUniswapSDK(
   walletClient = null,
   publicClient = null,
   account = null,
-  outputDecimals = 18
+  outputDecimals = 18,
+  connector // wagmi useAccount() connector, for Safe detection
 ) {
   const isEthersSigner = signer && signer.getChainId && typeof signer.getChainId === 'function' && !signer._isSigner;
 
@@ -989,7 +997,8 @@ export async function executeSwapForUniswapSDK(
       signer,
       walletClient,
       publicClient,
-      account
+      account,
+      connector
     });
 
     return tx;

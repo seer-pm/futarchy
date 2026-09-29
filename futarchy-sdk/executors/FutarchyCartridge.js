@@ -2,6 +2,7 @@
 
 import { parseEther, formatEther } from 'viem';
 import { waitForSafeTxReceipt } from '../../src/utils/waitForSafeTxReceipt';
+import { assertReceiptSucceeded, isSafeTransactionSent } from '../../src/utils/txErrors';
 
 // =============================================================================
 // FUTARCHY ROUTER ABI
@@ -278,7 +279,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -338,7 +339,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -398,7 +399,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -459,7 +460,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -567,7 +568,7 @@ export class FutarchyCartridge {
                 });
             }
         } else {
-            receipt = await publicClient.waitForTransactionReceipt({ hash });
+            receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
         }
 
         yield {
@@ -722,7 +723,7 @@ export class FutarchyCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete split failed: ${error.message}`,
@@ -892,7 +893,7 @@ export class FutarchyCartridge {
             }
 
         } catch (error) {
-            if (error.message === "SAFE_TRANSACTION_SENT") throw error;
+            if (isSafeTransactionSent(error)) throw error;
             yield {
                 status: 'error',
                 message: `Complete merge failed: ${error.message}`,

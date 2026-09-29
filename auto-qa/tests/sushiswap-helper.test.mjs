@@ -286,14 +286,16 @@ test('hazard H1 — futarchy.js:1238 still calls fetchSushiSwapRoute POSITIONALL
         `or the call site moved (re-pin under new location).`);
 });
 
-test('hazard H1 — ShowcaseSwapComponent.jsx still uses the CORRECT destructured form', async () => {
-    // Sanity-pin the working call site so a refactor that breaks it
-    // would surface here.
-    // The call and the six lines after it (what `grep -A 6` used to return).
+test('hazard H1 — ShowcaseSwapComponent.jsx never calls fetchSushiSwapRoute positionally', async () => {
+    // Its only call site sat in a handleConfirmSwap that nothing invoked
+    // (it signed through window.ethereum) and was removed. Should a call come
+    // back, it must use the destructured {tokenIn, ...} form.
     const lines = readFileSync(
         resolve(REPO_ROOT, 'src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx'),
         'utf8',
     ).split(/\r?\n/);
+    if (!lines.some(line => line.includes('fetchSushiSwapRoute('))) return;
+    // The call and the six lines after it (what `grep -A 6` used to return).
     const at = lines.findIndex(line => line.includes('fetchSushiSwapRoute({'));
     const out = at === -1 ? '' : lines.slice(at, at + 7).join('\n');
     assert.ok(out.includes('tokenIn'),

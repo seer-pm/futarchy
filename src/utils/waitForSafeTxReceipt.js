@@ -1,3 +1,5 @@
+import { isReceiptReverted, revertedTransactionError } from './txErrors.js';
+
 const SAFE_TX_SERVICE_URLS = {
     1: 'https://safe-transaction-mainnet.safe.global',
     100: 'https://safe-transaction-gnosis-chain.safe.global',
@@ -5,8 +7,30 @@ const SAFE_TX_SERVICE_URLS = {
     // Add other chains as needed
 };
 
+// keccak256("ExecutionFailure(bytes32,uint256)"): emitted by the Safe when the
+// inner call of execTransaction fails. The outer transaction still succeeds.
+export const SAFE_EXECUTION_FAILURE_TOPIC = '0x23428b18acfb3ea64b08dc0c1d296ea9c09702c09083ca5272e64d115b687d23';
+
+/**
+ * Whether an executed Safe transaction failed. The on-chain receipt belongs to
+ * the Safe's execTransaction call, which succeeds even when the call it wraps
+ * reverts, so we also look at the tx service's `isSuccessful` and for the
+ * Safe's ExecutionFailure event for this safeTxHash.
+ */
+export const safeExecutionFailed = ({ safeTx, receipt, safeTxHash }) => {
+    if (isReceiptReverted(receipt)) return true;
+    if (safeTx?.isSuccessful === false) return true;
+    const wanted = safeTxHash?.toLowerCase().replace(/^0x/, '');
+    return (receipt?.logs || []).some((log) =>
+        log?.topics?.[0]?.toLowerCase() === SAFE_EXECUTION_FAILURE_TOPIC &&
+        (!wanted || (log.data || '').toLowerCase().includes(wanted))
+    );
+};
+
 /**
  * Waits for a Safe tx to be executed on-chain, then returns a normal viem receipt.
+ * Throws (CALL_EXCEPTION, like a reverted ethers wait()) if the Safe executed
+ * the transaction but its inner call failed.
  */
 export async function waitForSafeTxReceipt({
     chainId,
@@ -64,6 +88,17 @@ export async function waitForSafeTxReceipt({
 
                 // 2) Now wait on-chain using viem
                 const receipt = await publicClient.waitForTransactionReceipt({ hash: realHash });
+
+                if (safeExecutionFailed({ safeTx, receipt, safeTxHash })) {
+                    onStatus?.({
+                        status: 'FAILED',
+                        message: 'Safe executed the transaction, but it failed.',
+                        safeTxHash,
+                        txHash: realHash,
+                        receipt
+                    });
+                    throw revertedTransactionError(receipt, realHash);
+                }
 
                 onStatus?.({
                     status: 'CONFIRMED',

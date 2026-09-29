@@ -1,75 +1,31 @@
 import { ethers } from 'ethers';
+import { assertReceiptSucceeded } from './txErrors.js';
 
+// An ethers v5 provider that reads through wagmi's public client, i.e. the RPC
+// for the chain wagmi is on. It used to wrap window.ethereum, which is whatever
+// extension won the injection race (Rabby, Coinbase, ...), not necessarily the
+// wallet the user connected, and is missing entirely for WalletConnect users.
 export const getEthersProvider = (publicClient) => {
     if (!publicClient) return null;
 
-    // Always try to use Web3Provider when window.ethereum is available
-    if (typeof window !== 'undefined' && window.ethereum) {
-        return new ethers.providers.Web3Provider(window.ethereum);
-    }
-
-    // For other cases, create a minimal provider adapter
-    return {
-        async getNetwork() {
-            return {
-                chainId: publicClient.chain.id,
-                name: publicClient.chain.name
-            };
-        },
-        async call(transaction, blockTag = 'latest') {
-            try {
-                return await publicClient.call({ ...transaction, blockTag });
-            } catch (error) {
-                console.error('Provider call failed:', error);
-                throw error;
-            }
-        },
-        async getBalance(address, blockTag = 'latest') {
-            try {
-                return await publicClient.getBalance({ address, blockTag });
-            } catch (error) {
-                console.error('Provider getBalance failed:', error);
-                throw error;
-            }
-        },
-        async getBlockNumber() {
-            try {
-                return await publicClient.getBlockNumber();
-            } catch (error) {
-                console.error('Provider getBlockNumber failed:', error);
-                throw error;
-            }
-        },
-        async getGasPrice() {
-            try {
-                return await publicClient.getGasPrice();
-            } catch (error) {
-                console.warn('Provider getGasPrice failed, using default:', error);
-                return ethers.utils.parseUnits('1', 'gwei'); // Default fallback
-            }
-        },
-        async estimateGas(transaction) {
-            try {
-                return await publicClient.estimateGas(transaction);
-            } catch (error) {
-                console.error('Provider estimateGas failed:', error);
-                throw error;
-            }
-        },
-        async getTransactionCount(address, blockTag = 'latest') {
-            try {
-                return await publicClient.getTransactionCount({ address, blockTag });
-            } catch (error) {
-                console.error('Provider getTransactionCount failed:', error);
-                throw error;
-            }
-        },
-        // Mark this as a provider
-        _isProvider: true,
-        // Store the public client for reference
-        _publicClient: publicClient
+    const eip1193 = {
+        request: ({ method, params }) => publicClient.request({ method, params }),
     };
+    const chainId = publicClient.chain?.id;
+    if (!chainId) return new ethers.providers.Web3Provider(eip1193);
+    const network = ethers.providers.getNetwork(chainId) || { chainId, name: `chain-${chainId}` };
+    return new ethers.providers.Web3Provider(eip1193, network);
 };
+
+// ethers v5 shape for a viem receipt, as returned by the custom signer's wait().
+const toEthersReceipt = (receipt, confirmations) => ({
+    status: receipt.status === 'success' ? 1 : 0,
+    transactionHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    gasUsed: receipt.gasUsed,
+    confirmations,
+    logs: receipt.logs
+});
 
 export const getEthersSigner = (walletClient, publicClient) => {
     console.log('[DEBUG] getEthersSigner called with:', {
@@ -125,15 +81,11 @@ export const getEthersSigner = (walletClient, publicClient) => {
                         });
 
                         console.log('Transaction confirmed:', receipt);
-                        return {
-                            status: receipt.status === 'success' ? 1 : 0,
-                            transactionHash: receipt.transactionHash,
-                            blockNumber: receipt.blockNumber,
-                            gasUsed: receipt.gasUsed,
-                            confirmations: confirmations,
-                            logs: receipt.logs
-                        };
+                        // Like ethers v5, a reverted transaction rejects wait()
+                        // instead of resolving with status 0.
+                        return assertReceiptSucceeded(toEthersReceipt(receipt, confirmations), hash);
                     } catch (error) {
+                        if (error?.code === 'CALL_EXCEPTION') throw error;
                         console.error('Transaction confirmation error:', error);
 
                         // If it's a timeout, we might want to check if the transaction exists
@@ -143,16 +95,10 @@ export const getEthersSigner = (walletClient, publicClient) => {
                             try {
                                 const receipt = await publicClient.getTransactionReceipt({ hash });
                                 if (receipt) {
-                                    return {
-                                        status: receipt.status === 'success' ? 1 : 0,
-                                        transactionHash: receipt.transactionHash,
-                                        blockNumber: receipt.blockNumber,
-                                        gasUsed: receipt.gasUsed,
-                                        confirmations: confirmations,
-                                        logs: receipt.logs
-                                    };
+                                    return assertReceiptSucceeded(toEthersReceipt(receipt, confirmations), hash);
                                 }
                             } catch (retryError) {
+                                if (retryError?.code === 'CALL_EXCEPTION') throw retryError;
                                 console.warn('Retry fetch receipt failed:', retryError);
                             }
                         }

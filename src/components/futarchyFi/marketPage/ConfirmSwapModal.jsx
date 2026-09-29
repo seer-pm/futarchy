@@ -54,6 +54,7 @@ import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter
 import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
+import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE } from '../../../utils/txErrors';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { approvalAmountFor } from '../../../utils/approvalAmount';
 
@@ -646,7 +647,7 @@ const ConfirmSwapModal = memo(({
     }, [getSafeSlippageTolerance]);
 
     // Replace useMetaMask with wagmi hooks
-    const { address: account, isConnected, chain } = useAccount();
+    const { address: account, isConnected, chain, connector } = useAccount();
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
     const isSafeConnection = useSafeConnection();
@@ -790,26 +791,27 @@ const ConfirmSwapModal = memo(({
 
     // Helper function to format transaction-related errors
     const formatTransactionError = (rawError, txId) => {
+        // A declined signature is not a failure worth explaining
+        if (isUserRejection(rawError)) {
+            return TX_CANCELLED_MESSAGE;
+        }
+
         if (txId) {
             return `Transaction Failed. ID: ${txId}. Please check details and try again.`;
         }
 
-        let message = '';
-        if (rawError && rawError.message) {
-            message = rawError.message;
-        } else if (typeof rawError === 'string') {
-            message = rawError;
-        } else {
-            message = rawError.toString();
-        }
+        // viem's shortMessage / the first line only: the full message carries
+        // request arguments and calldata that would flood the modal
+        const message = describeTxError(rawError, '');
 
         // Check for slippage-related errors first
         const slippageKeywords = [
             "too little received", "insufficient output amount", "slippage",
             "amountOutMinimum", "price impact", "output amount"
         ];
+        const fullMessage = `${message} ${rawError?.message || ''}`.toLowerCase();
         const isSlippageError = slippageKeywords.some(keyword =>
-            message.toLowerCase().includes(keyword.toLowerCase())
+            fullMessage.includes(keyword.toLowerCase())
         );
 
         if (isSlippageError) {
@@ -1110,7 +1112,7 @@ const ConfirmSwapModal = memo(({
                     if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error("SAFE_TRANSACTION_SENT");
+                            throw new Error(SAFE_TRANSACTION_SENT);
                         } else {
                             console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                             const chainId = await walletClient.getChainId();
@@ -1123,6 +1125,7 @@ const ConfirmSwapModal = memo(({
                     } else {
                         receipt = await publicClient.waitForTransactionReceipt({ hash });
                     }
+                    assertReceiptSucceeded(receipt, hash);
                     console.log('Approval confirmed:', receipt);
                 } else {
                     console.log(`Token already approved (allowance: ${allowance.toString()})`);
@@ -1158,7 +1161,7 @@ const ConfirmSwapModal = memo(({
                         if (isSafeConnection(walletClient)) {
                             if (!useBlockExplorer) {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                                throw new Error("SAFE_TRANSACTION_SENT");
+                                throw new Error(SAFE_TRANSACTION_SENT);
                             } else {
                                 console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                                 const chainId = await walletClient.getChainId();
@@ -1178,8 +1181,11 @@ const ConfirmSwapModal = memo(({
                             ]);
                         }
 
+                        assertReceiptSucceeded(receipt, tx.hash);
                         console.log('Approval confirmed:', receipt);
                     } catch (error) {
+                        // Pass the Safe "queued" signal through untouched
+                        if (isSafeTransactionSent(error)) throw error;
                         console.error('Approval transaction failed:', error);
                         throw new Error(`Token approval failed: ${error.message}`);
                     }
@@ -1269,6 +1275,10 @@ const ConfirmSwapModal = memo(({
 
                 for await (const status of iterator) {
                     console.log('[ConfirmSwapModal] SDK Status:', status);
+                    // The SDK reports failures (e.g. a reverted receipt) as an error status
+                    if (status.status === 'error') {
+                        throw new Error(status.message || status.error);
+                    }
 
                     // Map SDK steps to UI steps
                     if (status.step.includes('approv')) {
@@ -1385,7 +1395,7 @@ const ConfirmSwapModal = memo(({
                 if (isSafeConnection(walletClient)) {
                     if (!useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        throw new Error("SAFE_TRANSACTION_SENT");
+                        throw new Error(SAFE_TRANSACTION_SENT);
                     } else {
                         console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                         const chainId = await walletClient.getChainId();
@@ -1421,7 +1431,7 @@ const ConfirmSwapModal = memo(({
                     if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
                             console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error("SAFE_TRANSACTION_SENT");
+                            throw new Error(SAFE_TRANSACTION_SENT);
                         } else {
                             console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
                             const chainId = await walletClient.getChainId();
@@ -1445,6 +1455,8 @@ const ConfirmSwapModal = memo(({
                         throw new Error(`Transaction failed with status: ${receipt.status}`);
                     }
                 } catch (confirmError) {
+                    // Pass the Safe "queued" signal through untouched
+                    if (isSafeTransactionSent(confirmError)) throw confirmError;
                     console.error('Error confirming split position transaction:', confirmError);
                     throw new Error(`Transaction confirmation failed: ${confirmError.message}`);
                 }
@@ -1466,7 +1478,7 @@ const ConfirmSwapModal = memo(({
             return true;
         } catch (error) {
             // Handle Safe transaction signal
-            if (error.message === "SAFE_TRANSACTION_SENT") {
+            if (isSafeTransactionSent(error)) {
                 console.log('[ConfirmSwapModal] Safe transaction sent in collateral action - closing modal');
                 onSafeTransaction?.();
                 onClose();
@@ -1793,6 +1805,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalCow = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
@@ -1827,6 +1840,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalAlgebraRedeem = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -1868,6 +1882,7 @@ const ConfirmSwapModal = memo(({
                             setOrderStatus('fulfilled');
                             setProcessingStep('completed');
                             setIsProcessing(false);
+                            onTransactionComplete?.();
                             onClose(); // Auto-close for Safe
                             return;
                         } else {
@@ -1898,6 +1913,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -1951,7 +1967,8 @@ const ConfirmSwapModal = memo(({
                         useUnlimitedApproval,
                         walletClient,
                         publicClient,
-                        account
+                        account,
+                        connector
                     );
 
                     // Mark substep 2 as completed if not already done
@@ -1979,7 +1996,8 @@ const ConfirmSwapModal = memo(({
                         walletClient,
                         publicClient,
                         account,
-                        transactionData.outputDecimals || 18
+                        transactionData.outputDecimals || 18,
+                        connector
                     );
 
                     if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
@@ -2055,6 +2073,8 @@ const ConfirmSwapModal = memo(({
                     // Continue with original Uniswap V3 flow
                     const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
                         signer: signer,
+                        walletClient,
+                        connector,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
                         usePermit2,
@@ -2162,6 +2182,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2242,6 +2263,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalCow = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
@@ -2292,6 +2314,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalAlgebra = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2373,6 +2396,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -2411,7 +2435,8 @@ const ConfirmSwapModal = memo(({
                         useUnlimitedApproval,
                         walletClient,
                         publicClient,
-                        account
+                        account,
+                        connector
                     );
 
                     // Mark substep 2 as completed if not already done
@@ -2439,7 +2464,8 @@ const ConfirmSwapModal = memo(({
                         walletClient,
                         publicClient,
                         account,
-                        transactionData.outputDecimals || 18
+                        transactionData.outputDecimals || 18,
+                        connector
                     );
 
                     if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
@@ -2497,6 +2523,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
 
@@ -2509,6 +2536,7 @@ const ConfirmSwapModal = memo(({
                                     setOrderStatus('fulfilled');
                                     setProcessingStep('completed');
                                     setIsProcessing(false);
+                                    onTransactionComplete?.();
                                     return; // Exit successfully
                                 }
                             } catch (receiptError) {
@@ -2539,6 +2567,8 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
                         signer: signer,
+                        walletClient,
+                        connector,
                         tokenAddress: tokenIn,
                         amount: amountInWei,
                         usePermit2,
@@ -2626,6 +2656,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx failed during confirmation:', waitError);
                         throw waitError;
@@ -2641,6 +2672,7 @@ const ConfirmSwapModal = memo(({
 
                     const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
                         walletClient,
+                        connector,
                         signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
                         spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
                         onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
@@ -2735,7 +2767,7 @@ const ConfirmSwapModal = memo(({
 
         } catch (error) {
             // Handle Safe transaction signal
-            if (error.message === "SAFE_TRANSACTION_SENT") {
+            if (isSafeTransactionSent(error)) {
                 console.log('[ConfirmSwapModal] Safe transaction sent in swap action - closing modal');
                 onSafeTransaction?.();
                 onClose();
@@ -4467,7 +4499,7 @@ const ConfirmSwapModal = memo(({
 
                         {/* Error Display */}
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm flex overflow-y-auto">
+                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm break-words max-h-32 overflow-y-auto">
                                 {error}
                             </div>
                         )}
