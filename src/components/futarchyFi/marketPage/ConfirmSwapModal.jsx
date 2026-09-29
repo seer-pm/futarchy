@@ -732,10 +732,13 @@ const ConfirmSwapModal = memo(({
     const pollingRetryCountRef = useRef(0);
     const MAX_POLLING_ATTEMPTS = 5;
 
-    // Define backdrop variants for Framer Motion
+    // Define backdrop variants for Framer Motion. Fade the backdrop colour in,
+    // not the element's opacity: the panel is a child of this element, so an
+    // opacity fade-in left it see-through and the price chart showed through
+    // it while the modal opened.
     const backdropVariants = {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { duration: 0.2 } },
+        hidden: { backgroundColor: 'rgba(0, 0, 0, 0)' },
+        visible: { backgroundColor: 'rgba(0, 0, 0, 0.5)', transition: { duration: 0.2 } },
         exit: { opacity: 0, transition: { duration: 0.3 } },
     };
 

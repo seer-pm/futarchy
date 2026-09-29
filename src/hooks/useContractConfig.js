@@ -3,6 +3,7 @@ import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
 import { invalidateCache } from '../services/requestCache';
 import { fetchOnChainResolution } from '../utils/onChainResolution';
+import { resolveProposalId } from '../utils/marketPageUtils.mjs';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
 
 /**
@@ -20,30 +21,13 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
   useEffect(() => {
     const fetchContractConfig = async () => {
       try {
-        // Get proposal ID from URL parameters using native browser API
-        let extractedProposalId = proposalId;
-
-        // Try to get proposalId from URL search parameters
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const proposalFromUrl = urlParams.get('proposalId');
-          console.log('📊 Full URL:', window.location.href);
-          console.log('📊 Window location search:', window.location.search);
-          console.log('📊 URL search params:', Object.fromEntries(urlParams.entries()));
-          console.log('📊 proposalFromUrl:', proposalFromUrl);
-          console.log('📊 proposalId param:', proposalId);
-
-          if (proposalFromUrl) {
-            extractedProposalId = proposalFromUrl;
-            console.log('📊 Using proposalId from URL:', extractedProposalId);
-          } else if (proposalId) {
-            console.log('📊 Using proposalId from parameter:', extractedProposalId);
-          } else {
-            console.log('📊 No proposalId found in URL or parameters');
-          }
-        } else {
-          console.log('📊 Server-side rendering - using passed proposalId:', proposalId);
-        }
+        // The prop (or the /markets/<address> path) decides which proposal
+        // loads. ?proposalId= is only read on the legacy /market route, so
+        // /markets/0xA?proposalId=0xB can't show A's page while trading B.
+        const extractedProposalId = resolveProposalId(
+          proposalId,
+          typeof window !== 'undefined' ? window.location : null
+        );
 
         // If no proposal ID found, return null config (graceful handling for non-proposal pages)
         if (!extractedProposalId) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useRef, memo, useState, useCallback, useMemo } from "react";
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import Image from "next/image";
@@ -47,6 +47,7 @@ import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from "../../../const
 import { useContractConfig } from "../../../hooks/useContractConfig";
 import { useChainValidation } from "../../../hooks/useChainValidation";
 import { getRealityQuestionUrl } from '../../debug/constants/chainConfig';
+import { computeImpactPercent, formatImpactPercent, normalizeRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
 import WrongNetworkModal from "../../common/WrongNetworkModal";
 import { retryRpcCall } from '../../../utils/retryWithBackoff';
 import CreatePoolModal from './CreatePoolModal';
@@ -725,23 +726,23 @@ const TwapCountdown = ({
     if (diff < 1e-8) {
       return {
         leaderboardText: 'YES and NO are currently tied on TWAP.',
-        percentDiff: '0.00',
+        percentDiff: formatImpactPercent(0),
         leaderTheme: 'neutral'
       };
     }
 
+    // Same (YES - NO) / max(YES, NO) formula and formatter as "Impact (spot)".
+    const twapImpact = formatImpactPercent(computeImpactPercent(yes, no));
     if (yes > no) {
-      const pct = no > 0 ? (diff / no) * 100 : 100;
       return {
         leaderboardText: 'YES outcome is ahead on TWAP.',
-        percentDiff: `+${pct.toFixed(2)}`,
+        percentDiff: twapImpact,
         leaderTheme: 'blue'
       };
     } else {
-      const pct = yes > 0 ? (diff / yes) * 100 : 100;
       return {
         leaderboardText: 'NO outcome is ahead on TWAP.',
-        percentDiff: `-${pct.toFixed(2)}`,
+        percentDiff: twapImpact,
         leaderTheme: 'yellow'
       };
     }
@@ -835,7 +836,7 @@ const TwapCountdown = ({
             </span>
             {percentDiff && (isActive || hasEnded) && (
               <span className={`text-xs font-bold ${theme.text}`}>
-                ({percentDiff}%)
+                (TWAP impact {percentDiff})
               </span>
             )}
           </div>
@@ -1930,7 +1931,6 @@ const SnapshotWidget = ({
     return colorMap[colorKey] || colorMap.neutral;
   };
 
-  const colorClasses = currentResult ? getColorClasses(currentResult.colorKey) : getColorClasses('neutral');
 
   // Generate Snapshot proposal URL
   const snapshotProposalUrl = useMemo(() => {
@@ -1961,17 +1961,84 @@ const SnapshotWidget = ({
     buttonBorderColor = currentResult ? getColorClasses(currentResult.colorKey).border : 'border-futarchyGray11 dark:border-white';
   }
 
+  const BoltIcon = (
+    <svg className="flex-shrink-0 w-3.5 h-3.5" viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
+    </svg>
+  );
+
+  // Rendered inline in the hero badge row (it used to float fixed over the
+  // chart axis and the tab labels). Styled to sit next to the MarketBadges.
+  const pillClasses = `h-7 py-1 pl-2 pr-1 text-sm font-semibold rounded-lg border-2 ${buttonBorderColor} bg-transparent text-white flex items-center gap-2 whitespace-nowrap transition-colors duration-200 hover:bg-white/10`;
+  const chipClasses = 'rounded-md px-1.5 py-0.5 flex items-center gap-1 text-xs font-bold tabular-nums';
+  // The hero is always dark, so use the dark-theme result colours here.
+  const heroChipColors = (colorKey) => ({
+    success: 'bg-futarchyTeal7/20 text-futarchyTeal7',
+    danger: 'bg-futarchyCrimson7/20 text-futarchyCrimson9',
+  }[colorKey] || 'bg-white/10 text-white');
+
+  const debugDot = SHOW_DATA_DEBUG && snapshotSource === 'api' && (
+    <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
+  );
+
   return (
-    <div
-      className="fixed z-50 transition-all duration-300 ease-in-out left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0"
-      style={{
-        bottom: '24px',
-        ...(typeof window !== 'undefined' && window.innerWidth >= 768 ? { left: '24px' } : {}),
-      }}
-    >
-      {/* Expanded Container - Only show if proposal is still active */}
+    <div className="relative">
+      {isProposalClosed ? (
+        <a
+          href={snapshotProposalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={pillClasses}
+          aria-label="View final results on Snapshot"
+        >
+          {BoltIcon}
+          <span>Final Result{debugDot}</span>
+          {!snapshotLoading && snapshotData && (
+            snapshotData.proposalApproved === true ? (
+              <span className={`${chipClasses} bg-futarchyTeal7/20 text-futarchyTeal7`}>
+                {CheckIcon}
+                APPROVED
+              </span>
+            ) : snapshotData.proposalApproved === false ? (
+              <span className={`${chipClasses} bg-futarchyCrimson7/20 text-futarchyCrimson9`}>
+                {XIcon}
+                REJECTED
+              </span>
+            ) : snapshotHighestResult ? (
+              <span className={`${chipClasses} ${heroChipColors(snapshotHighestResult.colorKey)}`}>
+                {renderIcon(snapshotHighestResult.iconType)}
+                {snapshotHighestResult.percentage}
+              </span>
+            ) : null
+          )}
+        </a>
+      ) : (
+        <button
+          onClick={() => setIsWidgetExpanded(!isWidgetExpanded)}
+          className={pillClasses}
+          aria-expanded={isWidgetExpanded}
+          aria-label={isWidgetExpanded ? 'Close snapshot results' : 'Open snapshot results'}
+        >
+          {BoltIcon}
+          <span>Snapshot Results{debugDot}</span>
+          {snapshotLoading && (
+            <span className="h-3 w-3 rounded-full border-2 border-futarchyViolet7/40 border-t-futarchyViolet7 animate-spin" />
+          )}
+          {!snapshotLoading && currentResult && (
+            <span key={`${currentResult.key}-${currentResultIndex}`} className={`${chipClasses} ${heroChipColors(currentResult.colorKey)} animate-fadeIn`}>
+              {renderIcon(currentResult.iconType)}
+              {currentResult.percentage}
+            </span>
+          )}
+          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isWidgetExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+      )}
+
+      {/* Results dropdown - only while the proposal is still active */}
       {isWidgetExpanded && !isProposalClosed && (
-        <div className="bg-futarchyGray2 dark:bg-futarchyDarkGray2 rounded-3xl shadow-2xl backdrop-blur-sm border-2 border-futarchyGray62 dark:border-futarchyGray11/70 w-[95vw] md:w-[90vw] max-w-md animate-fadeIn mb-2 md:mb-3">
+        <div className="absolute left-0 top-full z-40 mt-2 bg-futarchyGray2 dark:bg-futarchyDarkGray2 rounded-3xl shadow-2xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 w-[calc(100vw-2.5rem)] max-w-md animate-fadeIn">
           <div className="p-3 md:p-4 max-h-[75vh] md:max-h-[70vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-2 md:mb-3">
               <div className="flex items-center gap-2">
@@ -2018,107 +2085,6 @@ const SnapshotWidget = ({
         </div>
       )}
 
-      {/* Floating Button */}
-      {/* If proposal is closed, clicking goes to Snapshot page; if active, expands widget */}
-      {isProposalClosed ? (
-        <a
-          href={snapshotProposalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`bg-futarchyGray2 dark:bg-futarchyDarkGray2 dark:text-white text-futarchyDarkGray3 font-oxanium font-semibold rounded-full transition-all duration-300 ease-in-out flex items-center justify-center border-2 ${buttonBorderColor} h-[48px] md:h-[52px] w-full md:w-[320px] px-3 pr-4 md:px-5 md:pr-6 gap-2 md:gap-3 hover:scale-105 active:scale-95`}
-          aria-label="View final results on Snapshot"
-        >
-          <svg className="flex-shrink-0 transition-all duration-300 w-4 h-4 md:w-5 md:h-5" viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg">
-            <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
-          </svg>
-
-          <span className="text-xs md:text-sm whitespace-nowrap flex-shrink-0">
-            Final Result
-            {SHOW_DATA_DEBUG && snapshotSource === 'api' && (
-              <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
-            )}
-          </span>
-
-          {/* Show winning result - use proposalApproved to determine color */}
-          {!snapshotLoading && snapshotData && (
-            <div className="ml-auto flex items-center gap-1.5 md:gap-2">
-              {snapshotData.proposalApproved === true ? (
-                // APPROVED - Futarchy Green
-                <div className="bg-futarchyTeal7/20 dark:bg-futarchyTeal7/10 rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300">
-                  <span className="flex items-center justify-center text-futarchyTeal11 dark:text-futarchyTeal7">
-                    {CheckIcon}
-                  </span>
-                  <span className="text-xs md:text-sm font-bold tabular-nums text-futarchyTeal11 dark:text-futarchyTeal9">
-                    APPROVED
-                  </span>
-                </div>
-              ) : snapshotData.proposalApproved === false ? (
-                // REJECTED - Futarchy Red
-                <div className="bg-futarchyCrimson7/20 dark:bg-futarchyCrimson7/10 rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300">
-                  <span className="flex items-center justify-center text-futarchyCrimson11 dark:text-futarchyCrimson7">
-                    {XIcon}
-                  </span>
-                  <span className="text-xs md:text-sm font-bold tabular-nums text-futarchyCrimson11 dark:text-futarchyCrimson9">
-                    REJECTED
-                  </span>
-                </div>
-              ) : snapshotHighestResult ? (
-                // Fallback to highest result if proposalApproved is null
-                <div className={`${getColorClasses(snapshotHighestResult.colorKey).bg} rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300`}>
-                  <span className={`flex items-center justify-center ${getColorClasses(snapshotHighestResult.colorKey).icon}`}>
-                    {renderIcon(snapshotHighestResult.iconType)}
-                  </span>
-                  <span className={`text-xs md:text-sm font-bold tabular-nums ${getColorClasses(snapshotHighestResult.colorKey).text}`}>
-                    {snapshotHighestResult.percentage}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </a>
-      ) : (
-        <button
-          onClick={() => setIsWidgetExpanded(!isWidgetExpanded)}
-          className={`bg-futarchyGray2 dark:bg-futarchyDarkGray2 dark:text-white text-futarchyDarkGray3 font-oxanium font-semibold rounded-full transition-all duration-300 ease-in-out flex items-center justify-center border-2 ${buttonBorderColor} ${isWidgetExpanded ? 'w-[48px] h-[48px] md:w-[52px] md:h-[52px] p-0 mt-2 md:mt-3' : 'h-[48px] md:h-[52px] w-full md:w-[320px] px-3 pr-4 md:px-5 md:pr-6 gap-2 md:gap-3'}`}
-          aria-label={isWidgetExpanded ? 'Close snapshot results' : 'Open snapshot results'}
-        >
-          <svg className={`flex-shrink-0 transition-all duration-300 ${isWidgetExpanded ? 'rotate-180 w-5 h-5 md:w-6 md:h-6' : 'w-4 h-4 md:w-5 md:h-5'}`} viewBox="0 0 105 126" fill="#FFAC33" xmlns="http://www.w3.org/2000/svg">
-            <path d="M104.781694,54.7785 C104.270697,53.41 102.961707,52.5 101.498717,52.5 L59.2365129,52.5 L83.6138421,5.103 C84.3803368,3.612 83.9848395,1.7885 82.6653488,0.7525 C82.0283532,0.2485 81.2618586,0 80.498864,0 C79.6833697,0 78.8678754,0.287 78.21338,0.8505 L52.4990602,23.058 L1.21391953,67.3505 C0.107927276,68.306 -0.291069928,69.8495 0.219926491,71.218 C0.730922911,72.5865 2.03641376,73.5 3.49940351,73.5 L45.7616074,73.5 L21.3842782,120.897 C20.6177836,122.388 21.0132808,124.2115 22.3327715,125.2475 C22.9697671,125.7515 23.7362617,126 24.4992564,126 C25.3147506,126 26.1302449,125.713 26.7847403,125.1495 L52.4990602,102.942 L103.784201,58.6495 C104.893693,57.694 105.28919,56.1505 104.781694,54.7785 L104.781694,54.7785 Z" />
-          </svg>
-
-          {!isWidgetExpanded && (
-            <>
-              <span className="text-xs md:text-sm whitespace-nowrap flex-shrink-0">
-                Snapshot Results
-                {SHOW_DATA_DEBUG && snapshotSource === 'api' && (
-                  <span className="ml-1 text-[10px] text-futarchyViolet9 dark:text-futarchyViolet7">●</span>
-                )}
-              </span>
-
-              {/* Loading State */}
-              {snapshotLoading && (
-                <div className="ml-auto flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full border-2 border-futarchyViolet9/40 dark:border-futarchyViolet7/40 border-t-futarchyViolet9 dark:border-t-futarchyViolet7 animate-spin" />
-                </div>
-              )}
-
-              {/* Cycling Results Preview */}
-              {!snapshotLoading && currentResult && (
-                <div key={`${currentResult.key}-${currentResultIndex}`} className="ml-auto flex items-center gap-1.5 md:gap-2 animate-fadeIn">
-                  <div className={`${colorClasses.bg} rounded-full px-2 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 transition-all duration-300`}>
-                    <span className={`flex items-center justify-center ${colorClasses.icon}`}>
-                      {renderIcon(currentResult.iconType)}
-                    </span>
-                    <span className={`text-xs md:text-sm font-bold tabular-nums ${colorClasses.text}`}>
-                      {currentResult.percentage}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </button>
-      )}
     </div>
   );
 };
@@ -2198,6 +2164,43 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false);
   const [isEditProposalModalOpen, setIsEditProposalModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  // The sticky hero collapses on desktop once the page scrolls. Without a
+  // placeholder the content below jumps up by the height it loses, moving
+  // whatever is under the cursor mid-click. heroReserve re-adds that height
+  // as a spacer at the top of the page content so nothing shifts.
+  const heroRef = useRef(null);
+  const [heroEl, setHeroEl] = useState(null);
+  const attachHeroRef = useCallback((el) => {
+    heroRef.current = el;
+    setHeroEl(el);
+  }, []);
+  const expandedHeroHeightRef = useRef(0);
+  const isScrolledRef = useRef(false);
+  const [heroReserve, setHeroReserve] = useState(0);
+  const syncHeroReserve = useCallback(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const height = el.offsetHeight;
+    if (!isScrolledRef.current) {
+      expandedHeroHeightRef.current = height;
+      setHeroReserve(0);
+    } else {
+      setHeroReserve(Math.max(0, expandedHeroHeightRef.current - height));
+    }
+  }, []);
+  // Layout effect: measure after the collapse commits but before paint.
+  useLayoutEffect(() => {
+    isScrolledRef.current = isScrolled;
+    syncHeroReserve();
+  }, [isScrolled, syncHeroReserve]);
+  // Follow later size changes (data loading, the 300ms padding transition).
+  useEffect(() => {
+    if (!heroEl || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(syncHeroReserve);
+    observer.observe(heroEl);
+    return () => observer.disconnect();
+  }, [heroEl, syncHeroReserve]);
 
   // Chart line visibility filters
   const [chartFilters, setChartFilters] = useState({
@@ -2681,13 +2684,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   });
 
   // Process the market title with regex to extract components
-  const rawMarketTitle = config?.marketInfo?.title || "What will be the impact on GNO price if GnosisPay reaches $5mil weekly volume?";
+  const rawMarketTitle = config?.marketInfo?.title || "";
   // Updated regex to match everything after "if" regardless of what comes before it
   const titleMatch = rawMarketTitle.match(/.*if\s+(.*)/i);
 
   // Extract title components for display
-  const marketTitlePrefix = "What will be the impact on GNO price if";
-  const marketEvent = titleMatch ? titleMatch[1] : "GnosisPay reaches $5mil weekly volume?";
+  const marketTitlePrefix = titleMatch ? rawMarketTitle.slice(0, rawMarketTitle.length - titleMatch[1].length).trim() : rawMarketTitle;
+  const marketEvent = titleMatch ? titleMatch[1] : "";
 
   // Get the full description for the smaller text
   const marketDescription = config?.marketInfo?.description || "";
@@ -2918,12 +2921,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     error: null
   });
 
-  // Dynamic market data state
+  // Dynamic market data state. Starts empty (the hero shows a skeleton while
+  // isLoading) — never another market's copy.
   const [marketData, setMarketData] = useState({
-    display_title_0: "What will be the impact on GNO price",
-    display_title_1: "if GnosisPay reaches €2,000,000 weekly volume?",
-    title: "Will GnosisPay process transactions exceeding €2,000,000 in volume within any complete calendar week (Monday 00:00 UTC through Sunday 23:59 UTC) concluding on or prior to June 30, 2025?",
-    description: "This conditional market on Gnosis Chain evaluates whether GnosisPay will exceed €2M in EUR transaction volume in any complete calendar week before June 30, 2025. Participants can trade YES or NO outcomes using wrapped GNO and sDAI to speculate on its impact on GNO's price.",
+    display_title_0: "",
+    display_title_1: "",
+    title: "",
+    description: "",
     question_title: null,
     question_link: null,
     isLoading: true,
@@ -2977,13 +2981,18 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       const marketInfo = config.marketInfo;
 
       // Parse the market event data to extract display titles
+      // Neutral fallbacks: a market without metadata shows its address, not
+      // another market's title/description.
+      const fallbackTitle = config?.MARKET_ADDRESS
+        ? `Market ${config.MARKET_ADDRESS.slice(0, 6)}…${config.MARKET_ADDRESS.slice(-4)}`
+        : 'Market';
       let parsedData = {
-        display_title_0: "What will be the impact on GNO price",
-        display_title_1: "if Circle deploy native USDC on Gnosis Chain?",
-        title: marketInfo.title || "Market Event",
-        description: marketInfo.description || "This conditional market on Gnosis Chain evaluates whether Circle will will deploy native USDC on gnosis chain before December 31 2025",
+        display_title_0: marketInfo.title || fallbackTitle,
+        display_title_1: "",
+        title: marketInfo.title || fallbackTitle,
+        description: marketInfo.description || "",
         question_title: marketInfo.title || null,
-        question_link: marketInfo.questionLink || null,
+        question_link: normalizeRealityQuestionUrl(marketInfo.questionLink, config?.chainId) || null,
         isLoading: false,
         error: null
       };
@@ -4785,24 +4794,21 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
   // Extract hero content for RootLayout
   const marketHero = (
-    <div className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
+    <div ref={attachHeroRef} className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
       }`}>
       <div className="container mx-auto px-5 flex-grow flex flex-col justify-center">
         <div className={`grid grid-cols-1 lg:grid-cols-3 transition-all duration-300 ease-in-out ${isScrolled ? 'py-8 lg:py-3' : 'py-4 lg:py-6'
           }`}>
-          <div className={`lg:col-span-2 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
+          <div className={`lg:col-span-2 min-w-0 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
             }`}>
             <h1 className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base' : 'text-sm lg:text-xl'
               }`}>
               {marketData.isLoading && (
-                <span className="inline-flex items-center gap-2 text-xs text-white/80">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading…
-                </span>
+                <span className="block h-5 lg:h-6 w-3/4 max-w-xl rounded bg-white/10 animate-pulse" aria-label="Loading market title" />
               )}
               {!marketData.isLoading && !marketData.error && (
                 <>
-                  <span className="whitespace-nowrap">{marketData.display_title_0}</span>{' '}
+                  <span className={marketData.display_title_1 ? 'lg:whitespace-nowrap' : ''}>{marketData.display_title_0}</span>{' '}
                   <span className="text-futarchyViolet7">{marketData.display_title_1}</span>
                 </>
               )}
@@ -4814,38 +4820,9 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 text-left transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               <StatDisplay
-                label="Impact"
-                value={(() => {
-                  // Calculate impact using existing logic
-                  if (newYesPrice === null || newNoPrice === null || typeof newYesPrice === 'undefined' || typeof newNoPrice === 'undefined') {
-                    return 'Loading...';
-                  }
-                  if (typeof newYesPrice !== 'number' || typeof newNoPrice !== 'number' || newNoPrice === 0) {
-                    return 'N/A';
-                  }
-                  const yes = Number(newYesPrice);
-                  const no = Number(newNoPrice);
-                  const denominator = Math.max(yes, no);
-                  const impactValue = denominator > 0 ? ((yes - no) / denominator) * 100 : 0;
-
-                  const prefix = impactValue > 0 ? '+' : '';
-                  return `${prefix}${impactValue.toFixed(2)}%`;
-                })()}
-                valueClassName={(() => {
-                  // Calculate impact to determine color
-                  if (newYesPrice === null || newNoPrice === null || typeof newYesPrice === 'undefined' || typeof newNoPrice === 'undefined') {
-                    return 'text-futarchyTeal7';
-                  }
-                  if (typeof newYesPrice !== 'number' || typeof newNoPrice !== 'number' || newNoPrice === 0) {
-                    return 'text-futarchyTeal7';
-                  }
-                  const yes = Number(newYesPrice);
-                  const no = Number(newNoPrice);
-                  const denominator = Math.max(yes, no);
-                  const impactValue = denominator > 0 ? ((yes - no) / denominator) * 100 : 0;
-
-                  return impactValue >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11';
-                })()}
+                label="Impact (spot)"
+                value={formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice))}
+                valueClassName={(computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11'}
                 Icon={ImpactIcon}
                 isLoading={newYesPrice === null || newNoPrice === null}
               />
@@ -4871,14 +4848,15 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               />
 
               <AggregatedStatDisplay
-                label="Liquidity"
+                label="TVL"
                 yesValue={liquiditySummary.yes?.total ?? null}
                 noValue={liquiditySummary.no?.total ?? null}
                 Icon={LiquidityIcon}
                 isLoading={poolDataLoading || configLoading}
                 formatFunction={formatLiquidity}
-                tooltipLabels={{ yes: 'YES Liquidity', no: 'NO Liquidity' }}
+                tooltipLabels={{ yes: 'YES TVL', no: 'NO TVL' }}
                 tooltipBreakdown={liquiditySummary.breakdown}
+                tooltipNote="Total value locked in the YES/NO pools across all price ranges. This is not tradable depth: liquidity parked far from the current price doesn't absorb trades, so check the price impact in the trade panel before sizing a trade."
                 normalize={poolData?.source !== 'subgraph'}
                 unavailable={!!poolDataError}
               />
@@ -4938,12 +4916,13 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               />
             </div>
 
-            <div className={`flex items-center gap-3 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
+            <div className={`flex flex-wrap items-center gap-3 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               {marketData.isLoading && (
-                <span className="inline-flex items-center gap-2 text-xs text-white/70">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading badges…
+                <span className="flex gap-2" aria-label="Loading badges">
+                  <span className="h-7 w-24 rounded-lg bg-white/10 animate-pulse" />
+                  <span className="h-7 w-32 rounded-lg bg-white/10 animate-pulse" />
+                  <span className="h-7 w-28 rounded-lg bg-white/10 animate-pulse" />
                 </span>
               )}
               {!marketData.isLoading && !marketData.error && (
@@ -5074,22 +5053,31 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               {!marketData.isLoading && marketData.error && (
                 <span className="text-xs text-red-400/80">Badges unavailable</span>
               )}
+              {/* Snapshot result - part of the badge row instead of a floating pill */}
+              <SnapshotWidget
+                snapshotData={snapshotData}
+                snapshotLoading={snapshotLoading}
+                snapshotSource={snapshotSource}
+                snapshotProposalId={snapshotProposalId}
+                snapshotHighestResult={snapshotHighestResult}
+              />
             </div>
           </div>
 
-          <div className={`lg:col-span-1 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-2 lg:pl-6' : 'py-2 lg:py-3 lg:pl-6'
+          <div className={`lg:col-span-1 min-w-0 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-2 lg:pl-6' : 'py-2 lg:py-3 lg:pl-6'
             }`}>
             {/* Description - hides on scroll */}
             <div className={`transition-all duration-300 ease-in-out ${isScrolled ? 'lg:hidden' : ''
               }`}>
               {marketData.isLoading && (
-                <p className="text-xs lg:text-sm text-white/80 inline-flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                  Loading description…
-                </p>
+                <div className="space-y-2" aria-label="Loading description">
+                  <span className="block h-3 w-full rounded bg-white/10 animate-pulse" />
+                  <span className="block h-3 w-5/6 rounded bg-white/10 animate-pulse" />
+                  <span className="block h-3 w-2/3 rounded bg-white/10 animate-pulse" />
+                </div>
               )}
               {!marketData.isLoading && !marketData.error && marketData.description && (
-                <p className="text-xs lg:text-sm text-white/70 leading-relaxed">{marketData.description}</p>
+                <p className="text-xs lg:text-sm text-white/70 leading-relaxed break-words [overflow-wrap:anywhere]">{marketData.description}</p>
               )}
               {!marketData.isLoading && marketData.error && (
                 <p className="text-xs lg:text-sm text-red-400/80">Description unavailable</p>
@@ -5129,6 +5117,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       <PriceHeader yesPrice={newYesPrice} noPrice={newNoPrice} currencySymbol={currencySymbol} />
       <RootLayout headerConfig="app" footerConfig="main" useSnapScroll={false} heroContent={marketHero}>
         <PageLayout>
+          {/* Holds the height the sticky hero gives up when it collapses */}
+          <div aria-hidden="true" style={{ height: heroReserve }} />
           {/* Main Content Area - Split Design */}
           <div className="relative flex-1">
             {/* Dark top half */}
@@ -5697,15 +5687,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               setMergeAmount('');
               setMergeTokenType('currency');
             }}
-          />
-
-          {/* Snapshot Results Widget */}
-          <SnapshotWidget
-            snapshotData={snapshotData}
-            snapshotLoading={snapshotLoading}
-            snapshotSource={snapshotSource}
-            snapshotProposalId={snapshotProposalId}
-            snapshotHighestResult={snapshotHighestResult}
           />
 
           {/* Snapshot Debug Console - Shows when debug mode is active */}

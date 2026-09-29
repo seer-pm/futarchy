@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { useSubgraphData } from '../../hooks/useSubgraphData';
 import { formatWith } from '../../utils/precisionFormatter';
+import { formatImpactPercent } from '../../utils/marketPageUtils.mjs';
 import { useSubgraphRefresh } from '../../contexts/SubgraphRefreshContext';
 import { SHOW_DATA_DEBUG } from '../../config/featureFlags';
 
@@ -601,9 +602,9 @@ const SubgraphChart = ({
 
                     {/* Impact - SAME styling as ChartParameters */}
                     <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 last:border-r-0 last:rounded-tr-3xl px-1">
-                        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact</span>
+                        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact (spot)</span>
                         <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${impactColorClass}`}>
-                            {(yesPrice === null || noPrice === null) ? <LoadingSpinner /> : `${formatWith(impact, 'default', precisionConfig)}%`}
+                            {(yesPrice === null || noPrice === null) ? <LoadingSpinner /> : formatImpactPercent(impact)}
                         </span>
                     </div>
 

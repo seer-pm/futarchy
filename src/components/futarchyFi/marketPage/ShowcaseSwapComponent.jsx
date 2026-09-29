@@ -1067,15 +1067,72 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           </div>
 
           {/* Balance Section */}
-          <div className="flex justify-between text-xs mt-1">
-            <span className="text-futarchyGray11 dark:text-futarchyGray112">Available</span>
-            <span
-              onClick={account ? handleMaxClick : undefined}
-              className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
-            >
-              {availableBalance.display}
-            </span>
-          </div>
+          {(() => {
+            // "Available" = wallet balance + the selected side's conditional
+            // tokens. Show both parts so the sum isn't a silent surprise.
+            const outcomePrefix = selectedOutcome === 'approved' ? 'YES' : 'NO';
+            let baseBalance = '0';
+            let outcomeBalance = '0';
+            let symbol;
+            let outcomeSymbol;
+
+            if (selectedAction === 'Buy') {
+              const currencyOutcome = (selectedOutcome === 'approved'
+                ? positions?.currencyYes?.total
+                : positions?.currencyNo?.total) || '0';
+              outcomeSymbol = `${outcomePrefix}_${getCurrencySymbol()}`;
+              if (selectedCurrency === getCurrencySymbol() || (selectedCurrency === 'WXDAI' && redirectToCOW)) {
+                // Currency mode (or WXDAI routed through CoW): currency + position tokens
+                baseBalance = balances?.sdaiBalance || '0';
+                outcomeBalance = currencyOutcome;
+                symbol = getCurrencySymbol();
+              } else if (selectedCurrency === 'WXDAI') {
+                // Native xDAI only (no position tokens)
+                baseBalance = balances?.nativeBalance || '0';
+                symbol = 'xDAI';
+              } else {
+                // Fallback mode: WXDAI + position tokens
+                baseBalance = positions?.wxdai || '0';
+                outcomeBalance = currencyOutcome;
+                symbol = 'WXDAI';
+              }
+            } else {
+              // Sell: company token + position tokens
+              baseBalance = positions?.faot || '0';
+              outcomeBalance = (selectedOutcome === 'approved'
+                ? positions?.companyYes?.total
+                : positions?.companyNo?.total) || '0';
+              symbol = getCompanySymbol();
+              outcomeSymbol = `${outcomePrefix}_${getCompanySymbol()}`;
+            }
+
+            // The total shown is availableBalance.display, the same value the
+            // insufficient-balance check reads; only the breakdown is computed here.
+            let breakdownText = null;
+            if (account && positions && !isLoadingBalances && parseFloat(outcomeBalance) > 0) {
+              breakdownText = `${formatWith(parseFloat(baseBalance), 'balance')} ${symbol} + ${formatWith(parseFloat(outcomeBalance), 'balance')} ${outcomeSymbol}`;
+            }
+
+            return (
+              <div className="mt-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-futarchyGray11 dark:text-futarchyGray112">Available</span>
+                  <span
+                    onClick={account ? handleMaxClick : undefined}
+                    title={breakdownText ? `Wallet ${symbol} + ${outcomeSymbol} you already hold: ${breakdownText}` : undefined}
+                    className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
+                  >
+                    {availableBalance.display}
+                  </span>
+                </div>
+                {breakdownText && (
+                  <div className="flex justify-end text-[10px] text-futarchyGray11 dark:text-futarchyGray112">
+                    {breakdownText}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* GET MORE SDAI Button - Show when redirectToCOW is true, in WXDAI mode, and in Buy mode */}
           {redirectToCOW && selectedCurrency === 'WXDAI' && selectedAction === 'Buy' && (

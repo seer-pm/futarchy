@@ -204,6 +204,7 @@ export const AggregatedStatDisplay = ({
     formatFunction,
     tooltipLabels = { yes: 'YES', no: 'NO' },
     tooltipBreakdown = null,
+    tooltipNote = null,
     normalize = true,
     unavailable = false
 }) => {
@@ -264,6 +265,11 @@ export const AggregatedStatDisplay = ({
                                 <span className={item.className}>{item.value}</span>
                             </span>
                         ))}
+                        {tooltipNote && (
+                            <span className="mt-1 max-w-[16rem] whitespace-normal border-t border-white/10 pt-1 text-white/60">
+                                {tooltipNote}
+                            </span>
+                        )}
                     </div>
                 )}
             </div>
