@@ -3289,6 +3289,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
   const handleCloseCollateralModal = () => {
     setIsCollateralModalOpen(false);
+    // A split or merge may have just landed: refresh now, not on the next poll
+    refetchBalances();
     // Reset all states when closing modal
     setProcessingStep(null);
     setCurrentSubstep({ step: 1, substep: 0 });
@@ -5370,7 +5372,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             </div>
                           )}
                           {activeTab === 'redeem-tokens' && (
-                            <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} />
+                            <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} onBalancesChanged={refetchBalances} />
                           )}
                         </div>
                       </div>
@@ -5403,6 +5405,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                               onConnectWallet={handleConnectWallet}
                               proposalId={proposalId}
                               marketHasClosed={marketHasClosed}
+                              refetchBalances={refetchBalances}
                             />
                           </div>
                         )}

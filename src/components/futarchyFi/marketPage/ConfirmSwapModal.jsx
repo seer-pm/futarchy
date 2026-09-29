@@ -1882,6 +1882,7 @@ const ConfirmSwapModal = memo(({
                             setOrderStatus('fulfilled');
                             setProcessingStep('completed');
                             setIsProcessing(false);
+                            onTransactionComplete?.();
                             onClose(); // Auto-close for Safe
                             return;
                         } else {
@@ -1912,6 +1913,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -2394,6 +2396,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled'); // Mark as fulfilled immediately
                         setProcessingStep('completed'); // Mark process complete
                         setIsProcessing(false); // Unlock UI
+                        onTransactionComplete?.(); // Refresh balances; the modal stays open
                         // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
@@ -2520,6 +2523,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
 
@@ -2532,6 +2536,7 @@ const ConfirmSwapModal = memo(({
                                     setOrderStatus('fulfilled');
                                     setProcessingStep('completed');
                                     setIsProcessing(false);
+                                    onTransactionComplete?.();
                                     return; // Exit successfully
                                 }
                             } catch (receiptError) {
@@ -2651,6 +2656,7 @@ const ConfirmSwapModal = memo(({
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
                         setIsProcessing(false);
+                        onTransactionComplete?.();
                     } catch (waitError) {
                         console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx failed during confirmation:', waitError);
                         throw waitError;

@@ -102,7 +102,7 @@ const FUTARCHY_ROUTER_ABI = [
   }
 ];
 
-const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBalances, account, isConnected, onConnectWallet, proposalId, marketHasClosed }) => {
+const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBalances, account, isConnected, onConnectWallet, proposalId, marketHasClosed, refetchBalances }) => {
   // Use contract config for dynamic token symbols
   const { config } = useContractConfig(proposalId);
 
@@ -743,10 +743,18 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     }
   };
 
+  // Called by ConfirmSwapModal on every successful swap. The modal stays open
+  // on its "complete" state (the user closes it); the balances refresh now
+  // rather than on the parent's next poll.
   const handleTransactionComplete = () => {
-    // Balance refresh is handled by parent component's useBalanceManager
-    setIsConfirmModalOpen(false);
+    refetchBalances?.();
     setIsNativeSwapModalOpen(false);
+  };
+
+  const handleConfirmModalClose = () => {
+    setIsConfirmModalOpen(false);
+    // Safe transactions close the modal without a completion callback
+    refetchBalances?.();
   };
 
   // Add these handlers from the working modal
@@ -1757,7 +1765,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
       {isConfirmModalOpen && (
         <ConfirmSwapModal
-          onClose={() => setIsConfirmModalOpen(false)}
+          onClose={handleConfirmModalClose}
           transactionData={confirmModalData}
           proposalId={proposalId}
           existingBalance={(() => {

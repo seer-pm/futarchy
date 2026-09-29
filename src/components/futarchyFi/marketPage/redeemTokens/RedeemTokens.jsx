@@ -24,7 +24,7 @@ const RedeemButton = ({ onClick, disabled = false, isConnected = false, isWinnin
   );
 };
 
-export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = false }) => {
+export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = false, onBalancesChanged }) => {
   const { address, isConnected } = useAccount();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -77,6 +77,8 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    // A redemption may have just landed: refresh now, not on the next poll
+    onBalancesChanged?.();
   };
 
   // If market is not resolved, show message
