@@ -2,6 +2,7 @@ import { useAccount } from 'wagmi';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Head from 'next/head';
 import { STATIC_MARKET_ADDRESSES } from '../config/marketAddresses';
 
 // This route almost always redirects to /markets/:address — it only renders
@@ -103,21 +104,33 @@ const MarketPage = () => {
     }
   }, [router, proposalIdFromQuery]);
   
+  const head = (
+    <Head>
+      <title>Market | Futarchy</title>
+    </Head>
+  );
+
   // Don't render the component if we're redirecting
   if (!router.isReady || !proposalIdFromQuery) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>
-      </div>
+      <>
+        {head}
+        <div className="flex justify-center items-center min-h-screen bg-white">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>
+        </div>
+      </>
     );
   }
   
   return (
-    <MarketPageShowcase 
-      isWalletConnected={isConnected}
-      connectedWalletAddress={address}
-      proposal={proposalIdFromQuery}
-    />
+    <>
+      {head}
+      <MarketPageShowcase 
+        isWalletConnected={isConnected}
+        connectedWalletAddress={address}
+        proposal={proposalIdFromQuery}
+      />
+    </>
   );
 };
 

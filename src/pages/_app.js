@@ -23,10 +23,10 @@ const barlow = Barlow({
 export default function App({ Component, pageProps }) {
   const router = useRouter();
 
-  // Check if this is a market page (including both dynamic and static market routes)
-  const isMarketPage = router.pathname.startsWith('/markets') ||
-    router.pathname.includes('/market') ||
-    router.asPath.startsWith('/markets/');
+  // Static market pages render their own title/description/OG tags from
+  // src/config/markets.js; every other page gets the site defaults (pages
+  // may still override <title> and the description with their own <Head>).
+  const isMarketPage = router.pathname === '/markets/[address]';
 
   return (
     <Providers>
@@ -44,6 +44,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
               }}
             />
             {/* End Google Tag Manager */}
+
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
 
             {!isMarketPage && (
               <>
@@ -69,18 +71,12 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                   content={metadata.twitter.description}
                 />
                 <meta name="twitter:image" content={metadata.twitter.image} />
+              </>
+            )}
 
-                {/* Icons */}
-                <link rel="icon" href={metadata.icons.icon} />
-              </>
-            )}
-            {isMarketPage && (
-              <>
-                {/* Basic fallback for icons only on market pages */}
-                {/* SEO will be handled by individual market pages */}
-                <link rel="icon" href={metadata.icons.icon} />
-              </>
-            )}
+            {/* Icons */}
+            <link rel="icon" href="/favicon.ico" sizes="32x32" />
+            <link rel="icon" href={metadata.icons.icon} type="image/svg+xml" />
           </Head>
 
           {/* Google Tag Manager (noscript) */}

@@ -69,9 +69,6 @@ export default function DynamicMarketPage({ address, seoData, marketConfig }) {
             "keywords": marketConfig.keywords?.join(', ')
           })}
         </script>
-        
-        {/* Favicon */}
-        <link rel="icon" href="/assets/favicon.svg" />
       </Head>
       
       <MarketPageShowcase proposal={address} />

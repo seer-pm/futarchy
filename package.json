@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/generate-sitemap.mjs",
     "build-with-seo": "npm run generate-seo && npm run build",
     "start": "next start",
     "lint": "next lint",
