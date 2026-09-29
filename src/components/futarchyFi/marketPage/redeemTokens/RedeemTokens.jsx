@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { formatBalance } from '../../../../utils/formatters';
 import RedemptionModal from './RedemptionModal';
+import { getRedeemSide, getRedeemAmounts, isPositiveAmount } from '../../../../utils/redeemPlan';
 
 const RedeemButton = ({ onClick, disabled = false, isConnected = false, isWinningOutcomeYes = true }) => {
   const baseClasses = "font-semibold py-2 px-4 rounded text-sm border-2 transition-colors";
@@ -30,44 +31,50 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
 
   // Determine winning outcome and corresponding tokens
   const winningOutcome = config?.marketInfo?.finalOutcome; // "Yes", "No", etc.
-  const isWinningOutcomeYes = winningOutcome?.toLowerCase() === 'yes';
+  // null for anything but an explicit Yes/No (e.g. "Invalid")
+  const redeemSide = getRedeemSide(winningOutcome);
+  const isWinningOutcomeYes = redeemSide === 'yes';
 
   // Get the winning outcome token balances
   const winningTokens = useMemo(() => {
-    if (!config?.MERGE_CONFIG || !positions) {
+    if (!config?.MERGE_CONFIG || !positions || !redeemSide) {
       return null;
     }
 
     const mergeConfig = config.MERGE_CONFIG;
-    const baseTokenConfig = config.BASE_TOKENS_CONFIG;
+    // The router only redeems wrapped ERC20 outcome tokens, so amounts are the
+    // wrapped balances; unwrapped ERC1155 balances are listed separately.
+    const amounts = getRedeemAmounts(positions, redeemSide);
 
     if (isWinningOutcomeYes) {
       // YES won - get YES currency and company tokens
       return {
-        currencyAmount: positions.currencyYes?.total || '0',
+        ...amounts,
         currencySymbol: mergeConfig.currencyPositions?.yes?.wrap?.tokenSymbol || 'YES_CURRENCY',
         currencyTokenAddress: mergeConfig.currencyPositions?.yes?.wrap?.wrappedCollateralTokenAddress,
-        companyAmount: positions.companyYes?.total || '0',
         companySymbol: mergeConfig.companyPositions?.yes?.wrap?.tokenSymbol || 'YES_COMPANY',
         companyTokenAddress: mergeConfig.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress,
       };
     } else {
       // NO won - get NO currency and company tokens
       return {
-        currencyAmount: positions.currencyNo?.total || '0',
+        ...amounts,
         currencySymbol: mergeConfig.currencyPositions?.no?.wrap?.tokenSymbol || 'NO_CURRENCY',
         currencyTokenAddress: mergeConfig.currencyPositions?.no?.wrap?.wrappedCollateralTokenAddress,
-        companyAmount: positions.companyNo?.total || '0',
         companySymbol: mergeConfig.companyPositions?.no?.wrap?.tokenSymbol || 'NO_COMPANY',
         companyTokenAddress: mergeConfig.companyPositions?.no?.wrap?.wrappedCollateralTokenAddress,
       };
     }
-  }, [config, positions, isWinningOutcomeYes]);
+  }, [config, positions, redeemSide, isWinningOutcomeYes]);
 
   // Check if user has any winning tokens to redeem
   const hasRedeemableTokens = winningTokens && (
-    parseFloat(winningTokens.currencyAmount) > 0 ||
-    parseFloat(winningTokens.companyAmount) > 0
+    isPositiveAmount(winningTokens.currencyAmount) ||
+    isPositiveAmount(winningTokens.companyAmount)
+  );
+  const hasUnwrappedTokens = winningTokens && (
+    isPositiveAmount(winningTokens.unwrappedCurrencyAmount) ||
+    isPositiveAmount(winningTokens.unwrappedCompanyAmount)
   );
 
   const handleRedeemClick = () => {
@@ -124,6 +131,33 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
     );
   }
 
+  // Resolved to something other than Yes/No (e.g. Invalid): neither side is the winner
+  if (!redeemSide) {
+    return (
+      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
+        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+          Market Resolved: {winningOutcome}
+        </h3>
+        <div className="text-center py-8 px-4 text-futarchyGray11 dark:text-white/70">
+          <p className="mb-2">This market has no single winning side, so YES or NO tokens can&apos;t be redeemed here.</p>
+          <p className="text-xs text-futarchyGray9">
+            If you hold matching YES and NO tokens, you can merge them back into the underlying collateral.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const unwrappedNotice = hasUnwrappedTokens && (
+    <p className="mt-4 text-xs text-futarchyGray9 text-center">
+      Not redeemable here (unwrapped ERC1155 positions; the router only redeems wrapped tokens):{' '}
+      {[
+        isPositiveAmount(winningTokens.unwrappedCurrencyAmount) && `${formatBalance(winningTokens.unwrappedCurrencyAmount, '')} ${winningTokens.currencySymbol}`,
+        isPositiveAmount(winningTokens.unwrappedCompanyAmount) && `${formatBalance(winningTokens.unwrappedCompanyAmount, '')} ${winningTokens.companySymbol}`,
+      ].filter(Boolean).join(', ')}
+    </p>
+  );
+
   return (
     <>
       <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
@@ -148,7 +182,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
                 </tr>
               </thead>
               <tbody>
-                {parseFloat(winningTokens.currencyAmount) > 0 && (
+                {isPositiveAmount(winningTokens.currencyAmount) && (
                   <tr className="hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGrayBG">
                     <td className="py-3">
                       <span className="font-semibold text-futarchyGray12 dark:text-white">
@@ -162,7 +196,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
                     </td>
                   </tr>
                 )}
-                {parseFloat(winningTokens.companyAmount) > 0 && (
+                {isPositiveAmount(winningTokens.companyAmount) && (
                   <tr className="hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGrayBG">
                     <td className="py-3">
                       <span className="font-semibold text-futarchyGray12 dark:text-white">
@@ -187,13 +221,15 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
                 isWinningOutcomeYes={isWinningOutcomeYes}
               />
             </div>
+            {unwrappedNotice}
           </div>
         ) : (
           <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
             <p className="mb-2">No redeemable tokens found</p>
             <p className="text-xs text-futarchyGray9">
-              You don't have any {winningOutcome.toLowerCase()} outcome tokens to redeem.
+              You don&apos;t have any {winningOutcome.toLowerCase()} outcome tokens to redeem.
             </p>
+            {unwrappedNotice}
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ import { useSafeDetection } from "../../../../hooks/useSafeDetection";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { isSafeWallet } from "../../../../utils/ethersAdapters";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
+import { getRedeemSide, describeRedeemError } from "../../../../utils/redeemPlan";
 
 const DEFAULT_REDEEM_GAS_LIMIT = 700000;
 const REDEEM_GAS_LIMIT_BY_CHAIN = {
@@ -544,7 +545,7 @@ const RedemptionModal = ({
   const [localIsProcessing, setLocalIsProcessing] = useState(false);
 
   // Determine if winning outcome is YES
-  const isWinningOutcomeYes = config?.marketInfo?.finalOutcome?.toLowerCase() === 'yes';
+  const isWinningOutcomeYes = getRedeemSide(config?.marketInfo?.finalOutcome) === 'yes';
 
   const signer = useMemo(() => {
     if (!walletClient) {
@@ -738,14 +739,19 @@ const RedemptionModal = ({
           token2Address: winningTokens.currencyTokenAddress,
           amount1: winningTokens.companyAmount.toString(),
           amount2: winningTokens.currencyAmount.toString(),
-          amount1: winningTokens.companyAmount.toString(),
-          amount2: winningTokens.currencyAmount.toString(),
           exactApproval: !useUnlimitedApproval,
           useBlockExplorer
         }, { publicClient, walletClient, account });
 
         for await (const status of iterator) {
           console.log('[RedemptionModal] SDK Status:', status);
+
+          // SDK failures come back as { status: 'error', message, error } with no step
+          if (status.status === 'error') {
+            throw new Error(status.error || status.message);
+          }
+          const step = status.step || '';
+          const message = status.message || '';
 
           // Update debug info from SDK status
           if (status.txHash) {
@@ -762,27 +768,27 @@ const RedemptionModal = ({
           }
 
           // Map SDK steps to UI steps
-          if (status.step.includes('approving_token1')) {
+          if (step.includes('approving_token1')) {
             setCurrentSubstep({ step: 1, substep: 1 });
-            if (status.step === 'token1_approved' || status.message.includes('Token 1 approved') || status.message.includes('Token 1 already approved')) {
+            if (step === 'token1_approved' || message.includes('Token 1 approved') || message.includes('Token 1 already approved')) {
               markSubstepCompleted(1, 1);
             }
-          } else if (status.step.includes('approving_token2')) {
+          } else if (step.includes('approving_token2')) {
             // If token 1 was skipped or done quickly, ensure it's marked
             markSubstepCompleted(1, 1);
             setCurrentSubstep({ step: 1, substep: 2 });
-            if (status.step === 'token2_approved' || status.message.includes('Token 2 approved') || status.message.includes('Token 2 already approved')) {
+            if (step === 'token2_approved' || message.includes('Token 2 approved') || message.includes('Token 2 already approved')) {
               markSubstepCompleted(1, 2);
             }
-          } else if (status.step.includes('redeem')) {
+          } else if (step.includes('redeem')) {
             markSubstepCompleted(1, 1);
             markSubstepCompleted(1, 2);
             setCurrentSubstep({ step: 1, substep: 3 });
-            if (status.step === 'complete') {
+            if (step === 'complete') {
               markSubstepCompleted(1, 3);
               setCompletedSubsteps(prev => ({ ...prev, 1: { ...prev[1], completed: true } }));
             }
-          } else if (status.step === 'complete') {
+          } else if (step === 'complete') {
             setLocalProcessingStep("completed");
             setLocalIsProcessing(false);
           }
@@ -875,13 +881,7 @@ const RedemptionModal = ({
 
     } catch (error) {
       console.error('Redemption failed:', error);
-      let errorMessage = error.message || "Unknown error occurred.";
-      if (error.code === 4001 || error.code === "ACTION_REJECTED") {
-        errorMessage = "Transaction rejected by the user.";
-      } else if (error.message?.includes("user rejected")) {
-        errorMessage = "Transaction rejected by the user.";
-      }
-      setLocalError(errorMessage);
+      setLocalError(describeRedeemError(error));
       setLocalProcessingStep(undefined);
       setLocalIsProcessing(false);
       setCurrentSubstep({ step: 1, substep: 1 });

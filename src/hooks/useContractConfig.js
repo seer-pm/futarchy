@@ -4,6 +4,7 @@ import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
 import { invalidateCache } from '../services/requestCache';
 import { getRpcProvider } from '../utils/getBestRpc';
+import { outcomeFromPayouts } from '../utils/redeemPlan';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
 
 /**
@@ -42,9 +43,12 @@ async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress,
     if (denominator.isZero()) {
       return { resolved: false, outcome: null };
     }
-    // Outcome slot 0 = Yes, slot 1 = No for futarchy proposals
-    const yesNumerator = await conditionalTokens.payoutNumerators(conditionId, 0);
-    return { resolved: true, outcome: yesNumerator.gt(0) ? 'Yes' : 'No' };
+    // Outcome slot 0 = Yes, slot 1 = No for futarchy proposals; both paying out = Invalid
+    const [yesNumerator, noNumerator] = await Promise.all([
+      conditionalTokens.payoutNumerators(conditionId, 0),
+      conditionalTokens.payoutNumerators(conditionId, 1)
+    ]);
+    return { resolved: true, outcome: outcomeFromPayouts(yesNumerator, noNumerator) };
   } catch (error) {
     console.warn('[Config] On-chain resolution check failed:', error?.message);
     return null;
