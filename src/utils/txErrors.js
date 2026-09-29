@@ -92,3 +92,50 @@ export const describeTxError = (error, fallback = 'Transaction failed. Please tr
         ? `${summary.slice(0, MAX_ERROR_LENGTH - 1)}…`
         : summary;
 };
+
+// Added to an on-chain swap revert: with no revert reason, a moved price is
+// the usual cause.
+export const SWAP_REVERT_HINT = 'The price may have moved beyond your slippage tolerance. Review the quote and try again.';
+
+const QUOTE_NETWORK_PATTERN = /network|timeout|timed out|failed to fetch|could not detect|missing response|rate limit|too many requests|\b429\b|\b50[234]\b|bad response|ECONN/i;
+const QUOTE_REVERT_PATTERN = /revert|call exception|CALL_EXCEPTION/i;
+
+// ethers v5 appends "[ See: https://links.ethers.org/... ]" and
+// "(method=..., data=..., code=..., version=...)" to its messages
+const stripEthersSuffix = (text) => text
+    .replace(/\s*\[\s*See:[^\]]*\]/g, '')
+    .replace(/\s*\((?:method|action|reason|code|error|data|transaction|requestBody|url|errorArgs|errorName|errorSignature|version)=[\s\S]*$/, '')
+    .trim();
+
+/**
+ * Classifies a failed quote (eth_call simulation) and gives one short line
+ * for the trade panel: RPC trouble, a reverted quote (the pool cannot fill
+ * the amount), or anything else with its own first line.
+ */
+export const describeQuoteError = (error) => {
+    const chain = errorChain(error);
+    const texts = chain.map((e) => `${e.shortMessage || ''} ${e.message || ''}`);
+    const codes = chain.map((e) => e.code);
+    // Checked first: ethers v5 reports an RPC failure during eth_call as a
+    // CALL_EXCEPTION ("missing revert data") with the SERVER_ERROR nested
+    const network = codes.some((c) => c === 'NETWORK_ERROR' || c === 'SERVER_ERROR' || c === 'TIMEOUT') ||
+        texts.some((t) => QUOTE_NETWORK_PATTERN.test(t));
+    const reverted = !network && (codes.includes('CALL_EXCEPTION') || texts.some((t) => QUOTE_REVERT_PATTERN.test(t)));
+
+    if (network) return { kind: 'network', message: 'Quote failed: RPC unavailable, try again' };
+
+    if (reverted) {
+        const reason = chain
+            .map((e) => e.reason)
+            .find((r) => typeof r === 'string' && r && !/^(transaction failed|missing revert data.*)$/i.test(r));
+        return {
+            kind: 'reverted',
+            message: reason
+                ? `Quote reverted: ${stripEthersSuffix(reason)}`
+                : 'Quote reverted: the pool cannot fill this amount',
+        };
+    }
+
+    const summary = stripEthersSuffix(describeTxError(error, 'Quote failed'));
+    return { kind: 'other', message: summary || 'Quote failed' };
+};

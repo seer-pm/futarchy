@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { selectSwapDeltas } from "./swapQuoteMath.js";
 
 /**
  * @title Futarchy Quote Helper
@@ -54,39 +55,25 @@ export async function getSwapQuote({ proposal, amount, isYesPool, isInputCompany
         result = await helper.callStatic.simulateQuote(proposal, isYesPool, inputType, amountBig, txOverrides); // v5 uses callStatic
     } catch (error) {
         console.error("Simulation Failed:", error.message);
-        throw new Error("Simulation failed. Check if pool exists or amount is valid.");
+        // Keep the original error (code, reason) so callers can tell an RPC
+        // failure from a reverted simulation.
+        const wrapped = new Error(`Quote simulation failed: ${error.reason || error.code || 'unknown error'}`);
+        wrapped.cause = error;
+        wrapped.code = error.code;
+        wrapped.reason = error.reason;
+        throw wrapped;
     }
 
     // 4. Parse Results
-    // Result has: amount0Delta, amount1Delta, startSqrtPrice, endSqrtPrice
-    const d0 = result.amount0Delta;
-    const d1 = result.amount1Delta;
-
-    // One delta is Neg (Input), One is Pos (Output)
-    // We verify against our input amount.
-    // Note: JS BigInts are signed.
-
-    let amountOutBig;
-
-    // Ethers v5 BigNumber handling
-    if (d0.lt(0)) {
-        // d0 is negative (input usually from pool perspective, but depends on exact semantics)
-        // Let's rely on logic from script: Identify the one that matches input size roughly/exactly?
-        // Actually, the helper standardizes this. 
-        // If inputType==0 (Company), we send Company.
-        // Let's stick to the script's logic: "Find the one that IS NOT the input"
-    }
-
-    // Script Logic Ported:
-    const absD0 = d0.lt(0) ? d0.mul(-1) : d0;
-    const absD1 = d1.lt(0) ? d1.mul(-1) : d1;
-
-    // Match input
-    if (absD0.eq(amountBig)) {
-        amountOutBig = absD1;
-    } else {
-        amountOutBig = absD0;
-    }
+    // Pool-side deltas: positive = paid into the pool (input), negative =
+    // paid out (output). A thin pool that stops at its price limit consumes
+    // less than amountIn — flagged as a partial fill.
+    const { amountOut: amountOutRaw, amountInConsumed, isPartialFill } = selectSwapDeltas({
+        amount0Delta: result.amount0Delta.toString(),
+        amount1Delta: result.amount1Delta.toString(),
+        amountIn: amountBig.toString(),
+    });
+    const amountOutBig = ethers.BigNumber.from(amountOutRaw.toString());
 
     // 5. Calculations
     const expectedReceive = ethers.utils.formatEther(amountOutBig);
@@ -143,9 +130,12 @@ export async function getSwapQuote({ proposal, amount, isYesPool, isInputCompany
         startSqrtPrice: startSqrtPrice.toString(),
         endSqrtPrice: endSqrtPrice.toString(),
         isInverted: isInverted,
+        // The pool could not absorb the whole amount (it hit its price limit)
+        partialFill: isPartialFill,
         // Raw big ints if needed
         raw: {
             amountIn: amountBig.toString(), // Convert to string for safety in JSON
+            amountInConsumed: amountInConsumed.toString(),
             amountOut: amountOutBig.toString()
         }
     };

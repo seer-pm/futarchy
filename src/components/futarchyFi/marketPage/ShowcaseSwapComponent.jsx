@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { STEPS_CONFIG } from './constants/swapSteps';
 import { ethers } from 'ethers';
@@ -34,6 +34,8 @@ import { useContractConfig } from '../../../hooks/useContractConfig';
 import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
 import { getUniswapV3QuoteWithPriceImpact, getPoolSqrtPrice, sqrtPriceX96ToPrice } from '../../../utils/uniswapSdk';
 import { usePublicClient, useChainId } from 'wagmi';
+import { describeQuoteError } from '../../../utils/txErrors';
+import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMath';
 
 // Opens only from the native-swap action — load it on demand.
 const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
@@ -143,6 +145,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     error: null
   });
   const [showPriceInfo, setShowPriceInfo] = useState(false);
+  // Id of the latest quote request; a response for an older one is dropped
+  const quoteRequestIdRef = useRef(0);
   const [tradeAnywayAcknowledged, setTradeAnywayAcknowledged] = useState(false);
   const publicClient = usePublicClient();
   const walletChainId = useChainId();
@@ -214,6 +218,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     setQuoterPreview(prev => ({ ...prev, isLoading: true }));
 
     let isActive = true;
+    const requestId = ++quoteRequestIdRef.current;
+    const isCurrent = () => isActive && requestId === quoteRequestIdRef.current;
 
     // Debounce: wait 500ms after user stops typing
     const timer = setTimeout(async () => {
@@ -279,6 +285,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
             try {
               const quote = await getSwapQuote(quoteParams, ethersProvider);
+              if (quote?.partialFill) {
+                // The pool stops at its price limit before taking the whole amount
+                const partialError = new Error('Pool can only fill part of this amount');
+                partialError.partialFill = true;
+                throw partialError;
+              }
               if (quote) {
                 quoteResult = {
                   amountOut: quote.expectedReceive, // String already
@@ -381,7 +393,14 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             currentPrice = sqrtPriceX96ToPrice(poolData.sqrtPriceX96);
           }
 
-          executionPrice = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
+          // Average price actually paid, already in currency per company
+          executionPrice = executionPriceFor({
+            amountIn: amount,
+            amountOut: quoteResult.amountOutFormatted,
+            isBuy: selectedAction === 'Buy'
+          });
+          // Pool spot price after the swap (token1/token0; inverted below)
+          quoteResult.priceAfter = sqrtPriceX96ToPrice(quoteResult.sqrtPriceX96After);
         }
 
         // Determine if we need to invert based on action (Buy/Sell)
@@ -404,7 +423,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
           if (shouldInvert) {
             currentPrice = 1 / currentPrice;
-            executionPrice = 1 / executionPrice;
+            quoteResult.priceAfter = 1 / quoteResult.priceAfter;
           }
 
           console.log('[QUOTER SHOWCASE] Uniswap Prices:', {
@@ -427,7 +446,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
 
-        if (isActive) {
+        if (isCurrent()) {
           const afterPrice = quoteResult.priceAfter ?? executionPrice;
           const priceImpactPct = Number.isFinite(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
             ? Math.abs(Number(quoteResult.priceImpactPct ?? quoteResult.priceImpact))
@@ -454,8 +473,13 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           });
         }
       } catch (error) {
-        if (isActive) {
+        if (isCurrent()) {
           console.error('[QUOTER SHOWCASE] Error:', error);
+          // A partial fill or a reverted simulation means the pool cannot take
+          // this amount; RPC and other failures are reported as they are.
+          const { kind, message } = error?.partialFill
+            ? { kind: 'partial', message: 'Pool can only fill part of this amount' }
+            : describeQuoteError(error);
 
           // Even when the quoter fails (e.g. no liquidity in sell direction),
           // try to show the current pool price so More Info still works
@@ -481,13 +505,15 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             console.warn('[QUOTER SHOWCASE] Could not get fallback pool price:', poolErr.message);
           }
 
+          if (!isCurrent()) return; // a newer quote started while the fallback price loaded
+
           setQuoterPreview({
             isLoading: false,
             amountOut: null,
             currentPrice: fallbackPrice,
             chainId: chainId,
-            insufficientLiquidity: true, // Quoter failure means pool can't handle this trade
-            error: error.message
+            insufficientLiquidity: kind === 'partial' || kind === 'reverted',
+            error: message
           });
         }
       }
@@ -646,6 +672,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       console.error("Invalid amount entered");
       return;
     }
+    if (insufficientBalance) {
+      console.error('Amount exceeds the available balance');
+      return;
+    }
     if ((chainId === 1 || chainId === 100) && (quoterPreview.isLoading || quoterPreview.quotedAmountIn !== amount || !quoterPreview.amountOut)) {
       console.error('A current on-chain pool quote is required');
       return;
@@ -718,13 +748,8 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
         priceAfter: (USING_FUTARCHY_QUOTER && quoterPreview?.priceAfter) ? quoterPreview.priceAfter : null,
         minimumReceived: (USING_FUTARCHY_QUOTER && quoterPreview?.minimumReceived) ? quoterPreview.minimumReceived : null,
         amountOutRaw: (USING_FUTARCHY_QUOTER && quoterPreview?.amountOutRaw) ? quoterPreview.amountOutRaw : null,
-        // Price Impact: Change in Pool Spot Price (Price After vs Current Price)
+        // Price impact of this trade, already included in the quoted output
         priceImpact: quoterPreview?.priceImpactPct ?? null,
-
-        // Slippage: Execution Price (Avg) vs Current Spot Price
-        slippage: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice && quoterPreview?.executionPrice)
-          ? ((Math.abs(parseFloat(quoterPreview.currentPrice) - parseFloat(quoterPreview.executionPrice)) / parseFloat(quoterPreview.currentPrice)) * 100).toFixed(4)
-          : null,
 
         currentPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice) ? quoterPreview.currentPrice : null,
         executionPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.executionPrice) ? quoterPreview.executionPrice : null,
@@ -806,6 +831,105 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       // Optionally show an error
     }
   };
+
+  // "Available" in the panel: wallet collateral plus the conditional tokens
+  // already held for the selected side. value is the exact decimal string
+  // (null while unknown) — the Confirm button compares the amount with it.
+  const computeAvailableBalance = () => {
+    if (!account) return { display: '-', value: null };
+    if (!positions || isLoadingBalances) return { display: 'Loading...', value: null }; // Show loading when positions or balances are loading
+
+    // Calculate available balance based on selected outcome and action
+    let calculatedValueStr, symbol;
+
+    if (selectedAction === 'Buy') {
+      // For Buy action, determine balance based on selected currency mode
+      if (selectedCurrency === getCurrencySymbol()) {
+        // Currency mode: Sum position tokens + currency balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = balances?.sdaiBalance || '0';
+        symbol = getCurrencySymbol();
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating currency balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      } else if (selectedCurrency === 'WXDAI') {
+        if (redirectToCOW) {
+          // When redirectToCOW is true: Show currency + position tokens (like currency mode)
+          const outcomeBalance = selectedOutcome === 'approved'
+            ? (positions?.currencyYes?.total || '0')
+            : (positions?.currencyNo?.total || '0');
+          const baseBalance = balances?.sdaiBalance || '0';
+          symbol = getCurrencySymbol();
+
+          try {
+            const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+            const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+            const totalBN = outcomeBN.add(baseBN);
+            calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+          } catch (calcError) {
+            console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
+            calculatedValueStr = outcomeBalance || '-';
+          }
+        } else {
+          // Original behavior: Show ONLY native xDAI balance (no position tokens)
+          calculatedValueStr = balances?.nativeBalance || '0';
+          symbol = 'xDAI';
+        }
+      } else {
+        // Fallback mode: Sum position tokens + WXDAI balance
+        const outcomeBalance = selectedOutcome === 'approved'
+          ? (positions?.currencyYes?.total || '0')
+          : (positions?.currencyNo?.total || '0');
+        const baseBalance = positions?.wxdai || '0';
+        symbol = 'WXDAI';
+
+        try {
+          const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+          const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+          const totalBN = outcomeBN.add(baseBN);
+          calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+        } catch (calcError) {
+          console.error('Error calculating fallback balance:', calcError);
+          calculatedValueStr = outcomeBalance || '-';
+        }
+      }
+    } else { // Sell
+      // For Sell action: Always sum position tokens + base token balance
+      const outcomeBalance = selectedOutcome === 'approved'
+        ? (positions?.companyYes?.total || '0')
+        : (positions?.companyNo?.total || '0');
+      const baseBalance = positions?.faot || '0'; // Company token balance from positions
+      symbol = getCompanySymbol();
+
+      try {
+        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
+        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
+        const totalBN = outcomeBN.add(baseBN);
+        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
+      } catch (calcError) {
+        console.error('Error calculating sell balance:', calcError);
+        calculatedValueStr = outcomeBalance || '-';
+      }
+    }
+
+    // If we don't have a valid calculated value, show dash
+    if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
+      return { display: '-', value: calculatedValueStr === '-' ? null : '0' };
+    }
+
+    return { display: `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`, value: calculatedValueStr };
+  };
+  const availableBalance = computeAvailableBalance();
+  const insufficientBalance = Boolean(account) && availableBalance.value !== null && exceedsAvailable(amount, availableBalance.value);
 
   const displayedPriceImpact = Number(quoterPreview.priceImpactPct);
   const hasPriceImpact = Number.isFinite(displayedPriceImpact);
@@ -949,99 +1073,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
               onClick={account ? handleMaxClick : undefined}
               className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
             >
-              {(() => {
-                if (!account) return '-';
-                if (!positions || isLoadingBalances) return 'Loading...'; // Show loading when positions or balances are loading
-
-                // Calculate available balance based on selected outcome and action
-                let calculatedValueStr, symbol;
-
-                if (selectedAction === 'Buy') {
-                  // For Buy action, determine balance based on selected currency mode
-                  if (selectedCurrency === getCurrencySymbol()) {
-                    // Currency mode: Sum position tokens + currency balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = balances?.sdaiBalance || '0';
-                    symbol = getCurrencySymbol();
-
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating currency balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  } else if (selectedCurrency === 'WXDAI') {
-                    if (redirectToCOW) {
-                      // When redirectToCOW is true: Show currency + position tokens (like currency mode)
-                      const outcomeBalance = selectedOutcome === 'approved'
-                        ? (positions?.currencyYes?.total || '0')
-                        : (positions?.currencyNo?.total || '0');
-                      const baseBalance = balances?.sdaiBalance || '0';
-                      symbol = getCurrencySymbol();
-
-                      try {
-                        const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                        const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                        const totalBN = outcomeBN.add(baseBN);
-                        calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                      } catch (calcError) {
-                        console.error('Error calculating WXDAI redirectToCOW balance:', calcError);
-                        calculatedValueStr = outcomeBalance || '-';
-                      }
-                    } else {
-                      // Original behavior: Show ONLY native xDAI balance (no position tokens)
-                      calculatedValueStr = balances?.nativeBalance || '0';
-                      symbol = 'xDAI';
-                    }
-                  } else {
-                    // Fallback mode: Sum position tokens + WXDAI balance
-                    const outcomeBalance = selectedOutcome === 'approved'
-                      ? (positions?.currencyYes?.total || '0')
-                      : (positions?.currencyNo?.total || '0');
-                    const baseBalance = positions?.wxdai || '0';
-                    symbol = 'WXDAI';
-
-                    try {
-                      const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                      const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                      const totalBN = outcomeBN.add(baseBN);
-                      calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                    } catch (calcError) {
-                      console.error('Error calculating fallback balance:', calcError);
-                      calculatedValueStr = outcomeBalance || '-';
-                    }
-                  }
-                } else { // Sell
-                  // For Sell action: Always sum position tokens + base token balance
-                  const outcomeBalance = selectedOutcome === 'approved'
-                    ? (positions?.companyYes?.total || '0')
-                    : (positions?.companyNo?.total || '0');
-                  const baseBalance = positions?.faot || '0'; // Company token balance from positions
-                  symbol = getCompanySymbol();
-
-                  try {
-                    const outcomeBN = ethers.utils.parseUnits(outcomeBalance, 18);
-                    const baseBN = ethers.utils.parseUnits(baseBalance, 18);
-                    const totalBN = outcomeBN.add(baseBN);
-                    calculatedValueStr = ethers.utils.formatUnits(totalBN, 18);
-                  } catch (calcError) {
-                    console.error('Error calculating sell balance:', calcError);
-                    calculatedValueStr = outcomeBalance || '-';
-                  }
-                }
-
-                // If we don't have a valid calculated value, show dash
-                if (!calculatedValueStr || calculatedValueStr === '0' || calculatedValueStr === '0.0') {
-                  return '-';
-                }
-
-                return `${formatWith(parseFloat(calculatedValueStr), 'balance')} ${symbol}`;
-              })()}
+              {availableBalance.display}
             </span>
           </div>
 
@@ -1110,7 +1142,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1209,7 +1246,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]">Insufficient liquidity</span>;
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                        }
+
+                        // Any other quote failure: show its reason, not a spot-price estimate
+                        if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
+                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1311,9 +1353,9 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             <button
               onClick={handleConfirmClick}
               className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors text-sm bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
+              disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || insufficientBalance || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
             >
-              <span className="relative z-10">{quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
+              <span className="relative z-10">{insufficientBalance ? 'Insufficient balance' : quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
               {(amount && parseFloat(amount) > 0 && !marketHasClosed) && (
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
               )}
