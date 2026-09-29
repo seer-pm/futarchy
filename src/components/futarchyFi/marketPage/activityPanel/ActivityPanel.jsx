@@ -189,4 +189,6 @@ const ActivityPanel = React.forwardRef(({
   );
 });
 
+ActivityPanel.displayName = 'ActivityPanel';
+
 export default ActivityPanel; 

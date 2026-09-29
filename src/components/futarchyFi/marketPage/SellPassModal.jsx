@@ -218,4 +218,6 @@ const SellPassModal = memo(({
     );
 });
 
+SellPassModal.displayName = 'SellPassModal';
+
 export default SellPassModal; 

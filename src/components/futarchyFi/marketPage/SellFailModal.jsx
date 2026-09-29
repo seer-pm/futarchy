@@ -96,4 +96,6 @@ const SellFailModal = memo(({
     );
 });
 
+SellFailModal.displayName = 'SellFailModal';
+
 export default SellFailModal; 
