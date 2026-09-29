@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { isSafeWallet } from './ethersAdapters';
 import { SAFE_TRANSACTION_SENT, assertReceiptSucceeded } from './txErrors.js';
+import { minReceiveFromQuote } from './swapQuoteMath.js';
 import { approvalAmountFor } from './approvalAmount';
 import { quoteUniswapV3ExactInput } from './uniswapV3Quote.mjs';
 
@@ -983,8 +984,10 @@ export async function executeSwapForUniswapSDK(
 
   const quotedAmountOut = ethers.BigNumber.from(quotedAmountOutRaw || 0);
   if (quotedAmountOut.isZero()) throw new Error('A non-zero on-chain quote is required for minOut');
-  const slippageBps = Math.round(slippageTolerance * 10000);
-  const minAmountWithSlippage = quotedAmountOut.mul(10000 - slippageBps).div(10000);
+  // Same formula as the confirm dialog's "Min. Receive" (tolerance in percent there)
+  const minAmountWithSlippage = ethers.BigNumber.from(
+    minReceiveFromQuote(quotedAmountOut.toString(), slippageTolerance * 100).toString()
+  );
 
   try {
     const tx = await executeUniswapV3Swap({
