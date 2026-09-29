@@ -89,7 +89,10 @@ test('modal — displayed Min. Receive is computed by minimumFromQuote from the 
 
 test('modal — Uniswap SDK execution gets the same (clamped) tolerance as the display', () => {
     assert.doesNotMatch(MODAL, /\n\s*slippageTolerance \/ 100,/);
-    assert.equal((MODAL.match(/getSafeSlippageTolerance\(\) \/ 100,\s*\n\s*walletClient,/g) || []).length, 2);
+    // Every executeSwapForUniswapSDK call passes the clamped tolerance.
+    const sdkCalls = (MODAL.match(/executeSwapForUniswapSDK\(/g) || []).length;
+    assert.ok(sdkCalls >= 1);
+    assert.equal((MODAL.match(/getSafeSlippageTolerance\(\) \/ 100,\s*\n\s*walletClient,/g) || []).length, sdkCalls);
     assert.match(UNISWAP_SDK, /minReceiveFromQuote\(quotedAmountOut\.toString\(\), slippageTolerance \* 100\)/);
 });
 

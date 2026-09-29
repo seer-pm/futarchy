@@ -6,51 +6,33 @@ import { ethers } from 'ethers';
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { CowSdk, OrderKind } from '@gnosis.pm/cow-sdk';
-import { fetchSushiSwapRoute, executeSushiSwapRoute } from '../../../utils/sushiswapHelper';
-import { executeV3Swap, executeSushiV3RouterSwap, executeSushiV3DirectRedemption, checkAndApproveTokenForV3Swap, V3_POOL_CONFIG, executeRedemptionSwap, executeAlgebraExactSingle, SWAPR_V3_ROUTER } from '../../../utils/sushiswapV3Helper';
-import {
-    checkAndApproveTokenForUniswapV3,
-    executeUniswapV3Swap,
-    getUniswapV3Quote,
-    UNISWAP_V3_ROUTER,
-    UNISWAP_UNIVERSAL_ROUTER,
-    PERMIT2_ADDRESS,
-    shouldUsePermit2
-} from '../../../utils/uniswapV3Helper';
+import { fetchSushiSwapRoute } from '../../../utils/sushiswapHelper';
+import { executeV3Swap, checkAndApproveTokenForV3Swap, executeAlgebraExactSingle, SWAPR_V3_ROUTER } from '../../../utils/sushiswapV3Helper';
 import {
     checkAndApproveForUniswapSDK,
     executeSwapForUniswapSDK,
     getUniswapV3QuoteWithPriceImpact,
-    getPoolSqrtPrice,
-    sqrtPriceX96ToPrice as uniswapSqrtPriceX96ToPrice
+    getPoolSqrtPrice
 } from '../../../utils/uniswapSdk';
 import {
     getAlgebraQuoteWithSlippage,
     sqrtPriceX96ToPrice
 } from '../../../utils/algebraQuoter';
-// Import SDK Cartridges
-import { UniswapRouterCartridge } from 'futarchy-sdk/executors/UniswapRouterCartridge';
-import { SwaprAlgebraCartridge } from 'futarchy-sdk/executors/SwaprAlgebraCartridge';
-import { FutarchyCartridge } from 'futarchy-sdk/executors/FutarchyCartridge';
 import { getBestRpcProvider, getBestRpc, clearRpcCache } from '../../../utils/getBestRpc';
 import {
     ERC20_ABI,
     FUTARCHY_ROUTER_ABI,
-    WRAPPER_SERVICE_ADDRESS,
     PRECISION_CONFIG as DEFAULT_PRECISION_CONFIG,
     DEFAULT_BASE_TOKENS_CONFIG,
     FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS,
     SUSHISWAP_V2_ROUTER as DEFAULT_SUSHISWAP_V2_ROUTER,
-    SUSHISWAP_V3_ROUTER as DEFAULT_SUSHISWAP_V3_ROUTER,
-    PREDICTION_POOLS,
-    MARKET_ADDRESS,
 } from './constants/contracts';
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { useRequiredChain } from '../../../hooks/useChainValidation';
 import DebugToast from './DebugToast';
-import { formatBalance, formatPrice, formatPercentage } from '../../../utils/formatters';
+import { formatBalance } from '../../../utils/formatters';
 import { Decimal } from 'decimal.js';
-import { formatTokenAmount, formatWith } from '../../../utils/precisionFormatter';
+import { formatTokenAmount } from '../../../utils/precisionFormatter';
 import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
@@ -112,65 +94,9 @@ export const STEPS_DATA = {
 
 // Updated function to get steps data based on transaction type AND method
 const getStepsData = (transactionType, selectedMethod = 'cowswap') => {
-    const swapTargetName =
-        selectedMethod === 'cowswap' ? 'CoW Swap' :
-            selectedMethod === 'algebra' ? 'Algebra (Swapr)' :
-                selectedMethod === 'uniswap' ? 'Uniswap V3' :
-                    selectedMethod === 'uniswapSdk' ? 'Uniswap SDK' :
-                        'SushiSwap V3';
-
-    if (transactionType === 'Redeem') {
-        // Use the same logic to determine the target name for redemption steps
-        const redemptionTargetName =
-            selectedMethod === 'cowswap' ? 'CoW Swap' :
-                selectedMethod === 'algebra' ? 'Algebra (Swapr)' :
-                    selectedMethod === 'uniswap' ? 'Uniswap V3' :
-                        selectedMethod === 'uniswapSdk' ? 'Uniswap SDK' :
-                            'SushiSwap V3';
-
-        // Special case for Uniswap with Permit2
-        if (selectedMethod === 'uniswap' || selectedMethod === 'uniswapSdk') {
-            return {
-                1: {
-                    title: 'Preparing Redemption',
-                    substeps: [
-                        { id: 1, text: 'Checking position balance', completed: false },
-                        { id: 2, text: 'Validating redemption eligibility', completed: false }
-                    ]
-                },
-                2: {
-                    title: 'Processing Redemption',
-                    substeps: [
-                        { id: 1, text: 'Step 1: Approve token to Permit2', completed: false },
-                        { id: 2, text: 'Step 2: Approve Permit2 to Universal Router', completed: false },
-                        { id: 3, text: 'Executing redemption', completed: false }
-                    ]
-                }
-            };
-        }
-
-        return {
-            1: {
-                title: 'Preparing Redemption',
-                substeps: [
-                    { id: 1, text: 'Checking position balance', completed: false },
-                    { id: 2, text: 'Validating redemption eligibility', completed: false }
-                ]
-            },
-            2: {
-                title: 'Processing Redemption',
-                substeps: [
-                    // Use the dynamically determined redemptionTargetName
-                    { id: 1, text: 'Approving token for spending', completed: false },
-                    { id: 2, text: 'Executing redemption', completed: false }
-                ]
-            }
-        };
-    }
-
     // Default steps for Buy/Sell
     // Special case for Uniswap with Permit2
-    if (selectedMethod === 'uniswap' || selectedMethod === 'uniswapSdk') {
+    if (selectedMethod === 'uniswapSdk') {
         return {
             1: {
                 title: 'Adding Collateral', // Method-agnostic
@@ -201,7 +127,6 @@ const getStepsData = (transactionType, selectedMethod = 'cowswap') => {
         2: {
             title: 'Processing Swap', // Method-agnostic
             substeps: [
-                // Use the dynamically determined swapTargetName
                 { id: 1, text: 'Approving token for spending', completed: false },
                 { id: 2, text: 'Executing swap', completed: false }
             ]
@@ -435,14 +360,6 @@ const MAINNET_EXPLORER_CONFIG = {
     name: 'Etherscan'
 };
 
-// ---> Simple SVG Cog Icon <----
-const SettingsIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block ml-1 text-futarchyGray9 hover:text-futarchyGray11 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-);
-
 const ConfirmSwapModal = memo(({
     onClose,
     transactionData,
@@ -456,13 +373,8 @@ const ConfirmSwapModal = memo(({
     useSushiV3 = true,  // Default to using SushiSwap V3
     hideToggleSushiSwap = true, // New flag to hide SushiSwap toggle
     toggleHideCowSwap = true, // New flag to hide CoW Swap toggle (default: true)
-    useSDK = false, // Feature flag for SDK integration
     useBlockExplorer = false // Flag to force waiting for transaction confirmation
 }) => {
-    // Feature flag for redemption functionality
-    const ENABLE_REDEMPTION = true;
-    // Feature flag to control whether we should display inverse swap prices for redemption
-    const USE_INVERSE_SWAP_DISPLAY = false; // Set to false to display direct API swap price instead of inverse
 
     // Get subgraph refresh triggers for post-swap updates
     const { refreshAll } = useSubgraphRefresh();
@@ -881,7 +793,6 @@ const ConfirmSwapModal = memo(({
     const {
         FUTARCHY_ROUTER_ADDRESS = DEFAULT_FUTARCHY_ROUTER_ADDRESS,
         SUSHISWAP_V2_ROUTER = DEFAULT_SUSHISWAP_V2_ROUTER,
-        SUSHISWAP_V3_ROUTER = DEFAULT_SUSHISWAP_V3_ROUTER,
         MARKET_ADDRESS, // This should come from the extracted proposal ID
         BASE_TOKENS_CONFIG = DEFAULT_BASE_TOKENS_CONFIG,
         MERGE_CONFIG, // This should come from config
@@ -1253,89 +1164,6 @@ const ConfirmSwapModal = memo(({
                 ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency
                 : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company;
 
-            // --- SDK INTEGRATION START ---
-            if (useSDK) {
-                console.log('[ConfirmSwapModal] Using SDK for Collateral Operation');
-
-                // Strictly match CollateralModal variable resolution
-                const routerAddress = config?.FUTARCHY_ROUTER_ADDRESS || FUTARCHY_ROUTER_ADDRESS;
-                // CollateralModal uses config?.MARKET_ADDRESS || MARKET_ADDRESS
-                const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
-
-                // Initialize Cartridge
-                const cartridge = new FutarchyCartridge(routerAddress);
-
-                // --- SDK SPLIT (ADD) ---
-                // We only support 'add' (split) here as this is ConfirmSwapModal (Buy/Sell)
-
-                // Strictly match CollateralModal baseToken resolution
-                const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
-                const baseToken = tokenType === 'currency' ? baseTokensConfig.currency : baseTokensConfig.company;
-
-                console.log('[ConfirmSwapModal] SDK Split Params:', {
-                    proposal: marketAddress,
-                    collateralToken: baseToken.address,
-                    amount: amount.toString(),
-                    exactApproval: !useUnlimitedApproval
-                });
-
-                // Execute completeSplit
-                const iterator = cartridge.completeSplit({
-                    proposal: marketAddress,
-                    collateralToken: baseToken.address,
-                    amount: amount.toString(), // Match CollateralModal exactly (relies on SDK parseEther)
-                    exactApproval: !useUnlimitedApproval,
-                    useBlockExplorer
-                }, { publicClient, walletClient, account });
-
-                for await (const status of iterator) {
-                    console.log('[ConfirmSwapModal] SDK Status:', status);
-                    // The SDK reports failures (e.g. a reverted receipt) as an error status
-                    if (status.status === 'error') {
-                        throw new Error(status.message || status.error);
-                    }
-
-                    // Map SDK steps to UI steps
-                    if (status.step.includes('approv')) {
-                        // Ensure we are on the approval substep
-                        if (currentSubstep.substep !== 1) {
-                            setCurrentSubstep({ step: 1, substep: 1 });
-                        }
-
-                        if (status.step === 'approved' || status.step === 'already_approved') {
-                            markSubstepCompleted(1, 1);
-                            // Move to next substep visually
-                            setCurrentSubstep({ step: 1, substep: 2 });
-                        }
-                    } else if (status.step.includes('split')) {
-                        // Ensure we are on the mint substep
-                        if (currentSubstep.substep !== 2) {
-                            setCurrentSubstep({ step: 1, substep: 2 });
-                        }
-
-                        // Fix: Check for 'split_complete' specifically
-                        if (status.step === 'split_complete' || status.status === 'success') {
-                            markSubstepCompleted(1, 2);
-                        }
-                    } else if (status.step === 'complete') {
-                        // All done
-                        setCompletedSubsteps(prev => ({
-                            ...prev,
-                            1: { ...prev[1], completed: true }
-                        }));
-
-                        // Advance to next step (Swap)
-                        setCurrentSubstep({ step: 2, substep: 1 });
-                        setProcessingStep(2);
-                        setExpandedSteps(prev => ({ ...prev, 1: false, 2: true }));
-                    }
-                }
-
-                console.log('[ConfirmSwapModal] SDK Collateral Operation Completed Successfully');
-                return true;
-            }
-            // --- SDK INTEGRATION END ---
-
             // Convert to decimal string first
             const amountInWei = amount.toString().includes('e')
                 ? ethers.utils.parseUnits(new Decimal(amount).toString(), baseToken.decimals)
@@ -1539,7 +1367,7 @@ const ConfirmSwapModal = memo(({
         }
 
         if (selectedSwapMethod === 'uniswapSdk') {
-            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG || DEFAULT_MERGE_CONFIG;
+            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG;
             const currency = isYes ? mergeConfig.currencyPositions.yes : mergeConfig.currencyPositions.no;
             const company = isYes ? mergeConfig.companyPositions.yes : mergeConfig.companyPositions.no;
             const quote = await getUniswapV3QuoteWithPriceImpact({
@@ -1743,127 +1571,10 @@ const ConfirmSwapModal = memo(({
             console.log(`[ConfirmSwapCow Debug - Toggle] Entering Step 2 for ${selectedSwapMethod}`);
             setCurrentSubstep({ step: 2, substep: 1 }); // Ensure focus is on approval substep
 
-            // --- SDK INTEGRATION START ---
-            if (useSDK) {
-                console.log('[ConfirmSwapModal] Using SDK for Swap Operation');
-
-                // Determine tokens for swap
-                let tokenIn, tokenOut;
-                const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG || DEFAULT_MERGE_CONFIG;
-                const baseTokenConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG;
-                const isRedemptionOrRecover = transactionData.action === 'Redeem' || transactionData.action === 'Recover';
-
-                if (isRedemptionOrRecover) {
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = baseTokenConfig.currency.address;
-                } else if (transactionData.action === 'Buy') {
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-                } else { // Sell
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.companyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.companyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                }
-
-                let cartridge;
-                let generator;
-
-                if (selectedSwapMethod === 'uniswap' || selectedSwapMethod === 'uniswapSdk') {
-                    console.log('[ConfirmSwapModal] Initializing UniswapRouterCartridge');
-                    cartridge = new UniswapRouterCartridge({
-                        chainId: chain?.id || 1,
-                        routerAddress: UNISWAP_UNIVERSAL_ROUTER,
-                        permit2Address: PERMIT2_ADDRESS
-                    });
-
-                    const minAmountOut = minimumFromQuote(
-                        swapRouteData.data?.buyAmount || transactionData.amountOutRaw
-                    );
-
-                    generator = cartridge.completeSwap({
-                        tokenIn,
-                        tokenOut,
-                        amountIn: amountInWei.toString(), // Pass as string or BigInt depending on SDK expectation. SDK usually handles strings/BigInts.
-                        minAmountOut: minAmountOut.toString(),
-                        recipient: account,
-                        fee: 500, // Default fee
-                        exactApproval: !useUnlimitedApproval,
-                        useBlockExplorer
-                    }, { publicClient, walletClient, account });
-
-                } else if (selectedSwapMethod === 'algebra') {
-                    console.log('[ConfirmSwapModal] Initializing SwaprAlgebraCartridge');
-                    cartridge = new SwaprAlgebraCartridge();
-
-                    // Prepare args for completeSwap
-                    // SwaprAlgebraCartridge.completeSwap expects { tokenIn, tokenOut, amount, slippageBps, deadline }
-                    const slippageBps = Math.round(getSafeSlippageTolerance() * 100);
-
-                    generator = cartridge.completeSwap({
-                        tokenIn,
-                        tokenOut,
-                        amount: amountInWei.toString(),
-                        slippageBps,
-                        deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-                        exactApproval: !useUnlimitedApproval,
-                        useBlockExplorer
-                    }, { publicClient, walletClient, account });
-                } else {
-                    throw new Error(`SDK not supported for method: ${selectedSwapMethod}`);
-                }
-
-                // Execute generator
-                for await (const step of generator) {
-                    console.log('[ConfirmSwapModal] SDK Step:', step);
-
-                    // Map SDK steps to UI
-                    // We have 2 main steps in UI: 1. Collateral (already done), 2. Processing Swap
-                    // Substeps for Swap: 1. Approve, 2. Execute
-
-                    if (step.status === 'error') {
-                        throw new Error(step.message || step.error);
-                    }
-
-                    if (step.step === 'check_approval' || step.step === 'approving' || step.step === 'approve_confirm' || step.step === 'check') {
-                        setCurrentSubstep({ step: 2, substep: 1 });
-                        // Update text if possible? Current UI has fixed text.
-                    } else if (step.step === 'approved' || step.step === 'permit2_approved' || step.step === 'already_approved') {
-                        markSubstepCompleted(2, 1);
-                        setCurrentSubstep({ step: 2, substep: 2 });
-                    } else if (step.step === 'swapping' || step.step === 'swap' || step.step === 'execute') {
-                        setCurrentSubstep({ step: 2, substep: 2 });
-                    } else if (step.step === 'complete' || step.status === 'success') {
-                        markSubstepCompleted(2, 2);
-                        setProcessingStep('completed');
-                        setOrderStatus('fulfilled');
-                        if (step.data && step.data.transactionHash) {
-                            setTransactionResultHash(step.data.transactionHash);
-                        }
-                    }
-                }
-
-                console.log('[ConfirmSwapModal] SDK Operation Completed Successfully');
-                setIsProcessing(false);
-                refreshAll(); // Trigger subgraph chart/trades refresh
-                onTransactionComplete?.();
-                return; // Exit function, skipping legacy logic
-            }
-            // --- SDK INTEGRATION END ---
-
             // Determine tokens for swap (same logic as before)
             let tokenIn, tokenOut;
-            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG || DEFAULT_MERGE_CONFIG;
+            const mergeConfig = config?.MERGE_CONFIG || MERGE_CONFIG;
             const baseTokenConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG;
-            const isRedemptionOrRecover = transactionData.action === 'Redeem' || transactionData.action === 'Recover';
 
             // --> ADD Definition for eventHappens <--
             const eventHappens = transactionData.outcome === 'Event Will Occur';
@@ -1877,13 +1588,7 @@ const ConfirmSwapModal = memo(({
                 action: transactionData.action
             });
 
-            if (isRedemptionOrRecover) {
-                // Always recover/redeem from position token to native token (currency)
-                tokenIn = transactionData.outcome === 'Event Will Occur'
-                    ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                tokenOut = baseTokenConfig.currency.address;
-            } else if (transactionData.action === 'Buy') {
+            if (transactionData.action === 'Buy') {
                 // Buy: Currency position -> Company position (same outcome)
                 tokenIn = transactionData.outcome === 'Event Will Occur'
                     ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
@@ -1907,514 +1612,112 @@ const ConfirmSwapModal = memo(({
                 action: transactionData.action,
                 outcome: transactionData.outcome
             });
-            // Special handling for Redemption (overrides Buy/Sell logic)
-            if (transactionData.action === 'Redeem') {
-                console.log(`[ConfirmSwapCow Debug - Toggle] Handling REDEEM action via ${selectedSwapMethod}`);
+            // --- Buy/Sell Path ---
+            console.log(`[ConfirmSwapCow Debug - Toggle] Handling ${transactionData.action} via ${selectedSwapMethod}`);
+            let swapTx;
 
-                // Determine Position Token address (tokenIn for redemption)
-                tokenIn = transactionData.outcome === 'Event Will Occur'
-                    ? (MERGE_CONFIG || DEFAULT_MERGE_CONFIG).currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                    : (MERGE_CONFIG || DEFAULT_MERGE_CONFIG).currencyPositions.no.wrap.wrappedCollateralTokenAddress;
+            if (selectedSwapMethod === 'cowswap') {
+                // --- CoW Swap Approval ---
+                const eventHappens = transactionData.outcome === 'Event Will Occur';
+                console.log('[DEBUG] CoW Buy/Sell - Using signer for approval:', {
+                    signerType: signer._isSigner ? 'custom' : 'Web3Provider',
+                    connectorName: walletClient?.connector?.name
+                });
 
-                let redeemTx;
+                const needsApprovalCow = await checkAndApproveTokenForV3Swap({
+                    walletClient,
+                    connector,
+                    signer: signer,
+                    tokenAddress: tokenIn,
+                    amount: amountInWei,
+                    eventHappens, // Keep for V3 helper context if needed
+                    onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
+                    onApprovalComplete: () => markSubstepCompleted(2, 1),
+                    publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
+                    useUnlimitedApproval
+                });
+                if (!needsApprovalCow) markSubstepCompleted(2, 1);
+                setCurrentSubstep({ step: 2, substep: 2 });
 
-                if (selectedSwapMethod === 'cowswap') {
-                    // --- CoW Swap Redemption Approval ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving Redemption for CoW Swap');
-                    console.log('[DEBUG] CoW Redeem - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
-                    });
+                // --- CoW Swap Execution ---
+                swapTx = await executeV3Swap({ // executeV3Swap handles CoW swap logic
+                    signer,
+                    tokenIn,
+                    tokenOut,
+                    amount: amountInWei,
+                    eventHappens,
+                    options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
+                });
 
-                    const needsApprovalCow = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer,
-                        tokenAddress: tokenIn,
-                        amount: amountInWei,
-                        eventHappens, // Keep for V3 helper context if needed
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalCow) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
+                if (!swapTx || !swapTx.hash) throw new Error("Failed to get Order ID from CoW Swap submission.");
+                console.log(`[ConfirmSwapCow Debug - Toggle] CoW Swap submitted. Order ID: ${swapTx.hash}`);
+                setTransactionResultHash(swapTx.hash);
 
-                    // --- CoW Swap Redemption Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing Redemption via CoW Swap path (executeRedemptionSwap)');
-                    redeemTx = await executeRedemptionSwap({ // Calls helper configured for CoW
-                        signer,
-                        tokenAddress: tokenIn,
-                        amount: amountInWei,
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                    });
-                    if (!redeemTx || !redeemTx.hash) throw new Error("Failed CoW Swap Redemption submission.");
-                    setTransactionResultHash(redeemTx.hash); // Store Order ID
-                    setOrderStatus('submitted'); // Trigger polling
-
-                } else if (selectedSwapMethod === 'algebra') {
-                    // --- Algebra (Swapr) Redemption Approval ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving Redemption for Algebra (Swapr)');
-                    console.log('[DEBUG] Algebra Redeem - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
-                    });
-
-                    const needsApprovalAlgebraRedeem = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
-                        spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalAlgebraRedeem) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
-
-                    // Get currency token address for tokenOut (the redemption target)
-                    const tokenOut = baseTokenConfig.currency.address;
-
-                    // --- Algebra (Swapr) Redemption Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing Redemption via Algebra (Swapr) Router (executeAlgebraExactSingle)');
-                    console.log('Redemption tokenIn (position token):', tokenIn);
-                    console.log(`Redemption tokenOut (${currencySymbol}):`, tokenOut);
-
-                    redeemTx = await executeAlgebraExactSingle({ // Calls helper configured for Algebra (Swapr)
-                        signer,
-                        tokenIn, // Position token
-                        tokenOut, // Currency token
-                        amount: amountInWei,
-                        slippageBps: Math.round(getSafeSlippageTolerance() * 100),
-                        minOutputAmount: minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw),
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") }
-                    });
-
-                    if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from Algebra (Swapr) execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx submitted: ${redeemTx.hash}`);
-                    setTransactionResultHash(redeemTx.hash); // Store Tx Hash
-
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            setOrderStatus('fulfilled');
-                            setProcessingStep('completed');
-                            setIsProcessing(false);
-                            onTransactionComplete?.();
-                            onClose(); // Auto-close for Safe
-                            return;
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: redeemTx.hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        // Wait for V3 confirmation *here*
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Algebra (Swapr) Tx confirmation...');
-                        receipt = await redeemTx.wait();
-                    }
-
-                    try {
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt, null);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx Confirmed! Hash: ${redeemTx.hash}`);
-                        setOrderStatus('fulfilled'); // Mark as fulfilled immediately
-                        setProcessingStep('completed'); // Mark process complete
-                        setIsProcessing(false); // Unlock UI
-                        onTransactionComplete?.(); // Refresh balances; the modal stays open
-                        // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
-                        // Enhanced error with receipt details for debugging
-                        if (waitError.receipt) {
-                            console.error('Transaction receipt details:', waitError.receipt);
-                        }
-                        throw waitError; // Re-throw to be caught by main catch block
-                    }
-
-                } else if (selectedSwapMethod === 'uniswap') {
-                    // --- Uniswap V3 Router Approval (with Permit2 on Ethereum) ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving for Uniswap V3');
-                    console.log('[DEBUG] Uniswap V3 Redeem - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name,
-                        chainId: chain?.id
-                    });
-
-                    // Check if we're on Ethereum mainnet (chainId 1) to use Permit2
-                    const usePermit2 = chain?.id === 1 || chain?.id === 137;
-
-                } else if (selectedSwapMethod === 'uniswapSdk') {
-                    // --- Uniswap SDK Cartridge Flow ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Using Uniswap SDK flow');
-
-                    // Get currency token address for tokenOut
-                    const tokenOut = baseTokenConfig.currency.address;
-
-                    // Use the SDK approval flow with step callbacks
-                    await checkAndApproveForUniswapSDK(
-                        tokenIn,
-                        null, // spender not needed, SDK handles Permit2 flow
-                        amountInWei,
-                        signer,
-                        (stepNum, isComplete) => {
-                            if (stepNum === 1) {
-                                if (!isComplete) {
-                                    setCurrentSubstep({ step: 2, substep: 1 });
-                                } else {
-                                    markSubstepCompleted(2, 1);
-                                }
-                            } else if (stepNum === 2) {
-                                if (!isComplete) {
-                                    setCurrentSubstep({ step: 2, substep: 2 });
-                                } else {
-                                    markSubstepCompleted(2, 2);
-                                }
-                            }
-                        },
-                        useUnlimitedApproval,
-                        walletClient,
-                        publicClient,
-                        account,
-                        connector
-                    );
-
-                    // Mark substep 2 as completed if not already done
-                    markSubstepCompleted(2, 2);
-
-                    // Move to swap execution step
-                    setCurrentSubstep({ step: 2, substep: 3 });
-
-                    // Execute swap using SDK flow
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing via Uniswap SDK');
-
-                    const quotedAmountOutRaw = swapRouteData.data?.buyAmount || transactionData.amountOutRaw;
-                    if (!quotedAmountOutRaw || ethers.BigNumber.from(quotedAmountOutRaw).isZero()) {
-                        throw new Error('A non-zero on-chain quote is required for minOut');
-                    }
-
-                    redeemTx = await executeSwapForUniswapSDK(
-                        tokenIn,
-                        tokenOut,
-                        amount, // Use the original string amount
-                        quotedAmountOutRaw,
-                        account,
-                        signer,
-                        getSafeSlippageTolerance() / 100,
-                        walletClient,
-                        publicClient,
-                        account,
-                        transactionData.outputDecimals || 18,
-                        connector
-                    );
-
-                    if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx submitted: ${redeemTx.hash}`);
-                    setTransactionResultHash(redeemTx.hash);
-
-                    // Mark swap execution as completed
-                    markSubstepCompleted(2, 3);
-
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onSafeTransaction?.(); // Trigger toast
-                        onTransactionComplete?.();
-                        onClose(); // Auto-close for Safe
-                        return;
-                    }
-
-                    // Wait for transaction confirmation
-                    console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap SDK Tx confirmation...');
-                    try {
-                        let receipt;
-                        // Check if tx has .wait() method (ethers) or just { hash } (viem)
-                        if (typeof redeemTx.wait === 'function') {
-                            // Ethers tx
-                            receipt = await redeemTx.wait();
-                        } else {
-                            // Viem tx - use publicClient to wait
-                            receipt = await publicClient.waitForTransactionReceipt({ hash: redeemTx.hash });
-                        }
-
-                        if (receipt.status === 0 || receipt.status === 'reverted') {
-                            const revertReason = parseRevertReason(receipt);
-                            const errorMessage = revertReason
-                                ? `Transaction reverted: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed! Hash: ${redeemTx.hash}`);
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onTransactionComplete?.();
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
-
-                        // Check if transaction actually succeeded despite wait() error
-                        if (redeemTx.hash) {
-                            try {
-                                const txReceipt = await provider.getTransactionReceipt(redeemTx.hash);
-                                if (txReceipt && txReceipt.status === 1) {
-                                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed despite wait() error! Hash: ${redeemTx.hash}`);
-                                    setOrderStatus('fulfilled');
-                                    setProcessingStep('completed');
-                                    setIsProcessing(false);
-                                    onTransactionComplete?.();
-                                    return; // Exit successfully
-                                }
-                            } catch (receiptError) {
-                                console.error('[ConfirmSwapCow Debug - Toggle] Failed to fetch receipt:', receiptError);
-                            }
-                        }
-
-                        throw waitError;
-                    }
-
-                } else if (selectedSwapMethod === 'uniswap') {
-                    // Continue with original Uniswap V3 flow
-                    const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
-                        signer: signer,
-                        walletClient,
-                        connector,
-                        tokenAddress: tokenIn,
-                        amount: amountInWei,
-                        usePermit2,
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        onStatusUpdate: (status) => {
-                            // Handle loading states for Permit2 two-step flow
-                            console.log('[Uniswap V3] Status update:', status);
-                            if (status.step === 'check') {
-                                console.log('[Uniswap V3] Checking Permit2 approvals...');
-                            } else if (status.step === 'erc20') {
-                                console.log('[Uniswap V3] Step 1: Approving ERC20 → Permit2...');
-                            } else if (status.step === 'erc20_wait') {
-                                console.log('[Uniswap V3] Waiting for ERC20 approval tx:', status.data?.transactionHash);
-                            } else if (status.step === 'permit2') {
-                                console.log('[Uniswap V3] Step 2: Approving Permit2 → Universal Router...');
-                            } else if (status.step === 'permit2_wait') {
-                                console.log('[Uniswap V3] Waiting for Permit2 approval tx:', status.data?.transactionHash);
-                            }
-                        },
-                        publicClient: publicClient,
-                        walletClient: walletClient,
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalUniswap) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
-
-                    // Get currency token address for tokenOut
-                    const tokenOut = baseTokenConfig.currency.address;
-                    const amountOutMinimum = minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw);
-
-                    // --- Uniswap V3 Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing via Uniswap V3');
-
-                    redeemTx = await executeUniswapV3Swap({
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        fee: 500, // 0.05% fee tier - SDK standard for conditional tokens - most common
-                        recipient: account,
-                        amountIn: amountInWei,
-                        amountOutMinimum,
-                        useUniversalRouter: usePermit2, // Use Universal Router on mainnet
-                        walletClient: walletClient
-                    });
-
-                    if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from Uniswap execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx submitted: ${redeemTx.hash}`);
-                    setTransactionResultHash(redeemTx.hash);
-
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            setOrderStatus('fulfilled');
-                            setProcessingStep('completed');
-                            setIsProcessing(false);
-                            onSafeTransaction?.(); // Trigger toast
-                            onTransactionComplete?.();
-                            onClose(); // Auto-close for Safe
-                            return;
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: redeemTx.hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        // Wait for Uniswap transaction confirmation
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap V3 Tx confirmation...');
-                        receipt = await redeemTx.wait();
-                    }
-
-                    try {
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx Confirmed! Hash: ${redeemTx.hash}`);
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onTransactionComplete?.();
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx failed during confirmation:', waitError);
-                        throw waitError;
-                    }
-
-                } else { // selectedSwapMethod === 'sushiswap'
-                    // --- SushiSwap V3 Router Approval ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving for SushiSwap V3 Router');
-                    console.log('[DEBUG] SushiSwap V3 Redeem - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
-                    });
-
-                    const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
-                        spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalV3) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
-
-                    // --- SushiSwap V3 Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing via SushiSwap V3 Router (executeSushiV3RouterSwap)');
-
-                    redeemTx = await executeSushiV3RouterSwap({ // Call the correct V3 function
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        amount: amountInWei,
-                        eventHappens,
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                    });
-
-                    if (!redeemTx || !redeemTx.hash) throw new Error("Failed to get transaction hash from SushiSwap execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx submitted: ${redeemTx.hash}`);
-                    setTransactionResultHash(redeemTx.hash); // Store Tx Hash
-
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onSafeTransaction?.(); // Trigger toast
-                        onTransactionComplete?.();
-                        onClose(); // Auto-close for Safe
-                        return;
-                    }
-
-                    // Wait for V3 confirmation *here*
-                    console.log('[ConfirmSwapCow Debug - Toggle] Waiting for SushiSwap V3 Tx confirmation...');
-                    try {
-                        const receipt = await redeemTx.wait();
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt, null);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx Confirmed! Hash: ${redeemTx.hash}`);
-                        setOrderStatus('fulfilled'); // Mark as fulfilled immediately
-                        setProcessingStep('completed'); // Mark process complete
-                        setIsProcessing(false); // Unlock UI
-                        onTransactionComplete?.(); // Notify parent
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx failed during confirmation:', waitError);
-                        // Enhanced error with receipt details for debugging
-                        if (waitError.receipt) {
-                            console.error('Transaction receipt details:', waitError.receipt);
-                        }
-                        throw waitError; // Re-throw to be caught by main catch block
-                    }
+                // Check for Safe wallet
+                if (isSafeConnection(walletClient) && !useBlockExplorer) {
+                    console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
+                    setOrderStatus('fulfilled');
+                    setProcessingStep('completed');
+                    setIsProcessing(false);
+                    onSafeTransaction?.(); // Trigger toast
+                    onTransactionComplete?.();
+                    onClose(); // Auto-close for Safe
+                    return;
                 }
-            } else {
-                // --- Buy/Sell Path ---
-                console.log(`[ConfirmSwapCow Debug - Toggle] Handling ${transactionData.action} via ${selectedSwapMethod}`);
-                let swapTx;
 
-                if (selectedSwapMethod === 'cowswap') {
-                    // --- CoW Swap Approval ---
-                    const eventHappens = transactionData.outcome === 'Event Will Occur';
-                    console.log('[DEBUG] CoW Buy/Sell - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
-                    });
+                setOrderStatus('submitted'); // Trigger polling
 
-                    const needsApprovalCow = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer,
-                        tokenAddress: tokenIn,
-                        amount: amountInWei,
-                        eventHappens, // Keep for V3 helper context if needed
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalCow) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
+            } else if (selectedSwapMethod === 'algebra') {
+                // --- Algebra (Swapr) Approval ---
+                console.log('[ConfirmSwapCow Debug - Toggle] Approving for Algebra (Swapr)');
+                console.log('[DEBUG] Algebra Buy/Sell - Using signer for approval:', {
+                    signerType: signer._isSigner ? 'custom' : 'Web3Provider',
+                    connectorName: walletClient?.connector?.name
+                });
 
-                    // --- CoW Swap Execution ---
-                    swapTx = await executeV3Swap({ // executeV3Swap handles CoW swap logic
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        amount: amountInWei,
-                        eventHappens,
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                    });
+                const needsApprovalAlgebra = await checkAndApproveTokenForV3Swap({
+                    walletClient,
+                    connector,
+                    signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
+                    spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
+                    onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
+                    onApprovalComplete: () => markSubstepCompleted(2, 1),
+                    publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
+                    useUnlimitedApproval
+                });
+                if (!needsApprovalAlgebra) markSubstepCompleted(2, 1);
+                setCurrentSubstep({ step: 2, substep: 2 });
 
-                    if (!swapTx || !swapTx.hash) throw new Error("Failed to get Order ID from CoW Swap submission.");
-                    console.log(`[ConfirmSwapCow Debug - Toggle] CoW Swap submitted. Order ID: ${swapTx.hash}`);
-                    setTransactionResultHash(swapTx.hash);
+                // --- Algebra (Swapr) Execution ---
+                console.log('[ConfirmSwapCow Debug - Toggle] Executing via Algebra (Swapr) Router (executeAlgebraExactSingle)');
 
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient) && !useBlockExplorer) {
+                const minOutputAmount = minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw);
+
+                swapTx = await executeAlgebraExactSingle({ // Calls helper configured for Algebra (Swapr)
+                    signer,
+                    tokenIn,
+                    tokenOut,
+                    amount: amountInWei,
+                    slippageBps: Math.round(getSafeSlippageTolerance() * 100),
+                    minOutputAmount, // Pass pre-calculated if available
+                    options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
+                });
+
+                if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Algebra (Swapr) execution.");
+
+                console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx submitted: ${swapTx.hash}`);
+                console.log(`[ConfirmSwapCow Debug - Toggle] Transaction object:`, {
+                    hash: swapTx.hash,
+                    hasWaitMethod: typeof swapTx.wait === 'function',
+                    confirmations: swapTx.confirmations,
+                    blockNumber: swapTx.blockNumber
+                });
+                setTransactionResultHash(swapTx.hash); // Store Tx Hash
+
+                let receipt;
+                // Check for Safe wallet
+                if (isSafeConnection(walletClient)) {
+                    if (!useBlockExplorer) {
                         console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
                         setOrderStatus('fulfilled');
                         setProcessingStep('completed');
@@ -2423,58 +1726,121 @@ const ConfirmSwapModal = memo(({
                         onTransactionComplete?.();
                         onClose(); // Auto-close for Safe
                         return;
+                    } else {
+                        console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
+                        const chainId = await walletClient.getChainId();
+                        receipt = await waitForSafeTxReceipt({
+                            chainId,
+                            safeTxHash: swapTx.hash,
+                            publicClient
+                        });
                     }
+                } else {
+                    // Wait for V3 confirmation *here*
+                    console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Algebra (Swapr) Tx confirmation...');
+                    receipt = await swapTx.wait();
+                }
 
-                    setOrderStatus('submitted'); // Trigger polling
-
-                } else if (selectedSwapMethod === 'algebra') {
-                    // --- Algebra (Swapr) Approval ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving for Algebra (Swapr)');
-                    console.log('[DEBUG] Algebra Buy/Sell - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
+                try {
+                    if (receipt.status === 0) {
+                        const revertReason = parseRevertReason(receipt, null);
+                        const errorMessage = revertReason
+                            ? `Transaction failed: ${revertReason}`
+                            : 'Transaction reverted - likely due to slippage or insufficient output amount';
+                        console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx reverted:', { receipt, revertReason });
+                        throw new Error(errorMessage);
+                    }
+                    console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx Confirmed! Hash: ${swapTx.hash}`, {
+                        status: receipt.status,
+                        blockNumber: receipt.blockNumber,
+                        confirmations: receipt.confirmations,
+                        gasUsed: receipt.gasUsed?.toString()
                     });
+                    setOrderStatus('fulfilled'); // Mark as fulfilled immediately
+                    setProcessingStep('completed'); // Mark process complete
+                    setIsProcessing(false); // Unlock UI
+                    onTransactionComplete?.(); // Refresh balances; the modal stays open
+                    // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
+                } catch (waitError) {
+                    console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
+                    // Enhanced error with receipt details for debugging
+                    if (waitError.receipt) {
+                        console.error('Transaction receipt details:', waitError.receipt);
+                    }
+                    throw waitError; // Re-throw to be caught by main catch block
+                }
 
-                    const needsApprovalAlgebra = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
-                        spenderAddressOverride: SWAPR_V3_ROUTER, // Target Algebra (Swapr) Router
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalAlgebra) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
+            } else if (selectedSwapMethod === 'uniswapSdk') {
+                // --- Uniswap SDK Cartridge Flow ---
+                console.log('[ConfirmSwapCow Debug - Toggle] Using Uniswap SDK flow for Buy/Sell');
 
-                    // --- Algebra (Swapr) Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing via Algebra (Swapr) Router (executeAlgebraExactSingle)');
+                // Use the SDK approval flow with step callbacks
+                await checkAndApproveForUniswapSDK(
+                    tokenIn,
+                    null, // spender not needed, SDK handles Permit2 flow
+                    amountInWei,
+                    signer,
+                    (stepNum, isComplete) => {
+                        if (stepNum === 1) {
+                            if (!isComplete) {
+                                setCurrentSubstep({ step: 2, substep: 1 });
+                            } else {
+                                markSubstepCompleted(2, 1);
+                            }
+                        } else if (stepNum === 2) {
+                            if (!isComplete) {
+                                setCurrentSubstep({ step: 2, substep: 2 });
+                            } else {
+                                markSubstepCompleted(2, 2);
+                            }
+                        }
+                    },
+                    useUnlimitedApproval,
+                    walletClient,
+                    publicClient,
+                    account,
+                    connector
+                );
 
-                    const minOutputAmount = minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw);
+                // Mark substep 2 as completed if not already done
+                markSubstepCompleted(2, 2);
 
-                    swapTx = await executeAlgebraExactSingle({ // Calls helper configured for Algebra (Swapr)
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        amount: amountInWei,
-                        slippageBps: Math.round(getSafeSlippageTolerance() * 100),
-                        minOutputAmount, // Pass pre-calculated if available
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                    });
+                // Move to swap execution step
+                setCurrentSubstep({ step: 2, substep: 3 });
 
-                    if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Algebra (Swapr) execution.");
+                // Execute swap using SDK flow
+                console.log('[ConfirmSwapCow Debug - Toggle] Executing Uniswap SDK swap');
 
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx submitted: ${swapTx.hash}`);
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Transaction object:`, {
-                        hash: swapTx.hash,
-                        hasWaitMethod: typeof swapTx.wait === 'function',
-                        confirmations: swapTx.confirmations,
-                        blockNumber: swapTx.blockNumber
-                    });
-                    setTransactionResultHash(swapTx.hash); // Store Tx Hash
+                const quotedAmountOutRaw = swapRouteData.data?.buyAmount || transactionData.amountOutRaw;
+                if (!quotedAmountOutRaw || ethers.BigNumber.from(quotedAmountOutRaw).isZero()) {
+                    throw new Error('A non-zero on-chain quote is required for minOut');
+                }
 
-                    let receipt;
+                swapTx = await executeSwapForUniswapSDK(
+                    tokenIn,
+                    tokenOut,
+                    amount, // Use the original string amount
+                    quotedAmountOutRaw,
+                    account,
+                    signer,
+                    getSafeSlippageTolerance() / 100,
+                    walletClient,
+                    publicClient,
+                    account,
+                    transactionData.outputDecimals || 18,
+                    connector
+                );
+
+                if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
+
+                console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx submitted: ${swapTx.hash}`);
+                setTransactionResultHash(swapTx.hash);
+
+                // Mark swap execution as completed
+                markSubstepCompleted(2, 3);
+
+                let receipt;
+                try {
                     // Check for Safe wallet
                     if (isSafeConnection(walletClient)) {
                         if (!useBlockExplorer) {
@@ -2496,394 +1862,57 @@ const ConfirmSwapModal = memo(({
                             });
                         }
                     } else {
-                        // Wait for V3 confirmation *here*
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Algebra (Swapr) Tx confirmation...');
-                        receipt = await swapTx.wait();
-                    }
-
-                    try {
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt, null);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
+                        // Wait for transaction confirmation
+                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap SDK Tx confirmation...');
+                        // Check if tx has .wait() method (ethers) or just { hash } (viem)
+                        if (typeof swapTx.wait === 'function') {
+                            // Ethers tx
+                            receipt = await swapTx.wait();
+                        } else {
+                            // Viem tx - use publicClient to wait
+                            receipt = await publicClient.waitForTransactionReceipt({ hash: swapTx.hash });
                         }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx Confirmed! Hash: ${swapTx.hash}`, {
-                            status: receipt.status,
-                            blockNumber: receipt.blockNumber,
-                            confirmations: receipt.confirmations,
-                            gasUsed: receipt.gasUsed?.toString()
-                        });
-                        setOrderStatus('fulfilled'); // Mark as fulfilled immediately
-                        setProcessingStep('completed'); // Mark process complete
-                        setIsProcessing(false); // Unlock UI
-                        onTransactionComplete?.(); // Refresh balances; the modal stays open
-                        // Do NOT auto-close modal for Algebra (Swapr). User must close manually.
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Algebra (Swapr) Tx failed during confirmation:', waitError);
-                        // Enhanced error with receipt details for debugging
-                        if (waitError.receipt) {
-                            console.error('Transaction receipt details:', waitError.receipt);
-                        }
-                        throw waitError; // Re-throw to be caught by main catch block
                     }
 
-                } else if (selectedSwapMethod === 'uniswapSdk') {
-                    // --- Uniswap SDK Cartridge Flow ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Using Uniswap SDK flow for Buy/Sell');
-
-                    // Use the SDK approval flow with step callbacks
-                    await checkAndApproveForUniswapSDK(
-                        tokenIn,
-                        null, // spender not needed, SDK handles Permit2 flow
-                        amountInWei,
-                        signer,
-                        (stepNum, isComplete) => {
-                            if (stepNum === 1) {
-                                if (!isComplete) {
-                                    setCurrentSubstep({ step: 2, substep: 1 });
-                                } else {
-                                    markSubstepCompleted(2, 1);
-                                }
-                            } else if (stepNum === 2) {
-                                if (!isComplete) {
-                                    setCurrentSubstep({ step: 2, substep: 2 });
-                                } else {
-                                    markSubstepCompleted(2, 2);
-                                }
-                            }
-                        },
-                        useUnlimitedApproval,
-                        walletClient,
-                        publicClient,
-                        account,
-                        connector
-                    );
-
-                    // Mark substep 2 as completed if not already done
-                    markSubstepCompleted(2, 2);
-
-                    // Move to swap execution step
-                    setCurrentSubstep({ step: 2, substep: 3 });
-
-                    // Execute swap using SDK flow
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing Uniswap SDK swap');
-
-                    const quotedAmountOutRaw = swapRouteData.data?.buyAmount || transactionData.amountOutRaw;
-                    if (!quotedAmountOutRaw || ethers.BigNumber.from(quotedAmountOutRaw).isZero()) {
-                        throw new Error('A non-zero on-chain quote is required for minOut');
+                    if (receipt.status === 0 || receipt.status === 'reverted') {
+                        const revertReason = parseRevertReason(receipt);
+                        const errorMessage = revertReason
+                            ? `Transaction failed: ${revertReason}`
+                            : 'Transaction reverted - likely due to slippage or insufficient output amount';
+                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx reverted:', { receipt, revertReason });
+                        throw new Error(errorMessage);
                     }
+                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed! Hash: ${swapTx.hash}`);
+                    setOrderStatus('fulfilled');
+                    setProcessingStep('completed');
+                    setIsProcessing(false);
+                    onTransactionComplete?.();
+                } catch (waitError) {
+                    console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
 
-                    swapTx = await executeSwapForUniswapSDK(
-                        tokenIn,
-                        tokenOut,
-                        amount, // Use the original string amount
-                        quotedAmountOutRaw,
-                        account,
-                        signer,
-                        getSafeSlippageTolerance() / 100,
-                        walletClient,
-                        publicClient,
-                        account,
-                        transactionData.outputDecimals || 18,
-                        connector
-                    );
-
-                    if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap SDK execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx submitted: ${swapTx.hash}`);
-                    setTransactionResultHash(swapTx.hash);
-
-                    // Mark swap execution as completed
-                    markSubstepCompleted(2, 3);
-
-                    let receipt;
-                    try {
-                        // Check for Safe wallet
-                        if (isSafeConnection(walletClient)) {
-                            if (!useBlockExplorer) {
-                                console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
+                    // Check if transaction actually succeeded despite wait() error
+                    if (swapTx.hash) {
+                        try {
+                            const txReceipt = await provider.getTransactionReceipt(swapTx.hash);
+                            if (txReceipt && txReceipt.status === 1) {
+                                console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed despite wait() error! Hash: ${swapTx.hash}`);
                                 setOrderStatus('fulfilled');
                                 setProcessingStep('completed');
                                 setIsProcessing(false);
-                                onSafeTransaction?.(); // Trigger toast
                                 onTransactionComplete?.();
-                                onClose(); // Auto-close for Safe
-                                return;
-                            } else {
-                                console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                                const chainId = await walletClient.getChainId();
-                                receipt = await waitForSafeTxReceipt({
-                                    chainId,
-                                    safeTxHash: swapTx.hash,
-                                    publicClient
-                                });
+                                return; // Exit successfully
                             }
-                        } else {
-                            // Wait for transaction confirmation
-                            console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap SDK Tx confirmation...');
-                            // Check if tx has .wait() method (ethers) or just { hash } (viem)
-                            if (typeof swapTx.wait === 'function') {
-                                // Ethers tx
-                                receipt = await swapTx.wait();
-                            } else {
-                                // Viem tx - use publicClient to wait
-                                receipt = await publicClient.waitForTransactionReceipt({ hash: swapTx.hash });
-                            }
+                        } catch (receiptError) {
+                            console.error('[ConfirmSwapCow Debug - Toggle] Failed to fetch receipt:', receiptError);
                         }
-
-                        if (receipt.status === 0 || receipt.status === 'reverted') {
-                            const revertReason = parseRevertReason(receipt);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed! Hash: ${swapTx.hash}`);
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onTransactionComplete?.();
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx wait() error:', waitError);
-
-                        // Check if transaction actually succeeded despite wait() error
-                        if (swapTx.hash) {
-                            try {
-                                const txReceipt = await provider.getTransactionReceipt(swapTx.hash);
-                                if (txReceipt && txReceipt.status === 1) {
-                                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap SDK Tx Confirmed despite wait() error! Hash: ${swapTx.hash}`);
-                                    setOrderStatus('fulfilled');
-                                    setProcessingStep('completed');
-                                    setIsProcessing(false);
-                                    onTransactionComplete?.();
-                                    return; // Exit successfully
-                                }
-                            } catch (receiptError) {
-                                console.error('[ConfirmSwapCow Debug - Toggle] Failed to fetch receipt:', receiptError);
-                            }
-                        }
-
-                        throw waitError;
                     }
 
-                } else if (selectedSwapMethod === 'uniswap') {
-                    // --- Uniswap V3 Approval (with Permit2 on Ethereum) ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving for Uniswap V3');
-                    console.log('[DEBUG] Current chain:', {
-                        chainId: chain?.id,
-                        chainName: chain?.name,
-                        isMainnet: chain?.id === 1
-                    });
-                    console.log('[DEBUG] Signer info:', {
-                        hasSigner: !!signer,
-                        signerType: signer?._isSigner ? 'ethers' : 'unknown',
-                        hasProvider: !!signer?.provider
-                    });
-
-                    // Check if we're on Ethereum mainnet (chainId 1) to use Permit2
-                    const usePermit2 = chain?.id === 1 || chain?.id === 137;
-                    console.log('[DEBUG] Use Permit2:', usePermit2);
-
-                    const needsApprovalUniswap = await checkAndApproveTokenForUniswapV3({
-                        signer: signer,
-                        walletClient,
-                        connector,
-                        tokenAddress: tokenIn,
-                        amount: amountInWei,
-                        usePermit2,
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        onStatusUpdate: (status) => {
-                            // Handle loading states for Permit2 two-step flow
-                            console.log('[Uniswap V3] Status update:', status);
-                            if (status.step === 'check') {
-                                console.log('[Uniswap V3] Checking Permit2 approvals...');
-                            } else if (status.step === 'erc20') {
-                                console.log('[Uniswap V3] Step 1: Approving ERC20 → Permit2...');
-                            } else if (status.step === 'erc20_wait') {
-                                console.log('[Uniswap V3] Waiting for ERC20 approval tx:', status.data?.transactionHash);
-                            } else if (status.step === 'permit2') {
-                                console.log('[Uniswap V3] Step 2: Approving Permit2 → Universal Router...');
-                            } else if (status.step === 'permit2_wait') {
-                                console.log('[Uniswap V3] Waiting for Permit2 approval tx:', status.data?.transactionHash);
-                            }
-                        },
-                        publicClient: publicClient,
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalUniswap) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
-
-                    // --- Uniswap V3 Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing Uniswap V3 swap');
-
-                    const calculatedMinOutput = minimumFromQuote(swapRouteData.data?.buyAmount || transactionData.amountOutRaw);
-
-                    swapTx = await executeUniswapV3Swap({
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        fee: 500, // 0.05% fee tier - SDK standard for conditional tokens
-                        recipient: account,
-                        amountIn: amountInWei,
-                        amountOutMinimum: calculatedMinOutput,
-                        useUniversalRouter: usePermit2
-                    });
-
-                    if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from Uniswap execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx submitted: ${swapTx.hash}`);
-                    setTransactionResultHash(swapTx.hash);
-
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            setOrderStatus('fulfilled');
-                            setProcessingStep('completed');
-                            setIsProcessing(false);
-                            onSafeTransaction?.(); // Trigger toast
-                            onTransactionComplete?.();
-                            onClose(); // Auto-close for Safe
-                            return;
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: swapTx.hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        // Wait for Uniswap transaction confirmation
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for Uniswap V3 Tx confirmation...');
-                        receipt = await swapTx.wait();
-                    }
-
-                    try {
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx Confirmed! Hash: ${swapTx.hash}`);
-                        setOrderStatus('fulfilled');
-                        setProcessingStep('completed');
-                        setIsProcessing(false);
-                        onTransactionComplete?.();
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] Uniswap V3 Tx failed during confirmation:', waitError);
-                        throw waitError;
-                    }
-
-                } else { // selectedSwapMethod === 'sushiswap' -> Use V3 Router Direct Path
-                    // --- SushiSwap V3 Router Approval ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Approving for SushiSwap V3 Router');
-                    console.log('[DEBUG] SushiSwap V3 Redeem - Using signer for approval:', {
-                        signerType: signer._isSigner ? 'custom' : 'Web3Provider',
-                        connectorName: walletClient?.connector?.name
-                    });
-
-                    const needsApprovalV3 = await checkAndApproveTokenForV3Swap({
-                        walletClient,
-                        connector,
-                        signer: signer, tokenAddress: tokenIn, amount: amountInWei, eventHappens,
-                        spenderAddressOverride: SUSHISWAP_V3_ROUTER, // Target the V3 Router
-                        onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
-                        onApprovalComplete: () => markSubstepCompleted(2, 1),
-                        publicClient: publicClient, // Pass wagmi publicClient for accurate allowance reading
-                        useUnlimitedApproval
-                    });
-                    if (!needsApprovalV3) markSubstepCompleted(2, 1);
-                    setCurrentSubstep({ step: 2, substep: 2 });
-
-                    // --- SushiSwap V3 Execution ---
-                    console.log('[ConfirmSwapCow Debug - Toggle] Executing via SushiSwap V3 Router (executeSushiV3RouterSwap)');
-
-                    swapTx = await executeSushiV3RouterSwap({ // Call the correct V3 function
-                        signer,
-                        tokenIn,
-                        tokenOut,
-                        amount: amountInWei,
-                        eventHappens,
-                        options: { gasLimit: 500000, gasPrice: ethers.utils.parseUnits("0.97", "gwei") } // Gas options
-                    });
-
-                    if (!swapTx || !swapTx.hash) throw new Error("Failed to get transaction hash from SushiSwap execution.");
-
-                    console.log(`[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx submitted: ${swapTx.hash}`);
-                    console.log(`[ConfirmSwapCow Debug - Toggle] Transaction object:`, {
-                        hash: swapTx.hash,
-                        hasWaitMethod: typeof swapTx.wait === 'function',
-                        confirmations: swapTx.confirmations,
-                        blockNumber: swapTx.blockNumber
-                    });
-                    setTransactionResultHash(swapTx.hash); // Store Tx Hash
-
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            setOrderStatus('fulfilled');
-                            setProcessingStep('completed');
-                            setIsProcessing(false);
-                            onTransactionComplete?.();
-                            onClose(); // Auto-close for Safe
-                            return;
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: swapTx.hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        // Wait for V3 confirmation *here*
-                        console.log('[ConfirmSwapCow Debug - Toggle] Waiting for SushiSwap V3 Tx confirmation...');
-                        receipt = await swapTx.wait();
-                    }
-
-                    try {
-                        if (receipt.status === 0) {
-                            const revertReason = parseRevertReason(receipt, null);
-                            const errorMessage = revertReason
-                                ? `Transaction failed: ${revertReason}`
-                                : 'Transaction reverted - likely due to slippage or insufficient output amount';
-                            console.error('[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx reverted:', { receipt, revertReason });
-                            throw new Error(errorMessage);
-                        }
-                        console.log(`[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx Confirmed! Hash: ${swapTx.hash}`, {
-                            status: receipt.status,
-                            blockNumber: receipt.blockNumber,
-                            confirmations: receipt.confirmations,
-                            gasUsed: receipt.gasUsed?.toString()
-                        });
-                        setOrderStatus('fulfilled'); // Mark as fulfilled immediately
-                        setProcessingStep('completed'); // Mark process complete
-                        setIsProcessing(false); // Unlock UI
-                        onTransactionComplete?.(); // Notify parent
-                    } catch (waitError) {
-                        console.error('[ConfirmSwapCow Debug - Toggle] SushiSwap V3 Tx failed during confirmation:', waitError);
-                        // Enhanced error with receipt details for debugging
-                        if (waitError.receipt) {
-                            console.error('Transaction receipt details:', waitError.receipt);
-                        }
-                        throw waitError; // Re-throw to be caught by main catch block
-                    }
+                    throw waitError;
                 }
-            } // End Buy/Sell Path
+
+                } else {
+                    throw new Error(`Unsupported swap method: ${selectedSwapMethod}`);
+                }
 
             // Note: CoW Swap path does not set isProcessing=false or processingStep=completed here.
             // That happens within the polling useEffect when a final status is reached.
@@ -3083,16 +2112,9 @@ const ConfirmSwapModal = memo(({
                 if (amountInWei.isZero()) throw new Error("Invalid amount");
 
                 let tokenIn, tokenOut;
-                const mergeConfig = MERGE_CONFIG || DEFAULT_MERGE_CONFIG;
-                const baseTokenConfig = BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG;
-                const isRedemptionOrRecover = transactionData.action === 'Redeem' || transactionData.action === 'Recover';
+                const mergeConfig = MERGE_CONFIG;
 
-                if (isRedemptionOrRecover) {
-                    tokenIn = transactionData.outcome === 'Event Will Occur'
-                        ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
-                        : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
-                    tokenOut = baseTokenConfig.currency.address;
-                } else if (transactionData.action === 'Buy') {
+                if (transactionData.action === 'Buy') {
                     tokenIn = transactionData.outcome === 'Event Will Occur'
                         ? mergeConfig.currencyPositions.yes.wrap.wrappedCollateralTokenAddress
                         : mergeConfig.currencyPositions.no.wrap.wrappedCollateralTokenAddress;
@@ -3866,83 +2888,6 @@ const ConfirmSwapModal = memo(({
                                         )}
                                     </>
                                 )}
-                                {/* SushiSwap Radio (hidden - kept for backwards compatibility) */}
-                                {false && !hideToggleSushiSwap && (
-                                    <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="swapMethod"
-                                            value="sushiswap"
-                                            checked={selectedSwapMethod === 'sushiswap'}
-                                            onChange={() => setSelectedSwapMethod('sushiswap')}
-                                            className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                            disabled={isProcessing || transactionResultHash}
-                                        />
-                                        <span className={`flex items-center text-sm ${selectedSwapMethod === 'sushiswap' ? 'text-futarchyGray12 dark:text-futarchyGray112 font-medium' : 'text-futarchyGray11 dark:text-futarchyGray112'
-                                            }`}>
-                                            SushiSwap
-                                            <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Direct V3 Pool)</span>
-                                            {selectedSwapMethod === 'sushiswap' && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        setShowExplorerConfigUi(!showExplorerConfigUi);
-                                                    }}
-                                                    className="ml-1 p-0.5 rounded hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray4 disabled:opacity-50"
-                                                    title="Configure Explorer Link"
-                                                    disabled={isProcessing || transactionResultHash}
-                                                >
-                                                    <SettingsIcon />
-                                                </button>
-                                            )}
-                                        </span>
-                                    </label>
-                                )}
-                                {/* Uniswap V3 Radio (hidden - replaced by chain-specific logic) */}
-                                {false && (
-                                    <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="swapMethod"
-                                            value="uniswap"
-                                            checked={selectedSwapMethod === 'uniswap'}
-                                            onChange={() => setSelectedSwapMethod('uniswap')}
-                                            className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                            disabled={isProcessing || transactionResultHash}
-                                        />
-                                        <span className={`flex items-center text-sm ${selectedSwapMethod === 'uniswap' ? 'text-futarchyGray12 dark:text-futarchyGray112 font-medium' : 'text-futarchyGray11 dark:text-futarchyGray112'
-                                            }`}>
-                                            Uniswap V3
-                                            <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Ethereum, Permit2)</span>
-                                            {selectedSwapMethod === 'uniswap' && (
-                                                <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">ETH Mainnet</span>
-                                            )}
-                                        </span>
-                                    </label>
-                                )}
-                                {/* Uniswap SDK Radio (hidden - integrated into chain-specific logic) */}
-                                {false && (
-                                    <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="swapMethod"
-                                            value="uniswapSdk"
-                                            checked={selectedSwapMethod === 'uniswapSdk'}
-                                            onChange={() => setSelectedSwapMethod('uniswapSdk')}
-                                            className="form-radio text-futarchyBlue9 focus:ring-futarchyBlue9 dark:bg-futarchyDarkGray3 dark:border-futarchyDarkGray7 dark:focus:ring-offset-futarchyDarkGray3"
-                                            disabled={isProcessing || transactionResultHash}
-                                        />
-                                        <span className={`flex items-center text-sm ${selectedSwapMethod === 'uniswapSdk' ? 'text-futarchyGray12 dark:text-futarchyGray112 font-medium' : 'text-futarchyGray11 dark:text-futarchyGray112'
-                                            }`}>
-                                            Uniswap SDK
-                                            <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(SDK Cartridge)</span>
-                                            {selectedSwapMethod === 'uniswapSdk' && (
-                                                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">✓ SDK Flow</span>
-                                            )}
-                                        </span>
-                                    </label>
-                                )}
                             </div>
                         </div>
 
@@ -4383,89 +3328,6 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                     </>
-                                )}
-                                {/* OLD: Estimated Price for Algebra - REMOVED, now using Algebra Quoter fields above */}
-                                {false && selectedSwapMethod === 'algebra' && transactionData.expectedReceiveAmount && transactionData.amount && (
-                                    <div className="flex justify-between">
-                                        <span className="text-futarchyGray11 dark:text-futarchyGray112/80">
-                                            {transactionData.action === 'Redeem' ? 'Redemption Rate' : 'Est. Price'}
-                                        </span>
-                                        <span className="text-futarchyGray12 dark:text-futarchyGray112 font-medium">
-                                            {(() => {
-                                                const inputAmount = parseFloat(transactionData.amount.split(' ')[0]);
-
-                                                // For Uniswap SDK, use QuoterV2 result
-                                                let outputAmount;
-                                                if (selectedSwapMethod === 'uniswapSdk' && swapRouteData.data?.buyAmount) {
-                                                    outputAmount = parseFloat(ethers.utils.formatUnits(swapRouteData.data.buyAmount, 18));
-                                                } else {
-                                                    outputAmount = parseFloat(transactionData.expectedReceiveAmount);
-                                                }
-
-                                                if (!inputAmount || !outputAmount || outputAmount <= 0) {
-                                                    return 'N/A';
-                                                }
-
-                                                const currencySymbol = (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency.symbol;
-                                                const companySymbol = (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol;
-                                                const precision = precisionConfig?.display?.price || 4;
-
-                                                // Calculate price based on action
-                                                if (transactionData.action === 'Redeem') {
-                                                    // For redemption: show how much currency per position token
-                                                    const price = inputAmount / outputAmount;
-                                                    return `${price.toFixed(precision)} ${currencySymbol} / Position Token`;
-                                                } else if (transactionData.action === 'Buy') {
-                                                    // For buy: show how much currency per company token
-                                                    const price = inputAmount / outputAmount;
-                                                    return `${price.toFixed(precision)} ${currencySymbol} / ${companySymbol}`;
-                                                } else {
-                                                    // For sell: show how much currency per company token (inverted)
-                                                    const price = outputAmount / inputAmount;
-                                                    return `${price.toFixed(precision)} ${currencySymbol} / ${companySymbol}`;
-                                                }
-                                            })()}
-                                        </span>
-                                    </div>
-                                )}
-                                {/* OLD: Max Price with Slippage for Algebra - REMOVED, now using Algebra Quoter fields above */}
-                                {false && selectedSwapMethod === 'algebra' && transactionData.expectedReceiveAmount && transactionData.amount && (
-                                    <div className="flex justify-between">
-                                        <span className="text-futarchyGray11 dark:text-futarchyGray112/80">
-                                            Max Price ({getSafeSlippageTolerance()}% slippage)
-                                        </span>
-                                        <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
-                                            {(() => {
-                                                const inputAmount = parseFloat(transactionData.amount.split(' ')[0]);
-                                                const outputAmount = parseFloat(transactionData.expectedReceiveAmount);
-                                                const slippage = getSafeSlippageTolerance();
-
-                                                if (!inputAmount || !outputAmount || outputAmount <= 0) {
-                                                    return 'N/A';
-                                                }
-
-                                                // Calculate min receive with slippage
-                                                const minReceive = outputAmount * (1 - slippage / 100);
-
-                                                const currencySymbol = (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency.symbol;
-                                                const companySymbol = (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol;
-                                                const precision = precisionConfig?.display?.price || 4;
-
-                                                // Calculate worst-case price (max price you'd pay)
-                                                if (transactionData.action === 'Redeem') {
-                                                    const maxPrice = inputAmount / minReceive;
-                                                    return `${maxPrice.toFixed(precision)} ${currencySymbol} / Position Token`;
-                                                } else if (transactionData.action === 'Buy') {
-                                                    const maxPrice = inputAmount / minReceive;
-                                                    return `${maxPrice.toFixed(precision)} ${currencySymbol} / ${companySymbol}`;
-                                                } else {
-                                                    // For sell: show min currency per company token (inverted)
-                                                    const minPrice = minReceive / inputAmount;
-                                                    return `${minPrice.toFixed(precision)} ${currencySymbol} / ${companySymbol}`;
-                                                }
-                                            })()}
-                                        </span>
-                                    </div>
                                 )}
                                 {selectedSwapMethod !== 'algebra' && selectedSwapMethod !== 'uniswapSdk' && (
                                     <div className="flex justify-between">
