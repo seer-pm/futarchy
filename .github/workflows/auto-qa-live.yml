@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: 'Override api.futarchy.fi base URL for live checks'
+        description: 'API base URL for live checks (default: the app''s DEFAULT_API_BASE)'
         required: false
-        default: 'https://api.futarchy.fi'
+        default: ''
   schedule:
     - cron: '17 4 * * 1'
 
@@ -27,5 +27,5 @@ jobs:
 
       - name: Run live auto-qa tests
         env:
-          AUTO_QA_API_BASE: ${{ inputs.api_base || 'https://api.futarchy.fi' }}
+          AUTO_QA_API_BASE: ${{ inputs.api_base }}
         run: npm run auto-qa:test:live
