@@ -6,8 +6,6 @@ import { ethers } from 'ethers';
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import {
-    ERC20_ABI,
-    FUTARCHY_ROUTER_ABI,
     PRECISION_CONFIG as DEFAULT_PRECISION_CONFIG,
     DEFAULT_BASE_TOKENS_CONFIG,
     FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS,
@@ -21,44 +19,12 @@ import { formatTokenAmount } from '../../../utils/precisionFormatter';
 import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
-import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, PRICE_MOVED_WHILE_SIGNING, describeQuoteError } from '../../../utils/txErrors';
+import { isSafeTransactionSent, isUserRejection, describeTxError, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, PRICE_MOVED_WHILE_SIGNING, describeQuoteError } from '../../../utils/txErrors';
 import { minReceiveFromQuote, compareQuotes, slippagePctToBps, slippageBpsForMinimum, executionPriceFor } from '../../../utils/swapQuoteMath';
 import { quoteSeerSwap, executeSeerSwap, getSeerPublicClient, SEER_ROUTE_NAMES, SEER_DEFAULT_SWAP_ROUTER } from '../../../utils/seerSwap';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
-import { approvalAmountFor } from '../../../utils/approvalAmount';
+import { splitCollateral } from '../../../utils/collateralActions';
 
-// Define ERC20 ABI in viem-compatible format
-const ERC20_ABI_VIEM = [
-    {
-        name: 'allowance',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'spender', type: 'address' },
-            { name: 'amount', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'account', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    }
-];
-
-// getEthersSigner and getEthersProvider imported from utils
 
 // Mock steps data with substeps
 export const STEPS_DATA = {
@@ -526,30 +492,6 @@ const ConfirmSwapModal = memo(({
         });
     }, [account, isConnected, walletClient, publicClient]);
 
-    // Derive signer and provider from wagmi clients
-    const signer = useMemo(() => {
-        if (!walletClient) {
-            console.log('No wallet client available for signer creation');
-            return null;
-        }
-
-        const ethersSigner = getEthersSigner(walletClient, publicClient);
-        const ethersProvider = getEthersProvider(publicClient);
-
-        // Link provider to signer for full ethers compatibility
-        if (ethersSigner && ethersProvider && !ethersSigner.provider) {
-            ethersSigner.provider = ethersProvider;
-        }
-
-        console.log('Signer created:', {
-            hasSigner: !!ethersSigner,
-            hasProvider: !!ethersProvider,
-            signerType: ethersSigner?._isSigner ? 'custom' : 'web3provider'
-        });
-
-        return ethersSigner;
-    }, [walletClient, publicClient]);
-
     const provider = useMemo(() => {
         const ethersProvider = getEthersProvider(publicClient);
         console.log('Provider created:', {
@@ -899,157 +841,6 @@ const ConfirmSwapModal = memo(({
         };
     };
 
-    // Internal helper functions
-    const handleTokenApproval = async (tokenAddress, spenderAddress, amount, tokenName = '') => {
-        try {
-            console.log(`Approving ${tokenName} token...`);
-
-            // Validate signer before proceeding
-            if (!signer) {
-                throw new Error('Signer not available. Please ensure wallet is connected.');
-            }
-
-            // Validate that we have a connected account
-            if (!account) {
-                throw new Error('Account not connected. Please connect your wallet.');
-            }
-
-            // Check if we have a full ethers signer or need to use viem approach
-            const isEthersSigner = signer && signer.getAddress && typeof signer.getAddress === 'function' && !signer._isSigner;
-
-            console.log('Signer detection in handleTokenApproval:', {
-                hasSigner: !!signer,
-                hasGetAddress: signer && typeof signer.getAddress === 'function',
-                isCustomSigner: signer && signer._isSigner,
-                signerType: isEthersSigner ? 'ethers' : 'viem',
-                signerKeys: signer ? Object.keys(signer) : []
-            });
-
-            if (!isEthersSigner) {
-                // Use viem approach for WalletConnect
-                console.log('Using viem-based approach for token approval');
-
-                // First, check allowance using the public client
-                const allowanceResult = await publicClient.readContract({
-                    address: tokenAddress,
-                    abi: ERC20_ABI_VIEM,
-                    functionName: 'allowance',
-                    args: [account, spenderAddress]
-                });
-
-                const allowance = ethers.BigNumber.from(allowanceResult.toString());
-                console.log(`Current allowance: ${allowance.toString()}`);
-
-                if (allowance.lt(amount)) {
-                    console.log('Allowance insufficient, requesting approval...');
-
-                    // Use unlimited or exact amount based on user preference
-                    const approvalAmount = approvalAmountFor(amount, useUnlimitedApproval).toString();
-                    console.log(`Approval amount: ${useUnlimitedApproval ? 'MaxUint256 (unlimited)' : 'exact amount'}`);
-
-                    // Send approval transaction using viem
-                    const hash = await walletClient.writeContract({
-                        address: tokenAddress,
-                        abi: ERC20_ABI_VIEM,
-                        functionName: 'approve',
-                        args: [spenderAddress, approvalAmount]
-                    });
-
-                    console.log('Approval transaction sent:', hash);
-
-                    // Wait for confirmation
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error(SAFE_TRANSACTION_SENT);
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        receipt = await publicClient.waitForTransactionReceipt({ hash });
-                    }
-                    assertReceiptSucceeded(receipt, hash);
-                    console.log('Approval confirmed:', receipt);
-                } else {
-                    console.log(`Token already approved (allowance: ${allowance.toString()})`);
-                }
-            } else {
-                // Use standard ethers approach for browser extension
-                console.log('Using ethers approach for token approval');
-
-                const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-
-                // Get current allowance with better error handling
-                let allowance;
-                try {
-                    allowance = await tokenContract.allowance(account, spenderAddress);
-                } catch (error) {
-                    console.error('Failed to check allowance:', error);
-                    throw new Error(`Failed to check token allowance: ${error.message}`);
-                }
-
-                if (allowance.lt(amount)) {
-                    console.log(`Current allowance insufficient (${allowance.toString()}), requesting approval...`);
-
-                    // Use unlimited or exact amount based on user preference
-                    const approvalAmount = approvalAmountFor(amount, useUnlimitedApproval);
-                    console.log(`Approval amount: ${useUnlimitedApproval ? 'MaxUint256 (unlimited)' : 'exact amount'}`);
-
-                    try {
-                        const tx = await tokenContract.approve(spenderAddress, approvalAmount);
-                        console.log('Approval transaction sent:', tx.hash);
-
-                        let receipt;
-                        // Check for Safe wallet
-                        if (isSafeConnection(walletClient)) {
-                            if (!useBlockExplorer) {
-                                console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                                throw new Error(SAFE_TRANSACTION_SENT);
-                            } else {
-                                console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                                const chainId = await walletClient.getChainId();
-                                receipt = await waitForSafeTxReceipt({
-                                    chainId,
-                                    safeTxHash: tx.hash,
-                                    publicClient
-                                });
-                            }
-                        } else {
-                            // Wait for confirmation with timeout
-                            receipt = await Promise.race([
-                                tx.wait(),
-                                new Promise((_, reject) =>
-                                    setTimeout(() => reject(new Error('Transaction timeout')), 60000)
-                                )
-                            ]);
-                        }
-
-                        assertReceiptSucceeded(receipt, tx.hash);
-                        console.log('Approval confirmed:', receipt);
-                    } catch (error) {
-                        // Pass the Safe "queued" signal through untouched
-                        if (isSafeTransactionSent(error)) throw error;
-                        console.error('Approval transaction failed:', error);
-                        throw new Error(`Token approval failed: ${error.message}`);
-                    }
-                } else {
-                    console.log(`Token already approved (allowance: ${allowance.toString()})`);
-                }
-            }
-        } catch (error) {
-            console.error('Token approval failed:', error);
-            throw error;
-        }
-    };
-
     const markSubstepCompleted = (step, substepId) => {
         setCompletedSubsteps(prev => {
             // Make sure the step and substeps objects exist
@@ -1073,14 +864,16 @@ const ConfirmSwapModal = memo(({
         });
     };
 
+    // Splits the missing collateral into YES/NO tokens before the swap
+    // (step 1 of the dialog). The transactions are in utils/collateralActions.
     const handleCollateralAction = async (tokenType, amount) => {
         try {
             setIsProcessing(true);
             setCurrentSubstep({ step: 1, substep: 1 });
             setProcessingStep(1);
 
-            if (!signer || !account) {
-                console.error('No signer or account available');
+            if (!walletClient || !publicClient || !account) {
+                console.error('No wallet client or account available');
                 setError('Wallet connection error');
                 return false;
             }
@@ -1089,147 +882,32 @@ const ConfirmSwapModal = memo(({
                 ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency
                 : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company;
 
-            // Convert to decimal string first
-            const amountInWei = amount.toString().includes('e')
-                ? ethers.utils.parseUnits(new Decimal(amount).toString(), baseToken.decimals)
-                : ethers.utils.parseUnits(amount.toString(), baseToken.decimals);
-
-            // Check if we're using a standard ethers signer or viem approach
-            const isEthersSigner = signer && signer.getAddress && typeof signer.getAddress === 'function' && !signer._isSigner;
-
-            console.log('Signer detection in handleCollateralAction:', {
-                hasSigner: !!signer,
-                hasGetAddress: signer && typeof signer.getAddress === 'function',
-                isCustomSigner: signer && signer._isSigner,
-                signerType: isEthersSigner ? 'ethers' : 'viem',
-                signerKeys: signer ? Object.keys(signer) : []
-            });
-
-            let userBalance;
-
-            if (isEthersSigner) {
-                // Standard ethers approach
-                const baseTokenContract = new ethers.Contract(baseToken.address, ERC20_ABI, signer);
-                userBalance = await baseTokenContract.balanceOf(account);
-            } else {
-                // Viem approach using publicClient
-                const balanceData = await publicClient.readContract({
-                    address: baseToken.address,
-                    abi: ERC20_ABI_VIEM,
-                    functionName: 'balanceOf',
-                    args: [account]
-                });
-                userBalance = ethers.BigNumber.from(balanceData.toString());
-            }
-
-            // 1. Check balance
-            if (userBalance.lt(amountInWei)) {
-                const formattedBalance = ethers.utils.formatUnits(userBalance, baseToken.decimals);
-                setError(`Insufficient ${baseToken.symbol} balance. You have ${formattedBalance} ${baseToken.symbol}`);
-                return false;
-            }
-
-            // 2. Check and approve if needed
-            await handleTokenApproval(
-                baseToken.address,
-                FUTARCHY_ROUTER_ADDRESS,
-                amountInWei,
-                baseToken.symbol
+            // Decimal first: a very small number may arrive in exponent form
+            const amountInWei = ethers.utils.parseUnits(
+                amount.toString().includes('e') ? new Decimal(amount).toString() : amount.toString(),
+                baseToken.decimals
             );
 
-            // Mark first substep completed
-            markSubstepCompleted(1, 1);
-            // Move to the second substep
-            setCurrentSubstep({ step: 1, substep: 2 });
-
-            // 3. Execute split position. Gas is left to the wallet's estimate: a
-            // fixed 2,000,000 limit made wallets show ~5x the real fee (a mainnet
-            // split uses ~360k gas) and could block a wallet whose ETH covers the
-            // split but not that limit.
-            const marketAddress = transactionData?.marketAddress || MARKET_ADDRESS;
-
-            if (isEthersSigner) {
-                // Standard ethers approach
-                const routerContract = new ethers.Contract(
-                    FUTARCHY_ROUTER_ADDRESS,
-                    FUTARCHY_ROUTER_ABI,
-                    signer
-                );
-
-                const tx = await routerContract.splitPosition(
-                    marketAddress,
-                    baseToken.address,
-                    amountInWei
-                );
-                // Check for Safe wallet
-                if (isSafeConnection(walletClient)) {
-                    if (!useBlockExplorer) {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                        throw new Error(SAFE_TRANSACTION_SENT);
-                    } else {
-                        console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                        const chainId = await walletClient.getChainId();
-                        await waitForSafeTxReceipt({
-                            chainId,
-                            safeTxHash: tx.hash,
-                            publicClient
-                        });
+            await splitCollateral({
+                publicClient,
+                walletClient,
+                account,
+                router: FUTARCHY_ROUTER_ADDRESS,
+                proposal: transactionData?.marketAddress || MARKET_ADDRESS,
+                collateralToken: baseToken.address,
+                amount: amountInWei.toString(),
+                symbol: baseToken.symbol,
+                useUnlimitedApproval,
+                isSafe: isSafeConnection(walletClient),
+                waitForSafeExecution: useBlockExplorer,
+                onStep: (step) => {
+                    if (step === 'approved') {
+                        // Also when the allowance was already enough
+                        markSubstepCompleted(1, 1);
+                        setCurrentSubstep({ step: 1, substep: 2 });
                     }
-                } else {
-                    await tx.wait();
-                }
-            } else {
-                // Viem approach using walletClient
-                console.log(`Executing splitPosition with viem for market: ${marketAddress}`);
-
-                const { request } = await publicClient.simulateContract({
-                    address: FUTARCHY_ROUTER_ADDRESS,
-                    abi: FUTARCHY_ROUTER_ABI,
-                    functionName: 'splitPosition',
-                    args: [marketAddress, baseToken.address, amountInWei],
-                    account
-                });
-
-                const hash = await walletClient.writeContract(request);
-                console.log(`Split position transaction sent: ${hash}`);
-
-                // Wait for transaction confirmation with better error handling
-                try {
-                    let receipt;
-                    // Check for Safe wallet
-                    if (isSafeConnection(walletClient)) {
-                        if (!useBlockExplorer) {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - skipping wait() and auto-closing');
-                            throw new Error(SAFE_TRANSACTION_SENT);
-                        } else {
-                            console.log('[ConfirmSwapModal] Safe wallet detected - waiting for execution via Safe API');
-                            const chainId = await walletClient.getChainId();
-                            receipt = await waitForSafeTxReceipt({
-                                chainId,
-                                safeTxHash: hash,
-                                publicClient
-                            });
-                        }
-                    } else {
-                        receipt = await publicClient.waitForTransactionReceipt({
-                            hash,
-                            timeout: 60000,
-                            confirmations: 1
-                        });
-                    }
-
-                    if (receipt.status === 'success') {
-                        console.log(`Split position transaction confirmed: ${receipt.transactionHash}`);
-                    } else {
-                        throw new Error(`Transaction failed with status: ${receipt.status}`);
-                    }
-                } catch (confirmError) {
-                    // Pass the Safe "queued" signal through untouched
-                    if (isSafeTransactionSent(confirmError)) throw confirmError;
-                    console.error('Error confirming split position transaction:', confirmError);
-                    throw new Error(`Transaction confirmation failed: ${confirmError.message}`);
-                }
-            }
+                },
+            });
 
             // Mark second substep completed
             markSubstepCompleted(1, 2);
@@ -1257,10 +935,8 @@ const ConfirmSwapModal = memo(({
             console.error('Error in handleCollateralAction:', error);
             setError(formatTransactionError(error)); // Use new error formatter
             return false;
-        } finally {
-            // Do not set isProcessing to false here; handleConfirmSwap manages overall state.
-            // setIsProcessing(false);
         }
+        // isProcessing stays set: handleConfirmSwap manages the overall state
     };
 
     // Add debug logging function

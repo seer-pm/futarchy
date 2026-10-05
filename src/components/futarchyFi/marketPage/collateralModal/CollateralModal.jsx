@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import SafeDetector from "../../../debug/SafeDetector";
 import { DEBUG_MODE } from "../../../../config/featureFlags";
 import PropTypes from "prop-types";
@@ -6,25 +6,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { formatBalance } from "../../../../utils/formatters";
 import { ethers } from "ethers";
 import { usePublicClient, useWalletClient, useAccount } from "wagmi";
-import { FutarchyCartridge } from 'futarchy-sdk/executors/FutarchyCartridge';
 // Import necessary constants and ABIs
 import {
-  ERC20_ABI,
   BASE_TOKENS_CONFIG,
   FUTARCHY_ROUTER_ADDRESS,
-  FUTARCHY_ROUTER_ABI,
   MARKET_ADDRESS
 } from "../constants/contracts";
-import { getEthersSigner } from "../../../../utils/ethersAdapters";
 import { useSafeConnection } from "../../../../hooks/useSafeConnection";
 // import { useContractConfig } from "../../../../hooks/useContractConfig";
-import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
-import { useSafeDetection } from "../../../../hooks/useSafeDetection";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
-import { approvalAmountFor } from "../../../../utils/approvalAmount";
-import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, describeTxError } from "../../../../utils/txErrors";
+import { splitCollateral, mergeCollateral } from "../../../../utils/collateralActions";
+import { isSafeTransactionSent, describeTxError } from "../../../../utils/txErrors";
 
-const toBN = (value) => ethers.BigNumber.from(value.toString());
 
 // MetaMask icon component
 const MetamaskIcon = () => (
@@ -315,7 +308,6 @@ const StepWithSubsteps = ({
   );
 };
 
-// getEthersSigner imported from utils
 
 const CollateralModal = ({
   title,
@@ -334,7 +326,6 @@ const CollateralModal = ({
   action = "add",
   onSafeTransaction,
   error,
-  useSDK = false,
   config,
   configLoading,
   proposalId
@@ -344,7 +335,6 @@ const CollateralModal = ({
   const isSafeConnection = useSafeConnection();
   const { address: account, isConnected } = useAccount();
   // const { config, isLoading: configLoading } = useContractConfig();
-  const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
   const requiredChain = useRequiredChain(config?.chainId);
 
   const [debugInfo, setDebugInfo] = useState(null);
@@ -353,23 +343,6 @@ const CollateralModal = ({
   const updateDebugInfo = (info) => {
     setDebugInfo(prev => ({ ...prev, ...info }));
   };
-
-  // Derive signer from wagmi clients
-  const signer = useMemo(() => {
-    if (!walletClient) {
-      console.log('No wallet client available for signer creation');
-      return null;
-    }
-
-    const ethersSigner = getEthersSigner(walletClient, publicClient);
-
-    console.log('CollateralModal signer created:', {
-      hasSigner: !!ethersSigner,
-      signerType: ethersSigner?._isSigner ? 'custom' : 'web3provider'
-    });
-
-    return ethersSigner;
-  }, [walletClient, publicClient]);
 
   // Local state for modal functionality
   const [selectedTokenType, setSelectedTokenType] = useState("currency");
@@ -435,118 +408,6 @@ const CollateralModal = ({
       setSelectedTokenType("currency");
     }
   }, [isProcessing]);
-
-  // Enhanced handleTokenApproval function using wagmi publicClient for accurate allowance reading
-  const handleTokenApproval = async (tokenAddress, spenderAddress, amount, tokenType, tokenSymbol) => {
-    if (!walletClient || !publicClient) {
-      throw new Error("Wallet not connected properly");
-    }
-
-    try {
-      console.log(`[CollateralModal] Checking ${tokenSymbol} allowance...`);
-
-      // Use JSON ABI format for publicClient calls
-      const ERC20_JSON_ABI = [
-        {
-          inputs: [
-            { name: "owner", type: "address" },
-            { name: "spender", type: "address" }
-          ],
-          name: "allowance",
-          outputs: [{ name: "", type: "uint256" }],
-          stateMutability: "view",
-          type: "function"
-        }
-      ];
-
-      // Use publicClient for accurate allowance reading
-      const currentAllowanceRaw = await publicClient.readContract({
-        address: tokenAddress,
-        abi: ERC20_JSON_ABI,
-        functionName: "allowance",
-        args: [account || connectedWalletAddress, spenderAddress],
-      });
-
-      console.log(`[CollateralModal] Current ${tokenSymbol} allowance:`, currentAllowanceRaw.toString());
-      console.log(`[CollateralModal] Required amount:`, amount.toString());
-
-      // convert bigint → ethers BigNumber
-      const currentAllowance = ethers.BigNumber.from(
-        currentAllowanceRaw.toString()
-      );
-      
-      const needsApproval = currentAllowance.lt(amount);      
-
-      if (needsApproval) {
-        console.log(`[CollateralModal] Approving ${tokenSymbol} for ${spenderAddress}...`);
-
-        // Use the wagmi signer for approval
-        if (!signer) {
-          throw new Error("No signer available");
-        }
-
-        // Use string format ABI for ethers Contract
-        const tokenContract = new ethers.Contract(
-          tokenAddress,
-          ERC20_ABI,
-          signer
-        );
-
-        const approveTx = await tokenContract.approve(
-          spenderAddress,
-          approvalAmountFor(amount, useUnlimitedApproval)
-        );
-        console.log(`[CollateralModal] ${tokenSymbol} approval transaction sent:`, approveTx.hash);
-
-        // Check for Safe wallet
-        if (isSafeConnection(walletClient)) {
-          if (!useBlockExplorer) {
-            console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
-            onSafeTransaction?.(); // Trigger toast
-            handleClose(); // Auto-close for Safe
-            throw new Error(SAFE_TRANSACTION_SENT); // Signal to stop execution
-          } else {
-            console.log('[CollateralModal] Safe wallet detected - waiting for execution via Safe API');
-            const chainId = await walletClient.getChainId();
-            await waitForSafeTxReceipt({
-              chainId,
-              safeTxHash: approveTx.hash,
-              publicClient
-            });
-          }
-        } else {
-          await approveTx.wait();
-        }
-        console.log(`[CollateralModal] ${tokenSymbol} approved successfully`);
-
-        // Verify allowance after approval using publicClient
-        const newAllowanceRaw = await publicClient.readContract({
-          address: tokenAddress,
-          abi: ERC20_JSON_ABI,
-          functionName: "allowance",
-          args: [account || connectedWalletAddress, spenderAddress],
-        });
-        
-        const newAllowance = ethers.BigNumber.from(
-          newAllowanceRaw.toString()
-        );
-
-        console.log(`[CollateralModal] New ${tokenSymbol} allowance:`, newAllowance.toString());
-
-        if (newAllowance.lt(amount)) {
-          throw new Error(`Allowance is still insufficient after approval for ${tokenSymbol}`);
-        }
-
-        return true; // Approval was needed and completed
-      } else {
-        console.log(`[CollateralModal] ${tokenSymbol} already has sufficient allowance`);
-        return false; // No approval was needed
-      }
-    } catch (error) {
-      console.error(`[CollateralModal] Error in handleTokenApproval for ${tokenSymbol}:`, error);
-      throw error;
-    }
-  };
 
   // SIMPLIFIED INPUT VALIDATION LOGIC
 
@@ -1135,12 +996,13 @@ const CollateralModal = ({
     });
   };
 
-  // Update handleCollateralAction to handle errors gracefully
+  // Splits collateral into YES/NO tokens ("add") or merges them back
+  // ("remove"). The transactions themselves are in utils/collateralActions.
   const handleCollateralAction = async (tokenType, amount) => {
     // A new attempt starts clean: no error from the previous one
     setLocalError(null);
     // Check if wallet is properly connected before proceeding
-    if (!isConnected || !account || !signer) {
+    if (!isConnected || !account || !walletClient || !publicClient) {
       setLocalError("Please connect your wallet first");
       return;
     }
@@ -1154,525 +1016,102 @@ const CollateralModal = ({
     }
 
     try {
-      console.log('[CollateralModal] Starting transaction with:', {
-        connectedAccount: account,
-        walletType: walletClient?.connector?.name,
-        isConnected,
-        action
-      });
-
       // Reset states at the start
       setCompletedSubsteps(new Set());
-      // --- SDK INTEGRATION START ---
-      if (useSDK) {
-        console.log('[CollateralModal] Using SDK for operation:', action);
-        const routerAddress = config?.FUTARCHY_ROUTER_ADDRESS || FUTARCHY_ROUTER_ADDRESS;
-        const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
+      setApprovalStates((prev) => ({
+        ...prev,
+        [tokenType]: { baseToken: false, yesToken: false, noToken: false },
+      }));
+      const markApproved = (token) => setApprovalStates((prev) => ({
+        ...prev,
+        [tokenType]: { ...prev[tokenType], [token]: true },
+      }));
 
-        // Initialize Cartridge
-        const cartridge = new FutarchyCartridge(routerAddress, { isSafeConnection });
-
-        if (action === "add") {
-          // --- SDK SPLIT (ADD) ---
-          setLocalProcessingStep("baseTokenApproval");
-          setCurrentSubstep({ step: 1, substep: 1 });
-
-          const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
-          const baseToken = tokenType === "currency" ? baseTokensConfig.currency : baseTokensConfig.company;
-
-          // Execute completeSplit
-          const iterator = cartridge.completeSplit({
-            proposal: marketAddress,
-            collateralToken: baseToken.address,
-            amount: amount.toString(),
-            exactApproval: !useUnlimitedApproval,
-            useBlockExplorer
-          }, { publicClient, walletClient, account });
-
-          for await (const status of iterator) {
-            console.log('[CollateralModal] SDK Status:', status);
-            // The SDK reports failures (e.g. a reverted receipt) as an error status
-            if (status.status === 'error') {
-              throw new Error(status.message || status.error);
-            }
-
-            // Map SDK steps to UI steps
-            if (status.step.includes('approv')) {
-              setLocalProcessingStep("baseTokenApproval");
-              if (status.step === 'approved' || status.step === 'already_approved') {
-                markSubstepCompleted(1, 0);
-                setApprovalStates(prev => ({
-                  ...prev,
-                  [tokenType]: { ...prev[tokenType], baseToken: true }
-                }));
-              }
-            } else if (status.step.includes('split')) {
-              setLocalProcessingStep("mint");
-              setCurrentSubstep({ step: 1, substep: 2 });
-              if (status.step === 'complete') {
-                markSubstepCompleted(1, 1);
-                setTransactionStates(prev => ({ ...prev, mint: true }));
-              }
-            } else if (status.step === 'complete') {
-              setLocalProcessingStep("completed");
-              setCurrentSubstep({ step: 1, substep: 3 });
-            }
-          }
-
-        } else if (action === "remove") {
-          // --- SDK MERGE (REMOVE) ---
-          setLocalProcessingStep("yesApproval");
-          setCurrentSubstep({ step: 1, substep: 1 });
-
-          const mergeConfig = config?.MERGE_CONFIG;
-          const yesTokenAddress = tokenType === "currency"
-            ? mergeConfig.currencyPositions?.yes?.wrap?.wrappedCollateralTokenAddress
-            : mergeConfig.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress;
-          const noTokenAddress = tokenType === "currency"
-            ? mergeConfig.currencyPositions?.no?.wrap?.wrappedCollateralTokenAddress
-            : mergeConfig.companyPositions?.no?.wrap?.wrappedCollateralTokenAddress;
-
-          const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
-          const baseToken = tokenType === "currency" ? baseTokensConfig.currency : baseTokensConfig.company;
-
-          // Execute completeMerge
-          const iterator = cartridge.completeMerge({
-            proposal: marketAddress,
-            collateralToken: baseToken.address,
-            amount: amount.toString(),
-            yesToken: yesTokenAddress,
-            noToken: noTokenAddress,
-            exactApproval: !useUnlimitedApproval,
-            useBlockExplorer
-          }, { publicClient, walletClient, account });
-
-          for await (const status of iterator) {
-            console.log('[CollateralModal] SDK Status:', status);
-            // The SDK reports failures (e.g. a reverted receipt) as an error status
-            if (status.status === 'error') {
-              throw new Error(status.message || status.error);
-            }
-
-            // Map SDK steps to UI steps
-            if (status.step.includes('yes_approv')) {
-              setLocalProcessingStep("yesApproval");
-              if (status.step === 'yes_approved' || status.step === 'yes_already_approved') {
-                markSubstepCompleted(1, 0);
-                setApprovalStates(prev => ({
-                  ...prev,
-                  [tokenType]: { ...prev[tokenType], yesToken: true }
-                }));
-                // Move to next step visually
-                setLocalProcessingStep("noApproval");
-                setCurrentSubstep({ step: 1, substep: 2 });
-              }
-            } else if (status.step.includes('no_approv')) {
-              setLocalProcessingStep("noApproval");
-              if (status.step === 'no_approved' || status.step === 'no_already_approved') {
-                markSubstepCompleted(1, 1);
-                setApprovalStates(prev => ({
-                  ...prev,
-                  [tokenType]: { ...prev[tokenType], noToken: true }
-                }));
-              }
-            } else if (status.step.includes('merg')) {
-              setLocalProcessingStep("merge");
-              setCurrentSubstep({ step: 1, substep: 3 });
-              if (status.step === 'complete') {
-                markSubstepCompleted(1, 2);
-                setTransactionStates(prev => ({ ...prev, merge: true }));
-              }
-            } else if (status.step === 'complete') {
-              setLocalProcessingStep("completed");
-              setCurrentSubstep({ step: 1, substep: 4 });
-            }
-          }
-        }
-
-        console.log('[CollateralModal] SDK Operation Completed Successfully');
-        return; // Exit function, skipping legacy logic
-      }
+      const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
+      const baseToken = tokenType === "currency" ? baseTokensConfig.currency : baseTokensConfig.company;
+      const isSafe = isSafeConnection(walletClient);
+      const common = {
+        publicClient,
+        walletClient,
+        account,
+        router: config?.FUTARCHY_ROUTER_ADDRESS || FUTARCHY_ROUTER_ADDRESS,
+        proposal: config?.MARKET_ADDRESS || MARKET_ADDRESS,
+        collateralToken: baseToken.address,
+        amount: ethers.utils.parseUnits(amount.toString(), baseToken.decimals ?? 18).toString(),
+        useUnlimitedApproval,
+        isSafe,
+        // A Safe queues the transaction. Either wait for it to execute, or
+        // (the default) tell the user it was sent and close.
+        waitForSafeExecution: useBlockExplorer,
+      };
+      updateDebugInfo({
+        status: isSafe ? 'Safe Wallet Detected' : 'Standard Wallet Detected',
+        message: `Wallet Type: ${walletClient?.connector?.name || 'Unknown'}`,
+        isSafe,
+        useBlockExplorer,
+      });
 
       if (action === "add") {
-        setApprovalStates((prev) => ({
-          ...prev,
-          [tokenType]: {
-            baseToken: false,
-            yesToken: false,
-            noToken: false,
-          },
-        }));
-
-        // Set initial step and substep for add
         setLocalProcessingStep("baseTokenApproval");
         setCurrentSubstep({ step: 1, substep: 1 });
 
-        // Use config-based token configuration with fallback to default
-        const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
-        const baseToken = tokenType === "currency"
-          ? baseTokensConfig.currency
-          : baseTokensConfig.company;
-
-        // Convert amount to wei
-        const amountInWei = ethers.utils.parseUnits(amount.toString(), 18);
-
-        // Check base token balance using publicClient
-        const balanceRaw = await publicClient.readContract({
-          address: baseToken.address,
-          abi: [
-            {
-              inputs: [{ name: "account", type: "address" }],
-              name: "balanceOf",
-              outputs: [{ name: "", type: "uint256" }],
-              stateMutability: "view",
-              type: "function"
+        await splitCollateral({
+          ...common,
+          symbol: baseToken.symbol,
+          onStep: (step) => {
+            if (step === 'approved') {
+              // Also when the allowance was already enough
+              markSubstepCompleted(1, 0);
+              markApproved('baseToken');
+            } else if (step === 'split') {
+              setLocalProcessingStep("mint");
+              setCurrentSubstep({ step: 1, substep: 2 });
             }
-          ],
-          functionName: "balanceOf",
-          args: [account]
+          },
         });
 
-        const balance = ethers.BigNumber.from(balanceRaw.toString());
-
-        logDebug({
-          event: "Balance check",
-          balance: balance.toString(),
-          required: amountInWei.toString(),
-          tokenType,
-        });
-
-        if (balance.lt(amountInWei)) {
-          throw new Error(`Insufficient ${baseToken.symbol} balance`);
-        }
-
-        // Handle base token approval using enhanced function with wagmi publicClient
-        const routerAddress = config?.FUTARCHY_ROUTER_ADDRESS || FUTARCHY_ROUTER_ADDRESS;
-        const approvalSuccess = await handleTokenApproval(
-          baseToken.address,
-          routerAddress,
-          amountInWei,
-          tokenType,
-          baseToken.symbol
-        );
-
-        if (approvalSuccess) {
-          markSubstepCompleted(1, 0);
-          setApprovalStates((prev) => ({
-            ...prev,
-            [tokenType]: {
-              ...prev[tokenType],
-              baseToken: true,
-            },
-          }));
-        } else {
-          // Even if no approval was needed, mark it as completed since it's already approved
-          markSubstepCompleted(1, 0);
-          setApprovalStates((prev) => ({
-            ...prev,
-            [tokenType]: {
-              ...prev[tokenType],
-              baseToken: true,
-            },
-          }));
-        }
-
-        setLocalProcessingStep("mint");
-        setCurrentSubstep({ step: 1, substep: 2 });
-
-        // Create router contract and execute split
-        const futarchyRouter = new ethers.Contract(
-          routerAddress,
-          FUTARCHY_ROUTER_ABI,
-          signer
-        );
-
-        logDebug({
-          event: "Executing split position",
-          tokenType,
-          amount: amountInWei.toString(),
-        });
-
-        // Use market address from config with fallback
-        const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
-
-        // No gas or fee overrides: the wallet estimates both for the current
-        // chain. Fixed fees (1.5 gwei max) left transactions stuck on mainnet
-        // whenever the base fee rose above them.
-        const splitTx = await futarchyRouter.splitPosition(
-          marketAddress,
-          baseToken.address,
-          amountInWei
-        );
-
-        // Always update debug info with detection result
-        const debugData = {
-          status: isSafe ? 'Safe Wallet Detected' : 'Standard Wallet Detected',
-          message: `Wallet Type: ${walletClient?.connector?.name || 'Unknown'}`,
-          isSafe,
-          useBlockExplorer,
-          // Extra debug fields
-          referrer: typeof document !== 'undefined' ? document.referrer : 'N/A',
-          isSafeFlag: typeof window !== 'undefined' ? String(window.ethereum?.isSafe) : 'N/A',
-          isSafeAppFlag: typeof window !== 'undefined' ? String(window.ethereum?.isSafeApp) : 'N/A',
-          connectorId: walletClient?.connector?.id || 'N/A',
-          safeInfo: safeInfo ? `Connected to ${safeInfo.safeAddress}` : 'No Info'
-        };
-        updateDebugInfo(debugData);
-
-        if (isSafe || isSafeConnection(walletClient)) {
-          if (!useBlockExplorer) {
-            console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
-            markSubstepCompleted(1, 1);
-            setTransactionStates((prev) => ({ ...prev, mint: true }));
-            setLocalProcessingStep("completed");
-            setCurrentSubstep({ step: 1, substep: 3 });
-            onSafeTransaction?.(); // Trigger toast
-            handleClose(); // Auto-close for Safe
-            return;
-          } else {
-            console.log('[CollateralModal] Safe wallet detected - waiting for execution via Safe API');
-            updateDebugInfo({
-              isSafe: true,
-              useBlockExplorer: true,
-              safeTxHash: splitTx.hash,
-              status: 'Initializing Safe polling...'
-            });
-            const chainId = await walletClient.getChainId();
-            await waitForSafeTxReceipt({
-              chainId,
-              safeTxHash: splitTx.hash,
-              publicClient,
-              onStatus: (status) => {
-                console.log('[CollateralModal] Safe Status Update:', status);
-                updateDebugInfo(status);
-              }
-            });
-            updateDebugInfo({ status: 'Safe execution confirmed!' });
-          }
-        } else {
-          await splitTx.wait();
-        }
-
-        // Mark split complete and set to completed state
         markSubstepCompleted(1, 1);
         setTransactionStates((prev) => ({ ...prev, mint: true }));
-
-        console.log('[CollateralModal] Split transaction completed successfully');
-
-        // Small delay to ensure state updates are processed
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Set processing step to completed to show completion UI
         setLocalProcessingStep("completed");
-        setCurrentSubstep({ step: 1, substep: 3 }); // Move to final substep
-
-        console.log('[CollateralModal] State updated to completed');
-
+        setCurrentSubstep({ step: 1, substep: 3 });
       } else if (action === "remove") {
-        // Handle remove collateral logic
-        setApprovalStates((prev) => ({
-          ...prev,
-          [tokenType]: {
-            baseToken: false,
-            yesToken: false,
-            noToken: false,
-          },
-        }));
-
-        // Set initial step for remove
         setLocalProcessingStep("yesApproval");
         setCurrentSubstep({ step: 1, substep: 1 });
 
-        // Convert amount to wei
-        const amountInWei = ethers.utils.parseUnits(amount.toString(), 18);
-
-        // Get YES and NO token addresses from config MERGE_CONFIG
-        const mergeConfig = config?.MERGE_CONFIG;
-
-        if (!mergeConfig) {
-          throw new Error("MERGE_CONFIG not available in contract configuration");
+        const positions = tokenType === "currency"
+          ? config?.MERGE_CONFIG?.currencyPositions
+          : config?.MERGE_CONFIG?.companyPositions;
+        const yesToken = positions?.yes?.wrap?.wrappedCollateralTokenAddress;
+        const noToken = positions?.no?.wrap?.wrappedCollateralTokenAddress;
+        if (!yesToken || !noToken) {
+          throw new Error(`Token addresses not found in config for ${tokenType}. YES: ${yesToken}, NO: ${noToken}`);
         }
 
-        // Get token addresses directly from MERGE_CONFIG structure (keeping .wrap as it's in the config)
-        const yesTokenAddress = tokenType === "currency"
-          ? mergeConfig.currencyPositions?.yes?.wrap?.wrappedCollateralTokenAddress
-          : mergeConfig.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress;
-        const noTokenAddress = tokenType === "currency"
-          ? mergeConfig.currencyPositions?.no?.wrap?.wrappedCollateralTokenAddress
-          : mergeConfig.companyPositions?.no?.wrap?.wrappedCollateralTokenAddress;
-
-        console.log('[CollateralModal] Remove - Token addresses from config:', {
-          tokenType,
-          yesTokenAddress,
-          noTokenAddress,
-          mergeConfig
-        });
-
-        if (!yesTokenAddress || !noTokenAddress) {
-          throw new Error(`Token addresses not found in config for ${tokenType}. YES: ${yesTokenAddress}, NO: ${noTokenAddress}`);
-        }
-
-        // Check YES and NO token balances
-        const ERC20_BALANCE_ABI = [
-          {
-            inputs: [{ name: "account", type: "address" }],
-            name: "balanceOf",
-            outputs: [{ name: "", type: "uint256" }],
-            stateMutability: "view",
-            type: "function"
-          }
-        ];
-
-        const yesBalanceRaw = await publicClient.readContract({
-          address: yesTokenAddress,
-          abi: ERC20_BALANCE_ABI,
-          functionName: "balanceOf",
-          args: [account]
-        });
-
-        const noBalanceRaw = await publicClient.readContract({
-          address: noTokenAddress,
-          abi: ERC20_BALANCE_ABI,
-          functionName: "balanceOf",
-          args: [account]
-        });
-
-        console.log('[CollateralModal] Remove - Token balances:', {
-          yesBalanceRaw: yesBalanceRaw.toString(),
-          noBalanceRaw: noBalanceRaw.toString(),
-          amountInWei: amountInWei.toString(),
-          comparison: {
-            yesHasEnough: toBN(yesBalanceRaw).gte(amountInWei),
-            noHasEnough: toBN(noBalanceRaw).gte(amountInWei),
-          },
-        });
-
-        // Check if user has enough of both tokens using BigNumber comparison
-        const yesBalanceBN = ethers.BigNumber.from(yesBalanceRaw.toString());
-        const noBalanceBN = ethers.BigNumber.from(noBalanceRaw.toString());
-
-        if (yesBalanceBN.lt(amountInWei) || noBalanceBN.lt(amountInWei)) {
-          console.error('[CollateralModal] Insufficient balance detected:', {
-            yesBalance: ethers.utils.formatUnits(yesBalanceBN, 18),
-            noBalance: ethers.utils.formatUnits(noBalanceBN, 18),
-            amountRequested: amount,
-            shortfall: {
-              yes: yesBalanceBN.lt(amountInWei)
-                ? ethers.utils.formatUnits(amountInWei.sub(yesBalanceBN), 18)
-                : '0',
-              no: noBalanceBN.lt(amountInWei)
-                ? ethers.utils.formatUnits(amountInWei.sub(noBalanceBN), 18)
-                : '0',
+        await mergeCollateral({
+          ...common,
+          yesToken,
+          noToken,
+          onStep: (step) => {
+            if (step === 'yesApproved') {
+              markSubstepCompleted(1, 0);
+              markApproved('yesToken');
+            } else if (step === 'noApproval') {
+              setLocalProcessingStep("noApproval");
+              setCurrentSubstep({ step: 1, substep: 2 });
+            } else if (step === 'noApproved') {
+              markSubstepCompleted(1, 1);
+              markApproved('noToken');
+            } else if (step === 'merge') {
+              setLocalProcessingStep("merge");
+              setCurrentSubstep({ step: 1, substep: 3 });
             }
-          });
-          throw new Error(`Insufficient token balance. Need ${amount} of both YES and NO tokens.`);
-        }
-
-        const routerAddress = config?.FUTARCHY_ROUTER_ADDRESS || FUTARCHY_ROUTER_ADDRESS;
-
-        // Approve YES tokens
-        await handleTokenApproval(
-          yesTokenAddress,
-          routerAddress,
-          amountInWei,
-          tokenType,
-          "YES"
-        );
-
-        markSubstepCompleted(1, 0);
-        setApprovalStates((prev) => ({
-          ...prev,
-          [tokenType]: {
-            ...prev[tokenType],
-            yesToken: true,
           },
-        }));
+        });
 
-        setLocalProcessingStep("noApproval");
-        setCurrentSubstep({ step: 1, substep: 2 });
-
-        // Approve NO tokens
-        await handleTokenApproval(
-          noTokenAddress,
-          routerAddress,
-          amountInWei,
-          tokenType,
-          "NO"
-        );
-
-        markSubstepCompleted(1, 1);
-        setApprovalStates((prev) => ({
-          ...prev,
-          [tokenType]: {
-            ...prev[tokenType],
-            noToken: true,
-          },
-        }));
-
-        setLocalProcessingStep("merge");
-        setCurrentSubstep({ step: 1, substep: 3 });
-
-        // Execute merge using the base token address from config
-        const futarchyRouter = new ethers.Contract(
-          routerAddress,
-          FUTARCHY_ROUTER_ABI,
-          signer
-        );
-
-        const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
-
-        // Use the base token address for the merge operation
-        const baseTokensConfig = config?.BASE_TOKENS_CONFIG || BASE_TOKENS_CONFIG;
-        const baseToken = tokenType === "currency"
-          ? baseTokensConfig.currency
-          : baseTokensConfig.company;
-
-        // No gas or fee overrides: the wallet estimates both (see splitPosition)
-        const mergeTx = await futarchyRouter.mergePositions(
-          marketAddress,
-          baseToken.address, // Use base token address for merge
-          amountInWei
-        );
-
-        // Check for Safe wallet
-        if (isSafeConnection(walletClient)) {
-          if (!useBlockExplorer) {
-            console.log('[CollateralModal] Safe wallet detected - skipping wait() and auto-closing');
-            markSubstepCompleted(1, 3);
-            setTransactionStates((prev) => ({ ...prev, merge: true }));
-            setLocalProcessingStep("completed");
-            setCurrentSubstep({ step: 1, substep: 4 });
-            onSafeTransaction?.(); // Trigger toast
-            handleClose(); // Auto-close for Safe
-            return;
-          } else {
-            console.log('[CollateralModal] Safe wallet detected - waiting for execution via Safe API');
-            const chainId = await walletClient.getChainId();
-            await waitForSafeTxReceipt({
-              chainId,
-              safeTxHash: mergeTx.hash,
-              publicClient
-            });
-          }
-        } else {
-          await mergeTx.wait();
-        }
-
-        // Mark merge complete and set to completed state
         markSubstepCompleted(1, 2);
         setTransactionStates((prev) => ({ ...prev, merge: true }));
-
-        console.log('[CollateralModal] Merge transaction completed successfully');
-
-        // Small delay to ensure state updates are processed
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Set processing step to completed to show completion UI
         setLocalProcessingStep("completed");
-        setCurrentSubstep({ step: 1, substep: 4 }); // Move to final substep
-
-        console.log('[CollateralModal] State updated to completed');
-
+        setCurrentSubstep({ step: 1, substep: 4 });
       }
 
       logDebug({
@@ -1683,8 +1122,10 @@ const CollateralModal = ({
       });
 
     } catch (error) {
-      // Ignore Safe transaction sent "error" as it's just a control flow signal
+      // Not a failure: the transaction is queued in the user's Safe
       if (isSafeTransactionSent(error)) {
+        onSafeTransaction?.(); // Trigger toast
+        handleClose(); // Auto-close for Safe
         return;
       }
 
