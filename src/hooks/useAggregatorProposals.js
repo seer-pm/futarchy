@@ -15,12 +15,9 @@ import { fetchNestedRegistrySnapshot } from '../services/registrySnapshot';
 import { cachedOnce } from '../services/requestCache';
 import { fetchOnChainResolutions, resolutionKey } from '../utils/onChainResolution';
 import {
-    applyOnChainResolution,
-    getProposalCloseTimestamp,
-    hasResolutionOutcome,
     isProposalArchived,
-    isProposalClosed,
-    isProposalResolved,
+    needsOnChainResolution,
+    resolveMarketStatus,
 } from '../utils/proposalLifecycle';
 
 /**
@@ -37,6 +34,15 @@ function parseMetadata(metadataString) {
 }
 
 /**
+ * Chain a proposal lives on: proposal metadata > org metadata > Gnosis (100).
+ */
+export function detectProposalChain(proposalMeta, orgMeta) {
+    return proposalMeta.chain
+        ? parseInt(proposalMeta.chain)
+        : (orgMeta.chain ? parseInt(orgMeta.chain) : 100);
+}
+
+/**
  * Transform subgraph proposal to EventHighlight-compatible format
  * 
  * Data comes from:
@@ -48,9 +54,7 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     const proposalMeta = parseMetadata(proposal.metadata);
 
     // Debug: Log chain detection sources
-    const detectedChain = proposalMeta.chain
-        ? parseInt(proposalMeta.chain)
-        : (orgMeta.chain ? parseInt(orgMeta.chain) : 100);
+    const detectedChain = detectProposalChain(proposalMeta, orgMeta);
 
     console.log(`[🔗 CHAIN-DETECT] Proposal "${proposal.displayNameEvent?.slice(0, 30)}...":`, {
         proposalMetaChain: proposalMeta.chain,
@@ -81,7 +85,7 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     // End time: closeTimestamp from metadata JSON, or null when there is none.
     // Don't invent one — a "now + 7 days" default moved with every render and
     // showed a perpetual countdown on markets that had long since settled.
-    const closeTimestamp = getProposalCloseTimestamp(proposalMeta);
+    const closeTimestamp = resolveMarketStatus(proposalMeta).closeTime;
     const endTimeSeconds = closeTimestamp || null;
     if (closeTimestamp) {
         console.log(`[🔗 CLOSE-TIME] Proposal "${proposal.displayNameEvent?.slice(0, 30)}..." closeTimestamp:`, {
@@ -94,8 +98,6 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
     // Visibility: 'public' (default), 'hidden' (staging/test - only for owner/editor)
     const visibility = proposalMeta.visibility || 'public';
 
-    const resolved = isProposalResolved(proposalMeta);
-    const closed = isProposalClosed(proposalMeta);
     const currencySymbol = proposalMeta?.currencyTokens?.base?.tokenSymbol ||
         (detectedChain === 1 ? 'USDS' : 'sDAI');
 
@@ -134,16 +136,14 @@ function transformProposalToEvent(proposal, org, connectedWallet) {
         startTime: startTimeSeconds,
         endTime: endTimeSeconds,  // closeTimestamp from metadata, null if none
         closeTimestamp,
-        isClosed: closed,
         timeProgress: 0,
 
-        // Status — use metadata resolution fields if available
-        status: resolved ? 'resolved' : (closed ? 'ended' : 'ongoing'),
-        resolutionStatus: proposalMeta.resolution_status || (closed ? 'closed' : 'unresolved'),
+        // Inputs of resolveMarketStatus (utils/proposalLifecycle.js), which
+        // every list derives a card's status from. onChainResolution is filled
+        // in by applyOnChainResolutions below.
         resolution_status: proposalMeta.resolution_status || null,
         resolution_outcome: proposalMeta.resolution_outcome || null,
-        resolutionOutcome: proposalMeta.resolution_outcome || null,
-        finalOutcome: proposalMeta.resolution_outcome || null,
+        onChainResolution: null,
 
         // =============================================
         // VISIBILITY & OWNERSHIP FLAGS
@@ -256,31 +256,41 @@ async function fetchPoolsByIds(ids, chainId) {
     return poolMap;
 }
 
-async function applyOnChainResolutions(proposals) {
-    const unsettled = proposals.filter(p =>
-        p.proposalAddress && !(p.status === 'resolved' && hasResolutionOutcome(p))
-    );
-    if (unsettled.length === 0) return;
+/**
+ * On-chain resolution of the proposals registry metadata doesn't settle,
+ * keyed by resolutionKey(chainId, proposalAddress). The proposal lists and
+ * the organizations table pass the same set, so they share one read.
+ *
+ * @param {Array<{proposalAddress: string, chainId: number, metadata: Object}>} proposals
+ * @returns {Promise<Map<string, {resolved: boolean, outcome: string|null}>>}
+ */
+export async function fetchUnsettledResolutions(proposals) {
+    const targets = proposals
+        .filter(p => p.proposalAddress && needsOnChainResolution(p))
+        .map(p => ({
+            proposalAddress: p.proposalAddress,
+            chainId: p.chainId,
+            conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
+        }));
+    if (targets.length === 0) return new Map();
 
-    const targets = unsettled.map(p => ({
-        proposalAddress: p.proposalAddress,
-        chainId: p.chainId,
-        conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
-    }));
     const cacheKey = `resolutions:${targets.map(t => resolutionKey(t.chainId, t.proposalAddress)).sort().join(',')}`;
+    return cachedOnce(cacheKey, () => fetchOnChainResolutions(targets));
+}
 
+async function applyOnChainResolutions(proposals) {
     let resolutions;
     try {
-        resolutions = await cachedOnce(cacheKey, () => fetchOnChainResolutions(targets));
+        resolutions = await fetchUnsettledResolutions(proposals);
     } catch (e) {
         console.warn('[🔗 ON-CHAIN-RESOLUTION] check failed:', e.message);
         return;
     }
 
-    for (const proposal of unsettled) {
+    for (const proposal of proposals) {
         const result = resolutions.get(resolutionKey(proposal.chainId, proposal.proposalAddress));
         if (result?.resolved) {
-            applyOnChainResolution(proposal, result);
+            proposal.onChainResolution = result;
             console.log(`[🔗 ON-CHAIN-RESOLUTION] "${proposal.eventTitle}" resolved on-chain: ${result.outcome}`);
         }
     }

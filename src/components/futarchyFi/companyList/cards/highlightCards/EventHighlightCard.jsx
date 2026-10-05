@@ -5,6 +5,7 @@ import CircularProgressBar from "../../components/CircularProgressBar";
 import { createSubgraphPoolFetcher } from "../../../../../utils/SubgraphPoolFetcher";
 import ChainBadge from "../../components/ChainBadge";
 import { USE_QUERY_PARAM_URLS } from "../../../../../config/featureFlags";
+import { resolveMarketStatus } from "../../../../../utils/proposalLifecycle";
 
 // Subgraph-backed pool fetcher (replaces SupabasePoolFetcher)
 const poolFetcher = createSubgraphPoolFetcher();
@@ -148,25 +149,37 @@ const LoadingSpinner = ({ className = "h-5 w-5 text-futarchyGray12 dark:text-whi
 );
 
 // Add Timestamp component similar to ProposalsCard
-const EventTimestamp = ({ countdownFinish, timestamp, endTime, resolutionStatus }) => {
+const EventTimestamp = ({ market }) => {
   const [remainingTime, setRemainingTime] = useState("");
 
   useEffect(() => {
     const updateRemainingTime = () => {
       const now = Date.now() / 1000; // Current time in seconds
+      const marketStatus = resolveMarketStatus(market, now);
+      const endTime = marketStatus.closeTime;
 
-      console.log(`[EventTimestamp] Debug values:`, {
-        countdownFinish,
-        timestamp,
-        endTime,
-        resolutionStatus,
-        now,
-        endTimeType: typeof endTime,
-        endTimeAsDate: endTime ? new Date(endTime * 1000) : null
-      });
-
-      if (endTime) {
+      if (marketStatus.showCountdown) {
         const timeLeft = endTime - now;
+        const days = Math.floor(timeLeft / 86400);
+        const hours = Math.floor((timeLeft % 86400) / 3600);
+        const minutes = Math.floor((timeLeft % 3600) / 60);
+
+        let timeString = '';
+        if (days > 0) {
+          timeString += `${days}d `;
+        }
+        if (hours > 0 || days > 0) {
+          timeString += `${hours}h `;
+        }
+        timeString += `${minutes}m`;
+
+        setRemainingTime(`Open until: ${timeString}`);
+      } else if (marketStatus.state === 'active') {
+        // No close time in the registry: the market has no deadline to count
+        // down to, and the registry has no creation time either, so say only
+        // that it is open rather than inventing a date.
+        setRemainingTime('Open');
+      } else if (endTime) {
         const endDate = new Date(endTime * 1000).toLocaleDateString('en-US', {
           year: 'numeric',
           month: '2-digit',
@@ -174,45 +187,16 @@ const EventTimestamp = ({ countdownFinish, timestamp, endTime, resolutionStatus 
           hour: '2-digit',
           minute: '2-digit'
         });
-
-        if (timeLeft <= 0) {
-          // End time has passed
-          if (resolutionStatus !== 'open') {
-            // Market is actually ended/resolved
-            setRemainingTime(`Ended on: ${endDate}`);
-          } else {
-            // Market is still open for submissions despite deadline
-            setRemainingTime(`Open: ${endDate}`);
-          }
-        } else {
-          // End time hasn't passed yet - show countdown
-          const days = Math.floor(timeLeft / 86400);
-          const hours = Math.floor((timeLeft % 86400) / 3600);
-          const minutes = Math.floor((timeLeft % 3600) / 60);
-
-          let timeString = '';
-          if (days > 0) {
-            timeString += `${days}d `;
-          }
-          if (hours > 0 || days > 0) {
-            timeString += `${hours}h `;
-          }
-          timeString += `${minutes}m`;
-
-          setRemainingTime(`Open until: ${timeString}`);
-        }
+        setRemainingTime(`Ended on: ${endDate}`);
       } else {
-        // No close time in the registry: the market has no deadline to count
-        // down to, and the registry has no creation time either, so say only
-        // that it is open rather than inventing a date.
-        setRemainingTime('Open');
+        setRemainingTime(marketStatus.labelWithOutcome);
       }
     };
 
     updateRemainingTime();
     const interval = setInterval(updateRemainingTime, 60000); // Update every minute
     return () => clearInterval(interval);
-  }, [countdownFinish, timestamp, endTime, resolutionStatus]);
+  }, [market]);
 
   return remainingTime ? (
     <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-medium mt-1">
@@ -226,14 +210,11 @@ const EventHighlightCard = ({
   proposalTitle,
   poolAddresses,
   timeProgress,
-  startTime,
-  endTime,
-  countdownFinish,
   eventId,
   status,
   approvalStatus,
   metadata,
-  resolutionStatus,
+  market,                  // The event itself: what resolveMarketStatus reads
   chainId,
   hideEventProbability = true,
   prefetchedPrices = null, // Pre-fetched prices from bulk subgraph query
@@ -248,8 +229,6 @@ const EventHighlightCard = ({
   const debugMode = searchParams.get('debugMode') === 'true';
 
   const currentStatus = status || approvalStatus;
-
-  console.log('[EventHighlight Open]', { eventId, resolutionStatus });
 
   // Use the simplified hook instead of complex price fetching
   // Pass prefetchedPrices to hook - if available, it will skip Supabase fetch
@@ -390,12 +369,7 @@ const EventHighlightCard = ({
                 proposalTitle || "Untitled Event"
               )}
             </h3>
-            <EventTimestamp
-              countdownFinish={countdownFinish}
-              timestamp={startTime}
-              endTime={endTime}
-              resolutionStatus={resolutionStatus}
-            />
+            <EventTimestamp market={market} />
           </div>
         </div>
 
