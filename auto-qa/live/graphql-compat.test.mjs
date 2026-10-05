@@ -1,7 +1,8 @@
 /**
  * GraphQL schema-compat test (auto-qa).
  *
- * Runs the schema-compat probe against the live api.futarchy.fi and asserts
+ * Runs the schema-compat probe against the API the app uses (see
+ * auto-qa/tools/api-base.mjs) and asserts
  * the set of failing queries matches the baseline at
  * auto-qa/fixtures/known-graphql-failures.json.
  *
@@ -22,12 +23,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { resolveApiBase } from '../tools/api-base.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROBE = resolve(__dirname, '../tools/probe-graphql.mjs');
 const BASELINE = resolve(__dirname, '../fixtures/known-graphql-failures.json');
 const REPO_ROOT = resolve(__dirname, '../..');
-const API_BASE = process.env.AUTO_QA_API_BASE || 'https://api.futarchy.fi';
+const API_BASE = resolveApiBase();
 
 async function isApiReachable() {
     try {
