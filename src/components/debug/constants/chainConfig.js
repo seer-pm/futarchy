@@ -1,4 +1,5 @@
 import { buildRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
+import { getRpcProvider } from '../../../utils/getBestRpc';
 
 // Multi-chain configuration for Create Proposal and Pool features
 // Supports Ethereum (1) and Gnosis (100)
@@ -102,28 +103,20 @@ export const REALITY_CONFIG = {
  * @returns {Promise<string|null>} - The questionId or null
  */
 export const fetchQuestionId = async (chainId, proposalAddress) => {
-    const rpcUrl = CHAIN_CONFIG[chainId]?.rpcUrl;
-    if (!rpcUrl || !proposalAddress) return null;
+    if (!CHAIN_CONFIG[chainId] || !proposalAddress) return null;
 
     try {
-        // questionId() function selector: 0xb06a5c52
-        const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'eth_call',
-                params: [{
-                    to: proposalAddress,
-                    data: '0xb06a5c52' // questionId() selector
-                }, 'latest'],
-                id: 1
-            })
-        });
+        // Read through the app's shared provider for the chain (the configured
+        // endpoint, failing over to the public one). This used to POST to the
+        // debug tools' own public endpoint in one try; when that was rate
+        // limited, the market page lost its Reality question link.
+        const result = await getRpcProvider(chainId).send('eth_call', [{
+            to: proposalAddress,
+            data: '0xb06a5c52' // questionId() selector
+        }, 'latest']);
 
-        const result = await response.json();
-        if (result.result && result.result !== '0x') {
-            return result.result; // Returns the questionId (bytes32)
+        if (/^0x[0-9a-fA-F]{64}$/.test(result) && !/^0x0{64}$/.test(result)) {
+            return result; // Returns the questionId (bytes32)
         }
         return null;
     } catch (error) {
