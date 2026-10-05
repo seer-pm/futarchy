@@ -1758,7 +1758,7 @@ const CollateralModal = ({
   }
 
   return (
-    <div className="flex flex-col relative w-11/12 max-w-[393px] max-h-[85vh] md:w-[480px] md:h-auto md:max-h-[638px] bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-lg gap-4 p-4 md:p-6 overflow-y-auto">
+    <div className="flex flex-col relative w-11/12 max-w-[393px] max-h-[calc(100dvh-2rem)] md:w-[480px] md:h-auto md:max-h-[min(638px,calc(100dvh-2rem))] bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-lg gap-4 p-4 md:p-6 overflow-y-auto">
       <div className="flex justify-between items-center">
         <div className="text-lg md:text-xl text-futarchyGray12 dark:text-futarchyGray3 font-medium">
           {title}

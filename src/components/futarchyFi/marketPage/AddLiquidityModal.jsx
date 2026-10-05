@@ -228,7 +228,7 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                     exit="hidden"
                 >
                     <motion.div
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto shadow-lg"
+                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl p-6 max-w-md w-full mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-lg"
                         onClick={(e) => e.stopPropagation()}
                         variants={modalVariants}
                         initial="hidden"
