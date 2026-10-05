@@ -135,6 +135,9 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
     nativeBalance: '0'
   };
   const [confirmModalData, setConfirmModalData] = useState(null);
+  // Bumped when a trade may have moved the pool, so the preview is quoted
+  // again at once rather than on the next change of the amount.
+  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
 
   // QuoterV2 live preview state
   const [quoterPreview, setQuoterPreview] = useState({
@@ -559,7 +562,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       isActive = false;
       clearTimeout(timer);
     };
-  }, [amount, selectedAction, selectedOutcome, chainId, config]);
+  }, [amount, selectedAction, selectedOutcome, chainId, config, quoteRefreshKey]);
 
   useEffect(() => {
     setTradeAnywayAcknowledged(false);
@@ -734,11 +737,10 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       console.log('[Confirm] Using cached quote from FutarchyQuoteHelper');
       expectedReceiveAmount = quoterPreview.amountOut;
 
-      if (selectedAction === 'Buy') {
-        receiveToken = (selectedOutcome === 'approved' ? 'YES_' : 'NO_') + getCompanySymbol();
-      } else {
-        receiveToken = getCurrencySymbol();
-      }
+      // Both sides of the swap are conditional tokens: a buy pays out
+      // YES_/NO_ company tokens and a sell YES_/NO_ currency tokens.
+      const outcomePrefix = selectedOutcome === 'approved' ? 'YES_' : 'NO_';
+      receiveToken = outcomePrefix + (selectedAction === 'Buy' ? getCompanySymbol() : getCurrencySymbol());
     } else if (chainId !== 1 && chainId !== 100 && currentPrice && currentPrice > 0) {
       // Fallback to legacy calc — spot price estimate with conservative fee deduction
       const APPROX_POOL_FEE = 0.01; // 1% conservative estimate for pool fees
@@ -797,12 +799,14 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
   // rather than on the parent's next poll.
   const handleTransactionComplete = () => {
     refetchBalances?.();
+    setQuoteRefreshKey((key) => key + 1);
   };
 
   const handleConfirmModalClose = () => {
     setIsConfirmModalOpen(false);
     // Safe transactions close the modal without a completion callback
     refetchBalances?.();
+    setQuoteRefreshKey((key) => key + 1);
   };
 
   // Add this effect to handle tab visibility changes

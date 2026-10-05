@@ -1300,9 +1300,25 @@ const ConfirmSwapModal = memo(({
 
     // Shows a re-quoted output in place of the one on screen.
     const applyRefreshedQuote = (amountOutRaw) => {
-        refreshedQuoteRef.current = { buyAmount: amountOutRaw.toString() };
+        // The execution price follows from the new output. The pool price
+        // before and after, and the impact, came with the earlier quote and no
+        // longer describe this one, so those rows are cleared, not left stale.
+        const executionPrice = executionPriceFor({
+            amountIn: transactionData.amount.split(' ')[0],
+            amountOut: ethers.utils.formatUnits(amountOutRaw.toString(), outputDecimals),
+            isBuy: transactionData.action === 'Buy'
+        });
+        refreshedQuoteRef.current = {
+            buyAmount: amountOutRaw.toString(),
+            executionPrice,
+            swapPrice: executionPrice === null ? null : String(executionPrice),
+            displayPrice: executionPrice === null ? null : String(executionPrice),
+            currentPrice: null,
+            poolPriceAfter: null,
+            priceImpact: null
+        };
         setSwapRouteData((prev) => (prev?.data
-            ? { ...prev, data: { ...prev.data, buyAmount: amountOutRaw.toString() } }
+            ? { ...prev, data: { ...prev.data, ...refreshedQuoteRef.current } }
             : prev));
     };
 
@@ -1822,7 +1838,7 @@ const ConfirmSwapModal = memo(({
             >
                 <div className="flex h-full items-center justify-center p-4">
                     <div // This is the modal content panel
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[calc(100dvh-2rem)]"
+                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[80dvh]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* All original modal content starts here */}
@@ -2348,13 +2364,13 @@ const ConfirmSwapModal = memo(({
                                             <div className="flex justify-between">
                                                 <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Already Have</span>
                                                 <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">
-                                                    {existingBalance} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
+                                                    {formatTokenAmount(existingBalance)} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Need to Add</span>
                                                 <span className="text-futarchyBlue11 dark:text-futarchyBlueDark11 font-medium">
-                                                    {additionalCollateralNeeded} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
+                                                    {formatTokenAmount(additionalCollateralNeeded)} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
                                                 </span>
                                             </div>
                                         </>
