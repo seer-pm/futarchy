@@ -234,7 +234,12 @@ test('seerSwap — approves the quoted router, then sends the quoted trade', () 
     assert.match(SEER, /isSafe = isSafeWallet\(walletClient, connector\),/);
     assert.match(SEER, /if \(isSafe\) throw new Error\(SAFE_TRANSACTION_SENT\);/);
     assert.match(MODAL, /isSafe: isSafeConnection\(walletClient\),/);
-    assert.match(SEER, /return tradeTokens\(\{ trade, account, isTradingCredits: false \}, \{ client: walletClient \}\);/);
+    assert.match(SEER, /return tradeTokens\(\{ trade: tradeToSend, account, isTradingCredits: false \}, \{ client: walletClient \}\);/);
+    // The swap is rebuilt after an approval (or when the quote has aged), so it
+    // is never sent with a deadline that passed while the user was signing.
+    assert.match(SEER, /if \(requote && \(approved \|\| Date\.now\(\) - quotedAt > MAX_QUOTE_AGE_MS\)\) \{\s*tradeToSend = await requote\(\);/);
+    assert.match(MODAL, /requote: requoteForSend,\s*quotedAt,/);
+    assert.match(MODAL, /if \(!fresh \|\| fresh\.minimumAmountOut\(\) < confirmedMinimum\) \{\s*throw new Error\(PRICE_MOVED_WHILE_SIGNING\);/);
     assert.match(SEER, /tradeType: TradeType\.EXACT_INPUT/);
 });
 

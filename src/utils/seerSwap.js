@@ -104,6 +104,10 @@ export const quoteSeerSwap = async ({ chainId, account, tokenIn, tokenOut, amoun
     });
 };
 
+// A quote's calldata carries a deadline five minutes after it was built
+// (@seer-pm/lens defaultDeadline). Past this age it is rebuilt before sending.
+export const MAX_QUOTE_AGE_MS = 60_000;
+
 /**
  * Approves the router if needed, then sends the quoted swap.
  * Returns the swap's transaction hash (a safeTxHash from a Safe).
@@ -111,6 +115,17 @@ export const quoteSeerSwap = async ({ chainId, account, tokenIn, tokenOut, amoun
  * other approval helpers, so the caller shows it as sent rather than failed.
  * Pass `isSafe` from useSafeConnection(): a Safe connected over WalletConnect
  * cannot be told from the wallet client and connector alone.
+ *
+ * The swap is the last of up to three signatures (collateral split, approval,
+ * swap), each followed by a wait for the chain. When an approval was needed,
+ * or the quote is older than MAX_QUOTE_AGE_MS, `requote` is called for a fresh
+ * trade just before the swap is sent, so the swap never goes out with a
+ * deadline that passed while the user was signing. `requote` must return a
+ * trade that still honours what the user confirmed, or throw.
+ *
+ * @param {object} p
+ * @param {() => Promise<object>} [p.requote] returns a fresh trade for the same swap
+ * @param {number} [p.quotedAt] Date.now() when `trade` was quoted
  */
 export const executeSeerSwap = async ({
     trade,
@@ -121,13 +136,17 @@ export const executeSeerSwap = async ({
     useUnlimitedApproval = false,
     onApprovalNeeded,
     onApprovalComplete,
+    requote,
+    quotedAt = Date.now(),
 }) => {
     const { fetchNeededApprovals, tradeTokens } = await loadSdk();
     const client = getSeerPublicClient(trade.chainId);
-    const amountIn = trade.maximumAmountIn();
 
-    const [needed] = await fetchNeededApprovals(client, [trade.tokenIn.address], account, trade.approveAddress, [amountIn]);
-    if (needed) {
+    // Returns true when an approval was sent (and mined).
+    const approveIfNeeded = async (trade) => {
+        const amountIn = trade.maximumAmountIn();
+        const [needed] = await fetchNeededApprovals(client, [trade.tokenIn.address], account, trade.approveAddress, [amountIn]);
+        if (!needed) return false;
         onApprovalNeeded?.();
         const approveHash = await walletClient.writeContract({
             address: trade.tokenIn.address,
@@ -140,8 +159,18 @@ export const executeSeerSwap = async ({
         if (isSafe) throw new Error(SAFE_TRANSACTION_SENT);
         const receipt = await client.waitForTransactionReceipt({ hash: approveHash });
         assertReceiptSucceeded(receipt, approveHash);
+        return true;
+    };
+
+    let tradeToSend = trade;
+    const approved = await approveIfNeeded(trade);
+    if (requote && (approved || Date.now() - quotedAt > MAX_QUOTE_AGE_MS)) {
+        tradeToSend = await requote();
+        // The fresh route can go through a different router (Uniswap V3 or V4
+        // on Ethereum), which then needs its own approval.
+        await approveIfNeeded(tradeToSend);
     }
     onApprovalComplete?.();
 
-    return tradeTokens({ trade, account, isTradingCredits: false }, { client: walletClient });
+    return tradeTokens({ trade: tradeToSend, account, isTradingCredits: false }, { client: walletClient });
 };
