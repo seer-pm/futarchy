@@ -29,7 +29,7 @@ jobs:
   unit:
     name: Deterministic auto-qa
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -39,6 +39,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+
+      # Several suites import the real modules, which need ethers and viem.
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
 
       - name: Run deterministic auto-qa tests
         run: npm run auto-qa:test:unit
