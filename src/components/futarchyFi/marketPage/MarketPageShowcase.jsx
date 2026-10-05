@@ -1,9 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
 import RootLayout from '../../../components/layout/RootLayout';
-import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS, SHOW_DATA_DEBUG, DEBUG_MODE } from '../../../config/featureFlags';
-import { StatDisplay, AggregatedStatDisplay, formatVolume, formatLiquidity, normalizeTokenAmount } from './page/Formatter';
+import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS, SHOW_DATA_DEBUG } from '../../../config/featureFlags';
+import { StatDisplay, AggregatedStatDisplay, formatVolume, formatLiquidity } from './page/Formatter';
 import ImpactIcon from './page/icons/ImpactIcon';
 import LiquidityIcon from './page/icons/LiquidityIcon';
 import StatusIcon from './page/icons/StatusIcon';
@@ -27,19 +26,14 @@ import { FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS } from './co
 import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from '../../../constants/addresses';
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { useChainValidation } from '../../../hooks/useChainValidation';
-import { getRealityQuestionUrl } from '../../debug/constants/chainConfig';
-import { fetchResolutionTime } from '../../../utils/onChainResolution';
-import { computeImpactPercent, formatImpactPercent, normalizeRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
+import { computeImpactPercent, formatImpactPercent } from '../../../utils/marketPageUtils.mjs';
 import WrongNetworkModal from '../../common/WrongNetworkModal';
 import CreatePoolModal from './CreatePoolModal';
-import { createSubgraphPoolFetcher } from '../../../utils/SubgraphPoolFetcher';
 import TripleChart from '@components/chart/TripleChart';
 import ChartParameters from './tripleChart/chartParameters/ChartParameters';
 import useLatestPrices from '../../../hooks/useLatestPrices';
 import { useCurrency, useUpdateCurrencyFromConfig } from '../../../contexts/CurrencyContext';
 import { useSdaiRate } from '../../../hooks/useSdaiRate';
-import { useBalanceManager } from '../../../hooks/useBalanceManager';
-import { useExternalSpotPrice } from '../../../hooks/useExternalSpotPrice';
 import AddLiquidityModal from './AddLiquidityModal';
 import { PendingOrderToast, ProcessingToast, SafeTransactionToast } from './showcase/toasts';
 import { TwapCountdown } from './showcase/TwapCountdown';
@@ -47,9 +41,20 @@ import { TradeHistoryTable } from './showcase/TradeHistoryTable';
 import { YourViewCard } from './showcase/YourViewCard';
 import { PredictionMarketModal } from './showcase/PredictionMarketModal';
 import { SnapshotWidget } from './showcase/SnapshotWidget';
-
-// Subgraph pool fetcher instance for latest prices
-const subgraphPoolFetcher = createSubgraphPoolFetcher();
+import { PROPOSALS_USING_SUBGRAPH_TRADES, useMarketPageParams } from './showcase/useMarketPageParams';
+import { useHeroCollapse } from './showcase/useHeroCollapse';
+import { useChartFilters } from './showcase/useChartFilters';
+import { useMarketSpotPrice } from './showcase/useMarketSpotPrice';
+import { useMarketTabs } from './showcase/useMarketTabs';
+import { useTokenImages } from './showcase/useTokenImages';
+import { useLivePoolPrices } from './showcase/useLivePoolPrices';
+import { useLiquiditySummary } from './showcase/useLiquiditySummary';
+import { useMarketBalances } from './showcase/useMarketBalances';
+import { useCollateralFlow } from './showcase/useCollateralFlow';
+import { useMarketData } from './showcase/useMarketData';
+import { useConfirmSwapState } from './showcase/useConfirmSwapState';
+import { useMarketTiming } from './showcase/useMarketTiming';
+import { usePendingCowOrders } from './showcase/usePendingCowOrders';
 
 const DEFAULT_TWAP_DESCRIPTION = "The Futarchy Test is considered passed if the time-weighted average price (TWAP) of the \u201cpass\u201d (yes) outcome over the final 24 hours of the Issuance KIP\u2019s voting period is greater than or equal to that of the \u201cfail\u201d (no) outcome. If not, the proposal fails the futarchy test, regardless of the Kleros DAO vote result.";
 
@@ -72,309 +77,32 @@ const SubgraphChart = dynamic(() => import("@components/chart/SubgraphChart"), {
 const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null }) => {
   const [safeToastVisible, setSafeToastVisible] = useState(false);
 
-  // Read useSubgraph query parameter for chart display control
-  // - No param or not set: Show only TripleChart (original behavior)
-  // - useSubgraph=true: Show both TripleChart AND SubgraphChart
-  // - useSubgraph=only: Show ONLY SubgraphChart (don't mount TripleChart)
-  // Proposals that default to Subgraph Trades
-  const PROPOSALS_USING_SUBGRAPH_TRADES = [
-    '0x45e1064348fD8A407D6D1F59Fc64B05F633b28FC',
-    '0xFb45aE9d8e5874e85b8e23D735EB9718EfEF47Fa'  // AAVE proposal
-  ];
-
-  // Proposal-specific config for SubgraphChart and spot price
-  const PROPOSAL_DEFAULTS = {
-    '0x45e1064348fD8A407D6D1F59Fc64B05F633b28FC': {
-      useSubgraph: 'only',
-      useSpotPrice: '0x8189c4c96826d016a99986394103dfa9ae41e7ee::0x89c80a4540a00b5270347e02e2e144c71da2eced-hour-500-xdai'  // GNO/WXDAI pool + sDAI rate provider
-    },
-    '0xFb45aE9d8e5874e85b8e23D735EB9718EfEF47Fa': {
-      useSubgraph: 'only',
-      useSpotPrice: 'composite::0xaa7a70070e7495fe86c67225329dbd39baa2f63b+0xc8cf54b0b70899ea846b70361e62f3f5b22b1f4binvert+0x3de27efa2f1aa663ae5d458857e731c129069f29invert-hour-100-eth'  // AAVE/GHO composite: USDC/GHO * AAVE/USDC(inv) * AAVE/GHO(inv)
-    },
-    '0xeCe80208CB8376Be311cE0f5Ea4eF73850a0dcF0': {
-      useSubgraph: 'only',
-      useSpotPrice: '0x8189c4c96826d016a99986394103dfa9ae41e7ee::0x89c80a4540a00b5270347e02e2e144c71da2eced-hour-500-xdai'  // GNO/WXDAI pool + sDAI rate provider
-    }
-  };
-
-  const searchParams = useSearchParams();
-
-  // Get proposal ID from URL path (/markets/[address]) or query param (?proposalId=)
-  // Use pathname for /markets/[address] format
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-  const pathMatch = pathname.match(/\/markets?\/([^/?]+)/i);
-  const proposalIdFromPath = pathMatch?.[1] || null;
-
-  // Get proposal ID early for defaults lookup
-  const proposalIdForDefaults = proposalIdFromPath || proposal?.address || proposal?.id || searchParams.get('proposalId');
-  const normalizedProposalIdForDefaults = proposalIdForDefaults?.toLowerCase?.();
-  const proposalDefaults = Object.entries(PROPOSAL_DEFAULTS).find(
-    ([address]) => address.toLowerCase() === normalizedProposalIdForDefaults
-  )?.[1] || {};
-
-  // Apply defaults: URL params override proposal defaults
-  // If global toggle is enabled, force subgraph for all proposals
-  const useSubgraphParam = ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS
-    ? 'only'  // Force SubgraphChart only
-    : (searchParams.get('useSubgraph') || proposalDefaults.useSubgraph);
-  const showTripleChart = useSubgraphParam !== 'only'; // Show unless 'only'
-  const showSubgraphChart = useSubgraphParam === 'true' || useSubgraphParam === 'only';
-
-  // External spot price from GeckoTerminal via spotClient
-  // Priority: 1) URL param, 2) proposal defaults, 3) config.marketInfo.coingecko_ticker
-  const useSpotPriceParam = searchParams.get('useSpotPrice') || proposalDefaults.useSpotPrice;
-
-  // Check for tradeSource parameter to switch between Supabase and Subgraph for trades
-  // - No param: Default to Supabase UNLESS in whitelist
-  // - tradeSource=subgraph: Use Subgraph (SubgraphTradesDataLayer)
-  // - tradeSource=supabase: Use Supabase (RecentTradesDataLayer)
-  const tradeSourceParam = searchParams.get('tradeSource');
-
-  // Logic moved below config definition...
+  const {
+    proposalIdForDefaults,
+    useSpotPriceParam,
+    tradeSourceParam,
+    showTripleChart,
+    showSubgraphChart,
+    isDebugMode,
+    debugAddress
+  } = useMarketPageParams({ proposal, debugMode });
 
   const handleSafeTransaction = useCallback(() => {
     setSafeToastVisible(true);
     // Auto-hide after 10 seconds
     setTimeout(() => setSafeToastVisible(false), 10000);
   }, []);
-  const [marketHasClosed, setMarketHasClosed] = useState(false);
   const [isPredictionMarketModalOpen, setIsPredictionMarketModalOpen] = useState(false);
   const [isAddLiquidityModalOpen, setIsAddLiquidityModalOpen] = useState(false);
   const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false);
   const [isEditProposalModalOpen, setIsEditProposalModalOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
 
-  // The sticky hero collapses on desktop once the page scrolls. Without a
-  // placeholder the content below jumps up by the height it loses, moving
-  // whatever is under the cursor mid-click. heroReserve re-adds that height
-  // as a spacer at the top of the page content so nothing shifts.
-  const heroRef = useRef(null);
-  const [heroEl, setHeroEl] = useState(null);
-  const attachHeroRef = useCallback((el) => {
-    heroRef.current = el;
-    setHeroEl(el);
-  }, []);
-  const expandedHeroHeightRef = useRef(0);
-  const isScrolledRef = useRef(false);
-  const [heroReserve, setHeroReserve] = useState(0);
-  const syncHeroReserve = useCallback(() => {
-    const el = heroRef.current;
-    if (!el) return;
-    const height = el.offsetHeight;
-    if (!isScrolledRef.current) {
-      expandedHeroHeightRef.current = height;
-      setHeroReserve(0);
-    } else {
-      setHeroReserve(Math.max(0, expandedHeroHeightRef.current - height));
-    }
-  }, []);
-  // Layout effect: measure after the collapse commits but before paint.
-  useLayoutEffect(() => {
-    isScrolledRef.current = isScrolled;
-    syncHeroReserve();
-  }, [isScrolled, syncHeroReserve]);
-  // Follow later size changes (data loading, the 300ms padding transition).
-  useEffect(() => {
-    if (!heroEl || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(syncHeroReserve);
-    observer.observe(heroEl);
-    return () => observer.disconnect();
-  }, [heroEl, syncHeroReserve]);
-
-  // Chart line visibility filters
-  const [chartFilters, setChartFilters] = useState({
-    spot: true, // Spot price shown as semi-transparent dashed line
-    yes: true,
-    no: true,
-    impact: false, // Impact line is hidden by default
-    eventProbability: false // Event probability line hidden by default
-  });
-
-  const handleChartFilterClick = (filterType) => {
-    setChartFilters(prev => {
-      const newFilters = { ...prev };
-
-      // Special handling for impact - when clicked, show only impact line
-      if (filterType === 'impact') {
-        if (!prev.impact) {
-          // Clicking impact when it's off: show only impact
-          newFilters.spot = false;
-          newFilters.yes = false;
-          newFilters.no = false;
-          newFilters.eventProbability = false;
-          newFilters.impact = true;
-        } else {
-          // Clicking impact when it's on: show all normal lines
-          newFilters.spot = true;
-          newFilters.yes = true;
-          newFilters.no = true;
-          newFilters.impact = false;
-          newFilters.eventProbability = false;
-        }
-        return newFilters;
-      }
-
-      // Special handling for event probability - mirror impact behaviour
-      if (filterType === 'eventProbability') {
-        if (!prev.eventProbability) {
-          newFilters.spot = false;
-          newFilters.yes = false;
-          newFilters.no = false;
-          newFilters.impact = false;
-          newFilters.eventProbability = true;
-        } else {
-          newFilters.spot = true;
-          newFilters.yes = true;
-          newFilters.no = true;
-          newFilters.impact = false;
-          newFilters.eventProbability = false;
-        }
-        return newFilters;
-      }
-
-      // If impact is currently shown, clicking any other filter switches back to normal mode
-      if (prev.impact) {
-        newFilters.impact = false;
-        newFilters.spot = false;
-        newFilters.yes = false;
-        newFilters.no = false;
-        newFilters.eventProbability = false;
-        newFilters[filterType] = true;
-        return newFilters;
-      }
-
-      // If event probability is currently shown, clicking any other filter switches back to normal mode
-      if (prev.eventProbability) {
-        newFilters.eventProbability = false;
-        newFilters.spot = false;
-        newFilters.yes = false;
-        newFilters.no = false;
-        newFilters.impact = false;
-        newFilters[filterType] = true;
-        return newFilters;
-      }
-
-      // Normal filter logic for spot/yes/no
-      // If clicking on an enabled item with all enabled, disable the other two
-      if (prev[filterType] && prev.spot && prev.yes && prev.no) {
-        Object.keys(newFilters).forEach(key => {
-          if (key !== 'impact' && key !== 'eventProbability') {
-            newFilters[key] = key === filterType;
-          }
-        });
-      }
-      // If clicking on a disabled item, enable it
-      else if (!prev[filterType]) {
-        newFilters[filterType] = true;
-      }
-      // If clicking on the only enabled item, enable all (except impact)
-      else if (prev[filterType] && Object.values({ spot: prev.spot, yes: prev.yes, no: prev.no }).filter(v => v).length === 1) {
-        newFilters.spot = true;
-        newFilters.yes = true;
-        newFilters.no = true;
-      }
-      // Otherwise, just toggle the clicked item
-      else {
-        newFilters[filterType] = !prev[filterType];
-      }
-
-      return newFilters;
-    });
-  };
-
-
-  // Scroll detection for minimized header - DESKTOP ONLY with animation lock
-  useEffect(() => {
-    let isAnimating = false;
-    let animationTimeout = null;
-
-    const handleScroll = () => {
-      // Only apply on desktop (lg breakpoint = 1024px and up)
-      const isDesktop = window.innerWidth >= 1024;
-      if (!isDesktop) {
-        setIsScrolled(false);
-        return;
-      }
-
-      // Don't update during animation to prevent feedback loop
-      if (isAnimating) return;
-
-      const shouldMinimize = window.scrollY > 0;
-
-      // Only update if state actually changes
-      setIsScrolled((prevScrolled) => {
-        if (prevScrolled !== shouldMinimize) {
-          // Lock updates during animation
-          isAnimating = true;
-
-          // Clear any existing timeout
-          if (animationTimeout) clearTimeout(animationTimeout);
-
-          // Unlock after animation completes (300ms)
-          animationTimeout = setTimeout(() => {
-            isAnimating = false;
-          }, 350); // Slightly longer than CSS transition
-
-          return shouldMinimize;
-        }
-        return prevScrolled;
-      });
-    };
-
-    // Also check on resize
-    const handleResize = () => {
-      const isDesktop = window.innerWidth >= 1024;
-      if (!isDesktop) {
-        setIsScrolled(false);
-        isAnimating = false;
-      } else {
-        handleScroll();
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize);
-
-    // Initial check
-    handleScroll();
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-      if (animationTimeout) clearTimeout(animationTimeout);
-    };
-  }, []);
-
-
-  // ...existing state...
-  const [newYesPrice, setNewYesPrice] = useState(null);
-  const [newNoPrice, setNewNoPrice] = useState(null);
-  const [newThirdPrice, setNewThirdPrice] = useState(null); // Added state for the third price
-  const [thirdCandles, setThirdCandles] = useState([]); // Event probability historical candles
-  const [newBasePrice, setNewBasePrice] = useState(null); // Added state for base/spot price from pool_candles
-  // Set when the latest-price fetch fails, so price stats stop spinning.
-  const [livePriceError, setLivePriceError] = useState(null);
-
+  const { isScrolled, attachHeroRef, heroReserve } = useHeroCollapse();
+  const { chartFilters, handleChartFilterClick } = useChartFilters();
 
   const { address: connectedAddress, isConnected: walletConnected } = useAccount();
-  const contractAddress = searchParams.get('contractAddress');
   const { selectedCurrency } = useCurrency(); // Get selected currency from context
   const { rate: sdaiRate, isLoading: isLoadingRate, error: rateError } = useSdaiRate(); // Get sDAI rate
-
-  // Prioritize URL query parameters over props/connected wallet
-  const debugModeParam = searchParams.get('debugMode');
-  const normalizedDebugParam = debugModeParam?.toLowerCase?.();
-  const isDebugMode =
-    normalizedDebugParam === 'true' ||
-    normalizedDebugParam === '1' ||
-    normalizedDebugParam === 'yes' ||
-    normalizedDebugParam === 'on' ||
-    normalizedDebugParam === 't' ||
-    debugMode;
-  // ?debugAddress= shows another wallet's positions as if it were connected;
-  // developer builds only.
-  const debugAddress = DEBUG_MODE ? searchParams.get('debugAddress') : null;
   const address = useMemo(() => debugAddress || connectedAddress, [debugAddress, connectedAddress]);
   const isConnected = useMemo(() => debugAddress ? true : walletConnected, [debugAddress, walletConnected]);
 
@@ -420,223 +148,19 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
   const latestPrices = useLatestPrices(30000, config);
 
-  // Compute effective spot price param now that config is available
-  // Priority: 1) URL param, 2) proposal defaults, 3) config.marketInfo.coingecko_ticker from Registry
-  const effectiveSpotPriceParam = useMemo(() => {
-    return useSpotPriceParam || config?.marketInfo?.coingecko_ticker || null;
-  }, [useSpotPriceParam, config?.marketInfo?.coingecko_ticker]);
-
-  // Second hook call with effective param (will re-fetch when config loads and provides coingecko_ticker)
   const {
-    spotData: configSpotData,
-    spotPrice: configSpotPrice,
-    refetch: refetchConfigSpot,
-    loading: configSpotLoading,
-    error: configSpotError
-  } = useExternalSpotPrice(effectiveSpotPriceParam, config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp);
-
-  // Nullify spot data for closed markets
-  const isLocallyClosed = config && (() => {
-    const ct = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
-    return ct && typeof ct === 'number' && (Date.now() / 1000) > ct;
-  })();
-
-  const finalSpotData = isLocallyClosed ? null : configSpotData;
-  const finalSpotPrice = isLocallyClosed ? null : configSpotPrice;
-  const finalSpotLoading = isLocallyClosed ? false : configSpotLoading;
-
-  // Stabilize spotData reference — only update when actual data values change
-  const stableSpotData = useMemo(() => finalSpotData, [JSON.stringify(finalSpotData)]);
-
-  const liquiditySummary = useMemo(() => {
-    const tokensConfig = config?.BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG;
-    const currencyAddress = tokensConfig?.currency?.address?.toLowerCase() || null;
-    const companyAddress = tokensConfig?.company?.address?.toLowerCase() || null;
-
-    const parsePrice = (value) => {
-      if (value === null || value === undefined) return null;
-      const numeric = typeof value === 'string' ? Number(value) : value;
-      return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-    };
-
-    const computeBreakdown = (liquidity, poolPrice) => {
-      if (!liquidity) return null;
-
-      // Some APIs return a pre-summed amount - treat it entirely as currency liquidity
-      if (typeof liquidity.amount !== 'undefined') {
-        const total = normalizeTokenAmount(liquidity.amount);
-        return {
-          total,
-          cashValue: total,
-          companyValue: 0,
-          otherValue: 0,
-          priceUsed: parsePrice(poolPrice)
-        };
-      }
-
-      const entries = [
-        { token: liquidity.token0, amount: liquidity.amount0, kind: liquidity.kind0 },
-        { token: liquidity.token1, amount: liquidity.amount1, kind: liquidity.kind1 }
-      ];
-
-      let cashValue = 0;
-      let companyTokenAmount = 0;
-      let otherValue = 0;
-
-      for (const entry of entries) {
-        if (!entry || entry.amount === null || entry.amount === undefined) continue;
-        const normalizedAmount = normalizeTokenAmount(entry.amount);
-        const tokenAddress = entry.token?.toLowerCase();
-
-        if (entry.kind === 'currency' || (currencyAddress && tokenAddress === currencyAddress)) {
-          cashValue += normalizedAmount;
-        } else if (entry.kind === 'company' || (companyAddress && tokenAddress === companyAddress)) {
-          companyTokenAmount += normalizedAmount;
-        } else {
-          otherValue += normalizedAmount;
-        }
-      }
-
-      const price = parsePrice(poolPrice);
-      const companyValue = price ? companyTokenAmount * price : companyTokenAmount;
-      const total = cashValue + companyValue + otherValue;
-
-      return {
-        total,
-        cashValue,
-        companyValue,
-        otherValue,
-        priceUsed: price,
-        rawCompanyAmount: companyTokenAmount
-      };
-    };
-
-    const yesPrice = parsePrice(newYesPrice ?? poolData?.yesPool?.price ?? latestPrices.yes);
-    const noPrice = parsePrice(newNoPrice ?? poolData?.noPool?.price ?? latestPrices.no);
-
-    const yesData = computeBreakdown(poolData?.yesPool?.liquidity, yesPrice);
-    const noData = computeBreakdown(poolData?.noPool?.liquidity, noPrice);
-
-    const MINIMUM_DISPLAY = 1e-9;
-    const tooltipBreakdown = [];
-
-    if (yesData) {
-      const hasYesCompany = yesData.companyValue > MINIMUM_DISPLAY;
-      const hasYesOther = yesData.otherValue > MINIMUM_DISPLAY;
-      const hasYesCash = yesData.cashValue > MINIMUM_DISPLAY;
-
-      tooltipBreakdown.push({
-        label: 'YES Total',
-        value: yesData.total,
-        className: 'text-futarchyBlue9 font-semibold'
-      });
-      if (hasYesCash && (hasYesCompany || hasYesOther)) {
-        tooltipBreakdown.push({
-          label: 'YES Cash',
-          value: yesData.cashValue,
-          className: 'text-futarchyBlue9'
-        });
-      }
-      if (hasYesCompany) {
-        tooltipBreakdown.push({
-          label: yesData.priceUsed ? 'YES Company' : 'YES Company (raw)',
-          value: yesData.companyValue,
-          className: 'text-futarchyBlue9'
-        });
-      }
-      if (hasYesOther) {
-        tooltipBreakdown.push({
-          label: 'YES Other',
-          value: yesData.otherValue,
-          className: 'text-white/80'
-        });
-      }
-    }
-
-    if (noData) {
-      const hasNoCompany = noData.companyValue > MINIMUM_DISPLAY;
-      const hasNoOther = noData.otherValue > MINIMUM_DISPLAY;
-      const hasNoCash = noData.cashValue > MINIMUM_DISPLAY;
-
-      tooltipBreakdown.push({
-        label: 'NO Total',
-        value: noData.total,
-        className: 'text-futarchyGold8 font-semibold'
-      });
-      if (hasNoCash && (hasNoCompany || hasNoOther)) {
-        tooltipBreakdown.push({
-          label: 'NO Cash',
-          value: noData.cashValue,
-          className: 'text-futarchyGold8'
-        });
-      }
-      if (hasNoCompany) {
-        tooltipBreakdown.push({
-          label: noData.priceUsed ? 'NO Company' : 'NO Company (raw)',
-          value: noData.companyValue,
-          className: 'text-futarchyGold8'
-        });
-      }
-      if (hasNoOther) {
-        tooltipBreakdown.push({
-          label: 'NO Other',
-          value: noData.otherValue,
-          className: 'text-white/80'
-        });
-      }
-    }
-
-    return {
-      yes: yesData,
-      no: noData,
-      breakdown: tooltipBreakdown
-    };
-  }, [
-    config?.BASE_TOKENS_CONFIG,
-    poolData?.yesPool?.liquidity,
-    poolData?.noPool?.liquidity,
-    poolData?.yesPool?.price,
-    poolData?.noPool?.price,
-    newYesPrice,
-    newNoPrice,
-    latestPrices.yes,
-    latestPrices.no
-  ]);
+    effectiveSpotPriceParam,
+    configSpotError,
+    stableSpotData,
+    finalSpotPrice,
+    refetchConfigSpot
+  } = useMarketSpotPrice(config, useSpotPriceParam);
 
   // Extract proposalId from config for passing to child components
   const proposalId = config?.proposalId;
 
-  // Token images for trade history rows; populated from on-chain metadata when available
-  const [tokenImages, setTokenImages] = useState({
-    company: null,
-    currency: null
-  });
-
-  // Split Configuration
-  useEffect(() => {
-    if (config?.marketInfo) {
-      // Check if market is resolved based on resolution status only
-      if (config.marketInfo.resolved) {
-        setMarketHasClosed(true);
-        // Switch to redeem-tokens tab when market is resolved
-        setActiveTab('redeem-tokens');
-      } else {
-        setMarketHasClosed(false);
-      }
-    }
-  }, [config]);
-
-  // Pull token images from the on-chain proposal metadata when present
-  useEffect(() => {
-    const meta = config?._registryMetadata || config?.marketInfo?.metadata;
-    const images = meta?.token_images || meta?.tokenImages;
-    if (images?.company || images?.currency) {
-      setTokenImages({
-        company: images.company || null,
-        currency: images.currency || null
-      });
-    }
-  }, [config?._registryMetadata, config?.marketInfo?.metadata]);
+  const { marketHasClosed, activeTab, setActiveTab, tradesLimit, setTradesLimit } = useMarketTabs(config);
+  const tokenImages = useTokenImages(config);
 
   // Extract config values from useContractConfig (with fallbacks only for essential router addresses)
   const MARKET_ADDRESS = config?.MARKET_ADDRESS; // This comes from the extracted proposal ID
@@ -648,8 +172,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   // Check if spot pool is explicitly disabled in metadata (via spotPool: "0x00")
   // otherwise fallback to checking if a base pool config exists (which might come from defaults)
   const hasSpot = !!config?.BASE_POOL_CONFIG?.address && config?.BASE_POOL_CONFIG?.address !== "0x00";
-
-
 
   // Snapshot integration - fetch Snapshot proposal ID from Supabase using MARKET_ADDRESS
   const useMockSnapshot = process.env.NEXT_PUBLIC_USE_MOCK_SNAPSHOT === 'true';
@@ -693,354 +215,40 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     }
   }, [config]);
 
-  // Fetch latest prices from Supabase pool_candles - much simpler!
-  useEffect(() => {
-    let isMounted = true;
-    let interval = null;
+  const {
+    newYesPrice,
+    newNoPrice,
+    newThirdPrice,
+    thirdCandles,
+    newBasePrice,
+    livePriceError,
+    pricesUnavailable
+  } = useLivePoolPrices({ config, configLoading, poolData, poolDataLoading, poolDataError });
+  const liquiditySummary = useLiquiditySummary({ config, poolData, newYesPrice, newNoPrice, latestPrices });
 
-    async function fetchLatestPricesFromSupabase() {
-      try {
-        console.log('[MarketPageShowcase] Fetching latest prices from Supabase pool_candles:', {
-          YES_POOL: config?.POOL_CONFIG_YES?.address,
-          NO_POOL: config?.POOL_CONFIG_NO?.address,
-          THIRD_POOL: config?.POOL_CONFIG_THIRD?.address,
-          BASE_POOL: config?.BASE_POOL_CONFIG?.address
-        });
-
-        // Don't fetch if config is not loaded yet
-        if (!config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address) {
-          console.log('[MarketPageShowcase] Pool addresses not yet loaded, skipping price fetch');
-          return;
-        }
-
-        const subgraphChainId = config?.chainId || 100;
-
-        // One batched pool query for every price we need — YES, NO and BASE —
-        // instead of a `pool(id:)` request each.
-        const priceAddresses = [
-          config.POOL_CONFIG_YES.address,
-          config.POOL_CONFIG_NO.address,
-          config.BASE_POOL_CONFIG?.address
-        ].filter(Boolean);
-
-        const [priceResult, thirdResult] = await Promise.all([
-          subgraphPoolFetcher.fetch('pools.batch', {
-            ids: priceAddresses,
-            chainId: subgraphChainId
-          }),
-          config.POOL_CONFIG_THIRD?.address
-            ? subgraphPoolFetcher.fetch('pools.candles', {
-              id: config.POOL_CONFIG_THIRD.address,
-              limit: 500,
-              chainId: subgraphChainId
-            })
-            : Promise.resolve(null)
-        ]);
-
-        // Pool IDs come back lowercased from the subgraph.
-        const pricesByAddress = new Map(
-          (priceResult?.data || []).map(pool => [String(pool.id).toLowerCase(), pool.price])
-        );
-        const priceFor = (address) =>
-          address ? (pricesByAddress.get(String(address).toLowerCase()) ?? null) : null;
-
-        // Extract prices from latest candles
-        let thirdPrice = null;
-
-        // Backend now handles token slot inversion, use raw prices directly
-        const yesPrice = priceFor(config.POOL_CONFIG_YES.address);
-        const noPrice = priceFor(config.POOL_CONFIG_NO.address);
-        const basePrice = priceFor(config.BASE_POOL_CONFIG?.address);
-        console.log('[MarketPageShowcase] Pool prices from batch:', { yesPrice, noPrice, basePrice });
-
-        if (thirdResult?.status === 'success' && thirdResult.data.length > 0) {
-          const processedThirdCandles = thirdResult.data
-            .map((candle) => ({
-              time: candle.timestamp,
-              value: Number(candle.price)
-            }))
-            .filter((candle) => !Number.isNaN(candle.value))
-            .sort((a, b) => a.time - b.time);
-
-          const rawThirdPrice = processedThirdCandles[processedThirdCandles.length - 1]?.value;
-          // Event probability should use raw price without inversion
-          thirdPrice = rawThirdPrice;
-          setThirdCandles(processedThirdCandles);
-          console.log('[MarketPageShowcase] THIRD price (event probability) from pool_candles:', {
-            raw: rawThirdPrice,
-            used: thirdPrice,
-            candles: processedThirdCandles.length
-          });
-        } else {
-          setThirdCandles([]);
-        }
-
-        if (isMounted) {
-          console.log('[MarketPageShowcase] Fetched prices from Supabase pool_candles:', {
-            yesPrice, noPrice, thirdPrice, basePrice,
-            yesTokenSlot: config.POOL_CONFIG_YES.tokenCompanySlot,
-            noTokenSlot: config.POOL_CONFIG_NO.tokenCompanySlot,
-            thirdTokenSlot: config.POOL_CONFIG_THIRD?.tokenCompanySlot,
-            baseCurrencySlot: config.BASE_POOL_CONFIG?.currencySlot
-          });
-          setNewYesPrice(yesPrice);
-          setNewNoPrice(noPrice);
-          setNewThirdPrice(thirdPrice);
-          setNewBasePrice(basePrice);
-          setLivePriceError(yesPrice === null && noPrice === null ? 'Price data unavailable' : null);
-        }
-      } catch (e) {
-        console.error('[MarketPageShowcase] Failed to fetch prices from Supabase:', e);
-        if (isMounted) {
-          setNewYesPrice(null);
-          setNewNoPrice(null);
-          setNewThirdPrice(null);
-          setNewBasePrice(null);
-          setThirdCandles([]);
-          setLivePriceError(e?.message || 'Price data unavailable');
-        }
-      }
-    }
-
-    // Only start fetching if config is loaded
-    if (config?.POOL_CONFIG_YES?.address && config?.POOL_CONFIG_NO?.address) {
-      fetchLatestPricesFromSupabase();
-      // Update every 30 seconds (more frequent since Supabase is faster)
-      interval = setInterval(fetchLatestPricesFromSupabase, 30000);
-    }
-
-    return () => {
-      isMounted = false;
-      if (interval) clearInterval(interval);
-    };
-  }, [config?.POOL_CONFIG_YES?.address, config?.POOL_CONFIG_NO?.address, config?.POOL_CONFIG_THIRD?.address, config?.BASE_POOL_CONFIG?.address]); // Only depend on pool addresses
-
-  // NOTE: The Supabase realtime pool_candles subscription that lived here was
-  // removed — the Supabase backend is permanently gone. Prices refresh via the
-  // 30s subgraph polling above.
-
-  // Fallback: use subgraph-derived prices when Supabase pool_candles aren't available
-  // (e.g., AAVE market has no POOL_CONFIG_YES/NO so Supabase fetch never runs)
-  useEffect(() => {
-    if (newYesPrice === null && poolData?.yesPool?.price != null) {
-      setNewYesPrice(poolData.yesPool.price);
-    }
-    if (newNoPrice === null && poolData?.noPool?.price != null) {
-      setNewNoPrice(poolData.noPool.price);
-    }
-  }, [newYesPrice, newNoPrice, poolData?.yesPool?.price, poolData?.noPool?.price]);
-
-  // Prices are unavailable (not loading) once every source has failed: the
-  // latest-price fetch, or — for markets without pool addresses — pool data.
-  const pricesUnavailable = (newYesPrice === null || newNoPrice === null) && (
-    !!livePriceError ||
-    (!config?.POOL_CONFIG_YES?.address && !configLoading && !poolDataLoading && !!poolDataError)
-  );
-
-  // Connection state for tracking wallet connection changes
-  const [previousConnectionState, setPreviousConnectionState] = useState(isConnected);
-
-  // Track wallet connection state changes explicitly
-  useEffect(() => {
-    // If connection state changed
-    if (previousConnectionState !== isConnected) {
-      setPreviousConnectionState(isConnected);
-      console.log('Wallet connection state changed:', {
-        previous: previousConnectionState,
-        current: isConnected,
-        address
-      });
-
-      // Balance manager handles connection state changes automatically
-    }
-  }, [isConnected, address, previousConnectionState]);
-
-  const [isCollateralModalOpen, setIsCollateralModalOpen] = useState(false);
-  const [collateralModalType, setCollateralModalType] = useState('add');
-  // Use centralized balance manager
-  const { balances: rawBalances, isLoading: isLoadingPositions, error: balanceError, refetch: refetchBalances } = useBalanceManager(config, address, isConnected);
-
-  // Transform balances to match existing position structure for compatibility
-  const positions = useMemo(() => ({
-    currencyYes: {
-      unwrapped: rawBalances.currencyYes,
-      wrapped: rawBalances.wrappedCurrencyYes,
-      total: rawBalances.totalCurrencyYes
-    },
-    currencyNo: {
-      unwrapped: rawBalances.currencyNo,
-      wrapped: rawBalances.wrappedCurrencyNo,
-      total: rawBalances.totalCurrencyNo
-    },
-    companyYes: {
-      unwrapped: rawBalances.companyYes,
-      wrapped: rawBalances.wrappedCompanyYes,
-      total: rawBalances.totalCompanyYes
-    },
-    companyNo: {
-      unwrapped: rawBalances.companyNo,
-      wrapped: rawBalances.wrappedCompanyNo,
-      total: rawBalances.totalCompanyNo
-    },
-    wxdai: rawBalances.currency, // SDAI balance for compatibility
-    faot: rawBalances.company,   // GNO balance for compatibility
-    native: rawBalances.native   // Native xDAI balance
-  }), [rawBalances]);
-
-  // Balance manager handles wallet disconnection automatically
+  const {
+    rawBalances,
+    positions,
+    isLoadingPositions,
+    balanceError,
+    refetchBalances
+  } = useMarketBalances(config, address, isConnected);
+  const {
+    isCollateralModalOpen,
+    collateralModalType,
+    showProcessingToast,
+    processingStep,
+    handleOpenCollateralModal,
+    handleCloseCollateralModal,
+    handleBackdropClick,
+    handleToastClick
+  } = useCollateralFlow(refetchBalances);
 
   const [showEventDetails, setShowEventDetails] = useState(false);
-  const [isApproving, setIsApproving] = useState(false);
-  const [isSplitting, setIsSplitting] = useState(false);
-  const [showProcessingToast, setShowProcessingToast] = useState(false);
 
-  // Add state for active tab - default to redeem-tokens if market is resolved, otherwise recent-trades-sdk
-  const [activeTab, setActiveTab] = useState(
-    config?.marketInfo?.resolved ? 'redeem-tokens' : 'recent-trades-sdk'
-  );
-
-  // State for Recent Trades filter controls
-  const [showMyTrades, setShowMyTrades] = useState(false);
-  const [tradesLimit, setTradesLimit] = useState(30);
-
-  // Dynamic market data state. Starts empty (the hero shows a skeleton while
-  // isLoading) — never another market's copy.
-  const [marketData, setMarketData] = useState({
-    display_title_0: "",
-    display_title_1: "",
-    title: "",
-    description: "",
-    question_title: null,
-    question_link: null,
-    isLoading: true,
-    error: null
-  });
-
-  const marketSubject = useMemo(() => {
-    const displayTexts = [
-      marketData.display_title_1,
-      marketData.display_title_0,
-      marketData.title,
-      config?.marketInfo?.display_text_1,
-      config?.marketInfo?.title
-    ].filter(Boolean);
-    const identifier = displayTexts.join(' ').match(/\b(?:EIP|GIP|KIP|ERC|RIP|SIP|AIP|MIP|TIP)[-\s]?\d+\b/i)?.[0];
-
-    if (identifier) return identifier.replace(/\s+/, '-').toUpperCase();
-
-    const fallback = String(displayTexts[0] || 'this market')
-      .replace(/^\s*if\s+/i, '')
-      .replace(/[?.!]+$/, '')
-      .trim();
-    return fallback.length > 48 ? `${fallback.slice(0, 45).trimEnd()}…` : fallback;
-  }, [
-    marketData.display_title_1,
-    marketData.display_title_0,
-    marketData.title,
-    config?.marketInfo?.display_text_1,
-    config?.marketInfo?.title
-  ]);
+  const { marketData, marketSubject } = useMarketData({ config, configLoading, configError });
 
   const [selectedToken, setSelectedToken] = useState('currency');
-
-  // Function to fetch dynamic market data from Supabase
-  const fetchMarketData = async () => {
-    // Don't fetch if config is not loaded yet - we'll get the data from useContractConfig instead
-    if (!config || !config.marketInfo) {
-      console.log('Config not loaded yet, skipping fetchMarketData');
-      return;
-    }
-
-    try {
-      console.log('Using market data from config:', config.marketInfo);
-      console.log('Checking for display_text fields:', {
-        display_text_0: config.marketInfo?.display_text_0,
-        display_text_1: config.marketInfo?.display_text_1
-      });
-      setMarketData(prev => ({ ...prev, isLoading: true, error: null }));
-
-      // Use the market info from useContractConfig hook instead of querying again
-      const marketInfo = config.marketInfo;
-
-      // Parse the market event data to extract display titles
-      // Neutral fallbacks: a market without metadata shows its address, not
-      // another market's title/description.
-      const fallbackTitle = config?.MARKET_ADDRESS
-        ? `Market ${config.MARKET_ADDRESS.slice(0, 6)}…${config.MARKET_ADDRESS.slice(-4)}`
-        : 'Market';
-      let parsedData = {
-        display_title_0: marketInfo.title || fallbackTitle,
-        display_title_1: "",
-        title: marketInfo.title || fallbackTitle,
-        description: marketInfo.description || "",
-        question_title: marketInfo.title || null,
-        question_link: normalizeRealityQuestionUrl(marketInfo.questionLink, config?.chainId) || null,
-        isLoading: false,
-        error: null
-      };
-
-      // Auto-generate Reality.eth link if not provided
-      if (!parsedData.question_link && config?.MARKET_ADDRESS && config?.chainId) {
-        try {
-          const realityUrl = await getRealityQuestionUrl(config.chainId, config.MARKET_ADDRESS);
-          if (realityUrl) {
-            parsedData.question_link = realityUrl;
-            console.log('[Reality] Auto-generated question link:', realityUrl);
-          }
-        } catch (e) {
-          console.warn('[Reality] Failed to generate question link:', e);
-        }
-      }
-
-      // First, try to use display_text_0 and display_text_1 from metadata if available
-      if (marketInfo.display_text_0 && marketInfo.display_text_1) {
-        parsedData.display_title_0 = marketInfo.display_text_0;
-        parsedData.display_title_1 = marketInfo.display_text_1;
-      } else if (marketInfo.title) {
-        // Fallback: Try to split the title into two parts if it contains "if"
-        const title = marketInfo.title;
-        const ifIndex = title.toLowerCase().indexOf(' if ');
-
-        if (ifIndex !== -1) {
-          parsedData.display_title_0 = title.substring(0, ifIndex);
-          parsedData.display_title_1 = "if " + title.substring(ifIndex + 4);
-        } else {
-          // If no "if" found, use the full title as display_title_0
-          parsedData.display_title_0 = title;
-          parsedData.display_title_1 = "";
-        }
-      }
-
-      setMarketData(parsedData);
-
-    } catch (error) {
-      console.error('Failed to process market data from config:', error);
-      setMarketData(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || 'Failed to process market data'
-      }));
-    }
-  };
-
-  // Fetch market data when config is loaded
-  useEffect(() => {
-    if (config && config.marketInfo) {
-      fetchMarketData();
-    }
-  }, [config]);
-
-  // Surface config failures instead of leaving the hero stuck on
-  // "Loading badges…" / "Loading description…" forever
-  useEffect(() => {
-    if (!configLoading && configError) {
-      setMarketData(prev => ({
-        ...prev,
-        isLoading: false,
-        error: configError.message || 'Market data unavailable'
-      }));
-    }
-  }, [configLoading, configError]);
 
   // Open the RainbowKit wallet picker; the chain guard switches networks once
   // connected. (This used to call window.ethereum directly, which reaches
@@ -1063,54 +271,16 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     };
   }, []);
 
-  // Modal handlers
-  const handleOpenCollateralModal = (type) => {
-    console.log('Opening modal:', type);
-    setCollateralModalType(type);
-    setIsCollateralModalOpen(true);
-  };
-
-  const handleCloseCollateralModal = () => {
-    setIsCollateralModalOpen(false);
-    // A split or merge may have just landed: refresh now, not on the next poll
-    refetchBalances();
-    // Reset all states when closing modal
-    setProcessingStep(null);
-    setCurrentSubstep({ step: 1, substep: 0 });
-  };
-
-  // Add processing state
-  const [processingStep, setProcessingStep] = useState(null);
-  const [currentSubstep, setCurrentSubstep] = useState({ step: 1, substep: 0 });
-
-  // Add click outside handler
-  const handleBackdropClick = (e) => {
-    // Only close if clicking the backdrop itself, not the modal
-    if (e.target === e.currentTarget) {
-      handleCloseCollateralModal();
-    }
-  };
-
-  // Add handler for toast click
-  const handleToastClick = () => {
-    setIsCollateralModalOpen(true);
-  };
-
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [currentTransactionData, setCurrentTransactionData] = useState(null);
-
-  // Add handler for transaction completion
-  const handleTransactionComplete = (transactionDetails) => {
-    // Refresh balances or any other state that needs updating
-    refetchBalances();
-  };
-
-  // Add selectedAction state
-  const [selectedAction, setSelectedAction] = useState('buy');
-  // Add selectedOutcome state
-  const [selectedOutcome, setSelectedOutcome] = useState('approved');
-  // Add amount state
-  const [amount, setAmount] = useState('1');
+  const {
+    isConfirmModalOpen,
+    setIsConfirmModalOpen,
+    currentTransactionData,
+    setCurrentTransactionData,
+    handleTransactionComplete,
+    selectedAction,
+    selectedOutcome,
+    amount
+  } = useConfirmSwapState(refetchBalances);
 
   // Add debugging for latestPrices
   useEffect(() => {
@@ -1126,83 +296,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     });
   }, [latestPrices]);
 
-  // Market end time falls back to the on-chain closeTimestamp when
-  // config.marketInfo.endTime is not set.
-  const marketEndTime = useMemo(() => {
-    const meta = config?._registryMetadata || config?.marketInfo?.metadata;
-    const close = meta?.closeTimestamp;
-    return close ? Number(close) : null;
-  }, [config?._registryMetadata, config?.marketInfo?.metadata]);
-
-  // Registry metadata has no resolution date; read when the Reality.eth
-  // question became final.
-  const [resolutionTime, setResolutionTime] = useState(null);
-  useEffect(() => {
-    if (!config?.marketInfo?.resolved || config.marketInfo.resolvedTime || !config?.MARKET_ADDRESS) return;
-    let cancelled = false;
-    fetchResolutionTime(config.MARKET_ADDRESS, config.chainId).then((seconds) => {
-      if (!cancelled) setResolutionTime(seconds);
-    });
-    return () => { cancelled = true; };
-  }, [config?.marketInfo?.resolved, config?.marketInfo?.resolvedTime, config?.MARKET_ADDRESS, config?.chainId]);
-
-  // ---> State for pending order check (count instead of ID) <---
-  const [isLoadingPendingOrder, setIsLoadingPendingOrder] = useState(false);
-  // const [pendingOrderId, setPendingOrderId] = useState(null); // Remove single ID state
-  const [pendingOrderCount, setPendingOrderCount] = useState(0); // Add count state
-  const [showPendingOrderToast, setShowPendingOrderToast] = useState(false);
-
-  // ---> useEffect to check for pending CoW orders <---
-  useEffect(() => {
-    const checkPendingCowOrders = async () => {
-      if (!isConnected || !address) {
-        setShowPendingOrderToast(false); // Hide toast if disconnected
-        setPendingOrderCount(0); // Reset count
-        return;
-      }
-
-      console.log('[Pending Order Check] Starting check for address:', address);
-      setIsLoadingPendingOrder(true);
-      setPendingOrderCount(0); // Reset before check
-      setShowPendingOrderToast(false);
-
-      try {
-        // CoW orders only come from the WXDAI -> sDAI modal, which is Gnosis-only.
-        const response = await fetch(`https://api.cow.fi/xdai/api/v1/account/${address}/orders?limit=10`);
-        if (!response.ok) throw new Error(`CoW API responded ${response.status}`);
-        const ordersData = await response.json();
-
-        console.log('[Pending Order Check] Received orders:', ordersData);
-
-        // ---> Filter for all pending orders and get count <----
-        const pendingOrders = ordersData.filter(order =>
-          order.status === 'open' || order.status === 'presignaturePending'
-        );
-        const count = pendingOrders.length;
-
-        if (count > 0) {
-          console.log(`[Pending Order Check] Found ${count} pending order(s).`);
-          setPendingOrderCount(count);
-          setShowPendingOrderToast(true);
-        } else {
-          console.log('[Pending Order Check] No pending orders found.');
-          setPendingOrderCount(0);
-          setShowPendingOrderToast(false);
-        }
-
-      } catch (error) {
-        console.error('[Pending Order Check] Error checking for pending CoW orders:', error);
-        // Don't show toast on error, just log it
-        setPendingOrderCount(0);
-        setShowPendingOrderToast(false);
-      } finally {
-        setIsLoadingPendingOrder(false);
-      }
-    };
-
-    checkPendingCowOrders();
-
-  }, [address, isConnected]);
+  const { marketEndTime, resolutionTime } = useMarketTiming(config);
+  const { pendingOrderCount } = usePendingCowOrders(address, isConnected);
 
   // <-- Add state for the new modal -->
   const [isSwapNativeModalOpen, setIsSwapNativeModalOpen] = useState(false);

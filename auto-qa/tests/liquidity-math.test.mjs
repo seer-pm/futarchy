@@ -18,6 +18,10 @@ const MARKET_PAGE_SRC = readFileSync(
     new URL('../../src/components/futarchyFi/marketPage/MarketPageShowcase.jsx', import.meta.url),
     'utf8',
 );
+const LIQUIDITY_SUMMARY_SRC = readFileSync(
+    new URL('../../src/components/futarchyFi/marketPage/showcase/useLiquiditySummary.js', import.meta.url),
+    'utf8',
+);
 
 const valueRealReserves = ({ currencyAmount, companyAmount, companyPrice }) =>
     currencyAmount + (companyAmount * companyPrice);
@@ -56,9 +60,9 @@ test('virtual-liquidity reserve approximation is absent', () => {
 });
 
 test('market stat classifies reserve sides and applies the pool price', () => {
-    assert.match(MARKET_PAGE_SRC, /entry\.kind === 'currency'/);
-    assert.match(MARKET_PAGE_SRC, /entry\.kind === 'company'/);
-    assert.match(MARKET_PAGE_SRC, /companyTokenAmount \* price/);
+    assert.match(LIQUIDITY_SUMMARY_SRC, /entry\.kind === 'currency'/);
+    assert.match(LIQUIDITY_SUMMARY_SRC, /entry\.kind === 'company'/);
+    assert.match(LIQUIDITY_SUMMARY_SRC, /companyTokenAmount \* price/);
     // Reserves across all ranges are TVL, not tradable depth near the price:
     // the stat is labelled TVL and its tooltip says so.
     assert.match(MARKET_PAGE_SRC, /label="TVL"/);
