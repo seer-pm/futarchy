@@ -7,7 +7,10 @@ import { getEthersProvider } from '../../../utils/ethersAdapters';
 
 const AddLiquidityModal = ({ isOpen, onClose, config }) => {
     const { address, isConnected } = useAccount();
-    const publicClient = usePublicClient();
+    // Positions are read on the market's chain. Without the chainId this was
+    // the wallet's chain, so a wallet on another network scanned the wrong
+    // chain and every lookup failed.
+    const publicClient = usePublicClient({ chainId: config?.chainId });
     const [positions, setPositions] = useState([]);
     const [isLoadingPositions, setIsLoadingPositions] = useState(false);
     const [fetchError, setFetchError] = useState(null);
