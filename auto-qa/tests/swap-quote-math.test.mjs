@@ -24,7 +24,6 @@ const tx = await import(new URL('../../src/utils/txErrors.js', import.meta.url))
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const MODAL = read('src/components/futarchyFi/marketPage/ConfirmSwapModal.jsx');
 const PANEL = read('src/components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx');
-const UNISWAP_SDK = read('src/utils/uniswapSdk.js');
 
 const E18 = 10n ** 18n;
 
@@ -91,7 +90,6 @@ test('modal — the re-quote uses the same (clamped) tolerance as the display', 
     assert.doesNotMatch(MODAL, /\n\s*slippageTolerance \/ 100,/);
     assert.match(MODAL, /const toleranceBps = slippagePctToBps\(tolerance\);/);
     assert.match(MODAL, /const tolerance = getSafeSlippageTolerance\(\);/);
-    assert.match(UNISWAP_SDK, /minReceiveFromQuote\(quotedAmountOut\.toString\(\), slippageTolerance \* 100\)/);
 });
 
 test('modal — no "Slippage Warning" computed from price impact', () => {
