@@ -186,7 +186,10 @@ const futarchyFactoryAbi = [
 // Default values for creating new proposals
 const DEFAULT_COMPANY_TOKEN = '0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb'; // GNO
 const DEFAULT_CURRENCY_TOKEN = '0xaf204776c7245bF4147c2612BF6e5972Ee483701'; // SDAI
-const DEFAULT_MIN_BOND = '1000000000000000000'; // 1 ETH
+// Reality.eth minimum bond for the proposal's question, in wei of the chain's
+// native token (1 xDAI on Gnosis). Whoever answers must post at least this,
+// and it cannot be changed after creation. Override with minBondWei.
+const DEFAULT_MIN_BOND = '1000000000000000000';
 const DEFAULT_CATEGORY = 'crypto, kleros, governance';
 const DEFAULT_LANGUAGE = 'en';
 const DEFAULT_FACTORY_ADDRESS = '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345';
@@ -1933,16 +1936,18 @@ async function createNewProposal(autoMode = false, config = null) {
     language = DEFAULT_LANGUAGE;
     minBond = config && config.minBondWei ? String(config.minBondWei) : DEFAULT_MIN_BOND;
     
-    // Use openingTime from config if provided, otherwise default to 3 months from now
-    if (config && config.openingTime) {
-      openingTime = config.openingTime;
-      console.log(`🤖 Using opening time from config: ${openingTime} (${new Date(openingTime * 1000).toLocaleString()})`);
-    } else {
-      // Set opening time to 3 months from now
-      const threeMontrhsInSeconds = 90 * 24 * 60 * 60; // 90 days
-      openingTime = Math.floor(Date.now() / 1000) + threeMontrhsInSeconds;
-      console.log(`🤖 Using default opening time (3 months from now): ${openingTime} (${new Date(openingTime * 1000).toLocaleString()})`);
+    // The opening time is when the Reality.eth question can first be answered,
+    // and it cannot be changed once the proposal exists. Auto mode used to fall
+    // back to three months from now without asking, which locks a market out of
+    // resolution for that long; it has to be stated in the config instead.
+    if (!config || !config.openingTime) {
+      console.error('❌ openingTime is required to create a proposal in auto mode.');
+      console.error('   Set "openingTime" (UNIX seconds) in the config: the time the Reality.eth question opens for answers.');
+      console.error('   It cannot be changed after the proposal is created.');
+      return null;
     }
+    openingTime = config.openingTime;
+    console.log(`🤖 Using opening time from config: ${openingTime} (${new Date(openingTime * 1000).toLocaleString()})`);
     
     console.log(`  Factory Address: ${factoryAddress}`);
     console.log(`  Company Token: ${companyTokenAddr}`);
@@ -1950,7 +1955,7 @@ async function createNewProposal(autoMode = false, config = null) {
     console.log(`  Market Name: ${marketName}`);
     console.log(`  Category: ${category}`);
     console.log(`  Language: ${language}`);
-    console.log(`  Min Bond: ${minBond}`);
+    console.log(`  Min Bond: ${ethers.formatEther(minBond)} native token (${minBond} wei${config && config.minBondWei ? '' : ', default; set minBondWei to change'})`);
     console.log(`  Opening Time: ${new Date(openingTime * 1000).toLocaleString()}`);
     
   } else {
@@ -1968,16 +1973,19 @@ async function createNewProposal(autoMode = false, config = null) {
     companyTokenAddr = await ask(`Enter company token address [${DEFAULT_COMPANY_TOKEN}]:`, DEFAULT_COMPANY_TOKEN);
     currencyTokenAddr = await ask(`Enter currency token address [${DEFAULT_CURRENCY_TOKEN}]:`, DEFAULT_CURRENCY_TOKEN);
     
-    // Calculate default opening time (3 months from now)
-    const threeMontrhsInSeconds = 90 * 24 * 60 * 60; // 90 days
-    const defaultOpeningTime = Math.floor(Date.now() / 1000) + threeMontrhsInSeconds;
-    const openingTimeStr = await ask(`Enter proposal opening time as UNIX timestamp [${defaultOpeningTime}]:`, defaultOpeningTime.toString());
+    // No default: the opening time is when the Reality.eth question can first
+    // be answered and it cannot be changed afterwards.
+    const openingTimeStr = await ask(`Enter proposal opening time as UNIX timestamp (when the Reality question can be answered; now is ${Math.floor(Date.now() / 1000)}):`);
     openingTime = parseInt(openingTimeStr);
+    if (!Number.isFinite(openingTime) || openingTime <= 0) {
+      console.error("Opening time is required");
+      return null;
+    }
     
     // Other parameters with defaults
     category = await ask(`Enter category [${DEFAULT_CATEGORY}]:`, DEFAULT_CATEGORY);
     language = await ask(`Enter language [${DEFAULT_LANGUAGE}]:`, DEFAULT_LANGUAGE);
-    minBond = await ask(`Enter minimum bond in wei [${DEFAULT_MIN_BOND}]:`, DEFAULT_MIN_BOND);
+    minBond = await ask(`Enter minimum Reality bond in wei of the native token [${DEFAULT_MIN_BOND} = ${ethers.formatEther(DEFAULT_MIN_BOND)}]:`, DEFAULT_MIN_BOND);
   }
   
   const factory = new ethers.Contract(factoryAddress, futarchyFactoryAbi, wallet);
