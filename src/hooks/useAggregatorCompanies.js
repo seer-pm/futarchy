@@ -13,7 +13,9 @@ import { useState, useEffect, useCallback } from 'react';
 
 import { fetchRegistrySnapshot } from '../services/registrySnapshot';
 import { getFlmPathForOrg } from '../utils/flm';
+import { resolutionKey } from '../utils/onChainResolution';
 import { isProposalActive, isProposalArchived } from '../utils/proposalLifecycle';
+import { detectProposalChain, fetchUnsettledResolutions } from './useAggregatorProposals';
 
 function parseMetadata(metadataString) {
     if (!metadataString) return {};
@@ -26,7 +28,8 @@ function parseMetadata(metadataString) {
 
 /**
  * @param {Object} org - Raw organization row from Checkpoint
- * @param {Array<Object>} proposalsForOrg - Raw proposalEntity rows whose organization === org
+ * @param {Array<Object>} proposalsForOrg - That org's non-archived proposals,
+ *   as { metadata, onChainResolution } (see fetchAggregatorCompanies)
  */
 function transformOrgToCard(org, proposalsForOrg) {
     const meta = parseMetadata(org.metadata);
@@ -34,9 +37,10 @@ function transformOrgToCard(org, proposalsForOrg) {
 
     // "Total proposals" excludes archived ones (treat archive as a delete).
     // "Active proposals" further excludes hidden, resolved, and closed markets.
-    const proposalMetadata = proposalsForOrg.map(p => parseMetadata(p.metadata));
-    const nonArchived = proposalMetadata.filter(pm => !isProposalArchived(pm));
-    const active = nonArchived.filter(pm => isProposalActive(pm));
+    const nonArchived = proposalsForOrg;
+    const active = nonArchived.filter(p =>
+        isProposalActive({ ...p.metadata, onChainResolution: p.onChainResolution })
+    );
 
     return {
         companyID: org.id,
@@ -87,14 +91,42 @@ async function fetchAggregatorCompanies(aggregatorAddress, connectedWallet = nul
         return true;
     });
 
+    // Non-archived proposals of every org, in the shape the proposal lists
+    // use, so the on-chain read below is the one they make too.
+    const orgMetaById = new Map(organizations.map(o => [o.id, parseMetadata(o.metadata)]));
+    const proposals = [];
+    for (const p of proposalEntities) {
+        const oid = p.organization?.id;
+        const metadata = parseMetadata(p.metadata);
+        if (!oid || isProposalArchived(metadata)) continue;
+        proposals.push({
+            orgId: oid,
+            proposalAddress: p.proposalAddress,
+            chainId: detectProposalChain(metadata, orgMetaById.get(oid) || {}),
+            metadata,
+            onChainResolution: null,
+        });
+    }
+
+    // Registry resolution metadata lags the chain, so a market can be resolved
+    // while its metadata still reads as open. If the read fails, the counts
+    // fall back to metadata alone.
+    try {
+        const resolutions = await fetchUnsettledResolutions(proposals);
+        for (const p of proposals) {
+            p.onChainResolution = resolutions.get(resolutionKey(p.chainId, p.proposalAddress)) || null;
+        }
+    } catch (e) {
+        console.warn('[useAggregatorCompanies] on-chain resolution check failed:', e.message);
+    }
+
     // Group proposals by org
     const visibleOrgIds = new Set(visible.map(o => o.id));
     const propsByOrg = new Map();
-    for (const p of proposalEntities) {
-        const oid = p.organization?.id;
-        if (!oid || !visibleOrgIds.has(oid)) continue;
-        if (!propsByOrg.has(oid)) propsByOrg.set(oid, []);
-        propsByOrg.get(oid).push(p);
+    for (const p of proposals) {
+        if (!visibleOrgIds.has(p.orgId)) continue;
+        if (!propsByOrg.has(p.orgId)) propsByOrg.set(p.orgId, []);
+        propsByOrg.get(p.orgId).push(p);
     }
 
     return {
