@@ -5,6 +5,7 @@ import { createChart, LineSeries } from 'lightweight-charts';
 import { useSubgraphData } from '../../hooks/useSubgraphData';
 import { formatWith } from '../../utils/precisionFormatter';
 import { formatImpactPercent } from '../../utils/marketPageUtils.mjs';
+import { resolveMarketStatus } from '../../utils/proposalLifecycle';
 import { useSubgraphRefresh } from '../../contexts/SubgraphRefreshContext';
 import { SHOW_DATA_DEBUG } from '../../config/featureFlags';
 
@@ -594,7 +595,7 @@ const SubgraphChart = ({
                             <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 px-1 opacity-80">
                                 <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Status</span>
                                 <span className="text-[9px] md:text-[11px] font-bold text-futarchyGray12 dark:text-white mt-0.5">
-                                    Market Closed
+                                    {resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: ct }).label}
                                 </span>
                             </div>
                         ) : (

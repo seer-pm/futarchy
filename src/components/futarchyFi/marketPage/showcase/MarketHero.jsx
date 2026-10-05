@@ -6,10 +6,14 @@ import TimeIcon from '../page/icons/TimeIcon';
 import VolumeIcon from '../page/icons/VolumeIcon';
 import MarketBadgeList from '../components/MarketBadgeList';
 import { computeImpactPercent, formatImpactPercent } from '../../../../utils/marketPageUtils.mjs';
+import { resolveMarketStatus } from '../../../../utils/proposalLifecycle';
 import { TwapCountdown } from './TwapCountdown';
 import { SnapshotWidget } from './SnapshotWidget';
 
 const DEFAULT_TWAP_DESCRIPTION = "The Futarchy Test is considered passed if the time-weighted average price (TWAP) of the \u201cpass\u201d (yes) outcome over the final 24 hours of the Issuance KIP\u2019s voting period is greater than or equal to that of the \u201cfail\u201d (no) outcome. If not, the proposal fails the futarchy test, regardless of the Kleros DAO vote result.";
+
+const STATUS_BADGE_COLORS = { active: 'emerald', awaiting_resolution: 'orange', resolved: 'gray' };
+const OUTCOME_BADGE_COLORS = { yes: 'blue', no: 'gold' };
 
 const MarketHero = ({
   attachHeroRef,
@@ -43,6 +47,12 @@ const MarketHero = ({
     setIsEditProposalModalOpen
   } = badgeModals;
 
+  const marketStatus = resolveMarketStatus({
+    ...config?.marketInfo,
+    endTime: config?.marketInfo?.endTime || marketEndTime
+  });
+  const isResolved = marketStatus.state === 'resolved';
+
   return (
     <div ref={attachHeroRef} className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
       }`}>
@@ -73,15 +83,15 @@ const MarketHero = ({
                 label="Impact (spot)"
                 // After resolution the losing side's tokens are worthless, so the
                 // gap between the two pools no longer measures anything.
-                value={config?.marketInfo?.resolved ? '—' : formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
-                valueClassName={config?.marketInfo?.resolved ? 'text-white' : ((computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
+                value={isResolved ? '—' : formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
+                valueClassName={isResolved ? 'text-white' : ((computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
                 Icon={ImpactIcon}
-                isLoading={!config?.marketInfo?.resolved && !pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
+                isLoading={!isResolved && !pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
               />
 
               <StatDisplay
                 label="Status"
-                value={config?.marketInfo?.resolved ? 'Resolved' : 'Active'}
+                value={marketStatus.shortLabel}
                 valueClassName="text-futarchyEmerald11"
                 Icon={StatusIcon}
                 isLoading={configLoading}
@@ -115,55 +125,40 @@ const MarketHero = ({
 
               <StatDisplay
                 label={(() => {
-                  // Check if market is resolved
-                  if (config?.marketInfo?.resolved) {
+                  if (isResolved) {
                     return "Resolution Date";
                   }
-
-                  // Check if end time has passed but not resolved
-                  if (config?.marketInfo?.endTime || marketEndTime) {
-                    const rawEndTime = config?.marketInfo?.endTime || marketEndTime;
-                    // Normalize: if endTime is a Unix timestamp in seconds, convert to ms
-                    const endTimeMs = typeof rawEndTime === 'number' && rawEndTime < 10000000000 ? rawEndTime * 1000 : (typeof rawEndTime === 'number' ? rawEndTime : new Date(rawEndTime).getTime());
-                    const now = new Date().getTime();
-                    const end = endTimeMs;
-                    if (end <= now) {
-                      return "Ended";
-                    }
-                    return "Remaining Time";
+                  if (marketStatus.state === 'awaiting_resolution') {
+                    return "Ended";
                   }
-                  return "Trading Ends";
+                  return marketStatus.showCountdown ? "Remaining Time" : "Trading Ends";
                 })()}
                 value={(() => {
                   // If resolved, show resolution time
-                  if (config?.marketInfo?.resolved && config?.marketInfo?.resolvedTime) {
+                  if (isResolved && config?.marketInfo?.resolvedTime) {
                     return new Date(config.marketInfo.resolvedTime).toLocaleDateString();
                   }
-                  if (config?.marketInfo?.resolved && resolutionTime) {
+                  if (isResolved && resolutionTime) {
                     return new Date(resolutionTime * 1000).toLocaleDateString();
                   }
 
-                  // Check if we have end time
-                  if (config?.marketInfo?.endTime || marketEndTime) {
-                    const rawEndTime = config?.marketInfo?.endTime || marketEndTime;
-                    // Normalize: if endTime is a Unix timestamp in seconds, convert to ms
-                    const endTimeMs = typeof rawEndTime === 'number' && rawEndTime < 10000000000 ? rawEndTime * 1000 : (typeof rawEndTime === 'number' ? rawEndTime : new Date(rawEndTime).getTime());
-                    const now = new Date().getTime();
-                    const end = endTimeMs;
-                    const diff = end - now;
+                  if (marketStatus.closeTime === null) {
+                    return 'Unknown';
+                  }
+                  const endTimeMs = marketStatus.closeTime * 1000;
 
-                    // If time has passed but not resolved, show opening time 
-                    if (diff <= 0) {
-                      return new Date(endTimeMs).toLocaleDateString();
-                    }
-
-                    // Still active, show remaining time
+                  // Still active, show remaining time
+                  if (marketStatus.showCountdown) {
+                    const diff = endTimeMs - Date.now();
                     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
                     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                     return `${days}d ${hours}h ${minutes}m`;
                   }
-                  return 'Unknown';
+
+                  // Ended (or resolved with no resolution time known): the end date.
+                  // A resolved market never shows a countdown.
+                  return endTimeMs <= Date.now() ? new Date(endTimeMs).toLocaleDateString() : 'Unknown';
                 })()}
                 valueClassName="text-futarchyGold8"
                 Icon={TimeIcon}
@@ -184,43 +179,11 @@ const MarketHero = ({
                 <MarketBadgeList badges={(() => {
                   const badges = [];
 
-                  // Only show time badge if market is active
-                  if (!config?.marketInfo?.resolved) {
-                    // Check if end time has passed but not resolved
-                    if (config?.marketInfo?.endTime || marketEndTime) {
-                      const rawEndTime = config?.marketInfo?.endTime || marketEndTime;
-                      // Normalize: if endTime is a Unix timestamp in seconds, convert to ms
-                      const endTimeMs = typeof rawEndTime === 'number' && rawEndTime < 10000000000 ? rawEndTime * 1000 : (typeof rawEndTime === 'number' ? rawEndTime : new Date(rawEndTime).getTime());
-                      const now = new Date().getTime();
-                      const end = endTimeMs;
-                      const diff = end - now;
-
-                      if (diff <= 0) {
-                        // Show Awaiting Resolution at the end
-                        // Don't add it here, add it after other badges
-                      } else {
-                        // Show Active status only
-                        badges.push({ text: 'Active', colorScheme: 'emerald' });
-                      }
-                    } else {
-                      badges.push({ text: 'Active', colorScheme: 'emerald' });
-                    }
-                  } else {
-                    // Market is resolved - use appropriate color based on outcome
-                    const outcome = config.marketInfo.finalOutcome;
-                    let colorScheme = 'gray';
-                    let text = `Resolved: ${outcome || 'Unknown'}`;
-
-                    if (outcome === 'YES' || outcome === 'Yes' || outcome === 'yes') {
-                      colorScheme = 'blue';  // Blue for YES
-                      text = 'Resolved: YES';
-                    } else if (outcome === 'NO' || outcome === 'No' || outcome === 'no') {
-                      colorScheme = 'gold';  // Gold/yellow for NO
-                      text = 'Resolved: NO';
-                    }
-
-                    badges.push({ text, colorScheme });
-                  }
+                  // Status badge: blue for YES, gold for NO, otherwise by state
+                  badges.push({
+                    text: marketStatus.labelWithOutcome,
+                    colorScheme: OUTCOME_BADGE_COLORS[marketStatus.outcome] || STATUS_BADGE_COLORS[marketStatus.state]
+                  });
 
                   // Market Summary badge
                   if (config?.marketInfo?.trackProgressLink) {
@@ -259,7 +222,7 @@ const MarketHero = ({
                   // stops saying "Resolve" once the market is resolved.
                   if (marketData.question_link) {
                     badges.push({
-                      text: config?.marketInfo?.resolved ? 'Resolution Question' : 'Resolve Question',
+                      text: isResolved ? 'Resolution Question' : 'Resolve Question',
                       colorScheme: 'violet',
                       link: marketData.question_link
                     });
