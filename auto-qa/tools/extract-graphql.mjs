@@ -53,8 +53,12 @@ function* walk(dir) {
 }
 
 // Match any backtick template literal. Conservative: greedy across lines, but
-// stops at unescaped backticks. We allow ${...} interpolations inside.
-const TEMPLATE_RE = /`((?:\\.|\$\{[\s\S]*?\}|[^`\\])*)`/g;
+// stops at unescaped backticks. We allow ${...} interpolations inside, and an
+// interpolation may hold one level of braces or its own template literal
+// (`[${ids.map(a => `"${a}"`).join(', ')}]`); without that the match ended at
+// the inner backtick and the query came out cut in half.
+const INTERPOLATION = /\$\{(?:[^{}`]|\{[^{}]*\}|`(?:\\.|\$\{[^{}]*\}|[^`\\])*`)*\}/.source;
+const TEMPLATE_RE = new RegExp('`((?:\\\\.|' + INTERPOLATION + '|[^`\\\\])*)`', 'g');
 
 // A template counts as a GraphQL query if it looks like one. Two shapes:
 //   (a) declares a named operation: "query Foo {", "mutation Bar(", etc.

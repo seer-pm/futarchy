@@ -32,11 +32,12 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { resolveApiBase } from './api-base.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXTRACTOR = resolve(__dirname, 'extract-graphql.mjs');
 
-const API_BASE = process.env.AUTO_QA_API_BASE || 'https://api.futarchy.fi';
+const API_BASE = resolveApiBase();
 const CANDLES_URL  = `${API_BASE}/candles/graphql`;
 const REGISTRY_URL = `${API_BASE}/registry/graphql`;
 
@@ -50,6 +51,10 @@ const DUMMY_VARS = {
     noPoolId:   '0x0000000000000000000000000000000000000000',
     id:         '0x0000000000000000000000000000000000000000',
     ids:        ['0x0000000000000000000000000000000000000000'],
+    poolIds:    ['0x0000000000000000000000000000000000000000'],
+    proposalIds: ['0x0000000000000000000000000000000000000000'],
+    aggregatorId: '0x0000000000000000000000000000000000000000',
+    searchTerm: 'auto-qa',
     chainId:    100,
     limit:      1,
     first:      1,
@@ -68,10 +73,11 @@ function pickEndpoint(query) {
 
 // Files whose GraphQL queries target external subgraphs (Snapshot Hub,
 // Balancer, Algebra/Swapr) — not our Checkpoint indexers. Skip them; the
-// probe targets api.futarchy.fi only.
+// probe targets the app's own API only.
 const EXTERNAL_GRAPHQL_FILES = new Set([
     'src/utils/snapshotApi.js',         // hub.snapshot.org
     'src/spotPriceUtils/balancerHopClient.js', // balancer subgraph
+    'src/hooks/useLatestPrices.js',     // api-v3.balancer.fi
 ]);
 
 // Heuristic: a "Row not found: …" response means the query parsed and
@@ -94,17 +100,37 @@ function declaredVars(query) {
 
 // Substitute JS template-literal `${expr}` placeholders the extractor can't
 // evaluate. Heuristic: assume any interpolation is a value, never a field
-// name or operator. We replace with a constant address-shaped string when
-// the surrounding context is a quoted slot (`"${x}"`), or with a constant
-// integer literal when the slot is bare. Falls back to "0x0000…" otherwise.
+// name or operator, and pick a literal from where it sits:
+//   `"${x}"`        → a zero address (the quotes are already there)
+//   `[${ids}]`      → an empty list
+//   `where: ${w}`   → an empty filter object
+//   anything else   → 1 (the API rejects `first: 0`)
+// Expressions are matched by brace depth, so one that contains its own
+// braces or template literal (`${ids.map(a => `"${a}"`).join(', ')}`) is
+// replaced whole.
 function substituteInterpolations(query) {
-    return query
-        // Inside double-quoted slot: `"${anything}"` → `"0x0000…"`
-        .replace(/"\$\{[^}]+\}"/g, '"0x0000000000000000000000000000000000000000"')
-        // Inside an array bracket adjacent to ${…}: `[${ids}]` → `[]`
-        .replace(/\[\s*\$\{[^}]+\}\s*\]/g, '[]')
-        // Bare numeric/scalar slot: `period: ${p}` → `period: 0`
-        .replace(/\$\{[^}]+\}/g, '0');
+    let out = '';
+    let i = 0;
+    while (i < query.length) {
+        const start = query.indexOf('${', i);
+        if (start === -1) { out += query.slice(i); break; }
+        let depth = 1;
+        let end = start + 2;
+        while (end < query.length && depth > 0) {
+            if (query[end] === '{') depth++;
+            else if (query[end] === '}') depth--;
+            end++;
+        }
+        const before = out + query.slice(i, start);
+        const after = query.slice(end);
+        let literal = '1';
+        if (/"$/.test(before) && /^"/.test(after)) literal = '0x0000000000000000000000000000000000000000';
+        else if (/\[\s*$/.test(before) && /^\s*\]/.test(after)) literal = '';
+        else if (/\bwhere:\s*$/.test(before)) literal = '{}';
+        out = before + literal;
+        i = end;
+    }
+    return out;
 }
 
 async function tryEndpoint(url, query, variables) {
