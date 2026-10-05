@@ -14,7 +14,7 @@ import { useSafeDetection } from "../../../../hooks/useSafeDetection";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { DEBUG_MODE } from "../../../../config/featureFlags";
 import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
-import { isSafeWallet } from "../../../../utils/ethersAdapters";
+import { useSafeConnection } from "../../../../hooks/useSafeConnection";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
 import { getRedeemSide, describeRedeemError } from "../../../../utils/redeemPlan";
 
@@ -421,6 +421,7 @@ const RedemptionModal = ({
   const publicClient = usePublicClient();
   const { isSafe, isLoading: isSafeLoading, safeInfo } = useSafeDetection();
   const requiredChain = useRequiredChain(config?.chainId);
+  const isSafeConnection = useSafeConnection();
 
   const [debugInfo, setDebugInfo] = useState(null);
 
@@ -575,7 +576,7 @@ const RedemptionModal = ({
       }
 
       // Initialize Cartridge
-      const cartridge = new FutarchyCartridge(routerAddress);
+      const cartridge = new FutarchyCartridge(routerAddress, { isSafeConnection });
 
       // Execute completeRedeemOutcomes
       const iterator = cartridge.completeRedeemOutcomes({

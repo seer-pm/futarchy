@@ -229,7 +229,11 @@ test('seerSwap — approves the quoted router, then sends the quoted trade', () 
     const SEER = read('src/utils/seerSwap.js');
     assert.match(SEER, /fetchNeededApprovals\(client, \[trade\.tokenIn\.address\], account, trade\.approveAddress, \[amountIn\]\)/);
     assert.match(SEER, /args: \[trade\.approveAddress, approvalAmountFor\(amountIn\.toString\(\), useUnlimitedApproval\)\.toBigInt\(\)\]/);
-    assert.match(SEER, /if \(isSafeWallet\(walletClient, connector\)\) throw new Error\(SAFE_TRANSACTION_SENT\);/);
+    // The caller's Safe check (useSafeConnection, which sees a Safe over
+    // WalletConnect) wins; the connector-only check is the fallback.
+    assert.match(SEER, /isSafe = isSafeWallet\(walletClient, connector\),/);
+    assert.match(SEER, /if \(isSafe\) throw new Error\(SAFE_TRANSACTION_SENT\);/);
+    assert.match(MODAL, /isSafe: isSafeConnection\(walletClient\),/);
     assert.match(SEER, /return tradeTokens\(\{ trade, account, isTradingCredits: false \}, \{ client: walletClient \}\);/);
     assert.match(SEER, /tradeType: TradeType\.EXACT_INPUT/);
 });
