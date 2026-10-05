@@ -138,7 +138,7 @@ NO GNO / sDAI
 ## How "Add Liquidity" Links are Generated
 
 ### Code Location
-[MarketPageShowcase.jsx](src/components/futarchyFi/marketPage/MarketPageShowcase.jsx)
+[MarketPageShowcase.jsx](../src/components/futarchyFi/marketPage/MarketPageShowcase.jsx)
 
 ### URL Generation Function
 
@@ -284,7 +284,7 @@ export const findPoolByPair = async (tokenA, tokenB) => {
 The application includes a CLI tool for automated pool creation and management:
 
 ### Location
-[algebra-cli.js](swapr/algebra-cli.js)
+[algebra-cli.js](../swapr/algebra-cli.js)
 
 ### Commands
 
@@ -451,7 +451,7 @@ await permit2Contract.approve(
 ## Pool Discovery and Classification
 
 ### File Location
-[poolUtils.js](src/components/refactor/utils/poolUtils.js)
+[poolUtils.js](../src/components/refactor/utils/poolUtils.js)
 
 ### Pool Type Detection
 
@@ -505,7 +505,7 @@ export const discoverFutarchyPools = async (proposalTokens) => {
 ## UI Components
 
 ### Market Page Showcase
-[MarketPageShowcase.jsx](src/components/futarchyFi/marketPage/MarketPageShowcase.jsx)
+[MarketPageShowcase.jsx](../src/components/futarchyFi/marketPage/MarketPageShowcase.jsx)
 
 **Features:**
 - Displays all pools with token pair names
@@ -579,13 +579,13 @@ select-pair
 
 | File | Purpose |
 |------|---------|
-| [MarketPageShowcase.jsx](src/components/futarchyFi/marketPage/MarketPageShowcase.jsx) | UI for displaying pools and liquidity links |
-| [poolUtils.js](src/components/refactor/utils/poolUtils.js) | Pool discovery and classification |
-| [addresses.js](src/components/refactor/constants/addresses.js) | Known pool and contract addresses |
-| [algebra-cli.js](swapr/algebra-cli.js) | Automated pool creation CLI |
-| [liquidityManager.js](src/futarchyJS/liquidityManager.js) | Legacy SushiSwap V2 liquidity management |
-| [uniswapV3Helper.js](src/utils/uniswapV3Helper.js) | Uniswap V3 protocol integration |
-| [swaprSdk.js](src/utils/swaprSdk.js) | Swapr SDK integration |
+| [MarketPageShowcase.jsx](../src/components/futarchyFi/marketPage/MarketPageShowcase.jsx) | UI for displaying pools and liquidity links |
+| [poolUtils.js](../src/components/refactor/utils/poolUtils.js) | Pool discovery and classification |
+| [addresses.js](../src/components/refactor/constants/addresses.js) | Known pool and contract addresses |
+| [algebra-cli.js](../swapr/algebra-cli.js) | Automated pool creation CLI |
+| [liquidityManager.js](../src/futarchyJS/liquidityManager.js) | Legacy SushiSwap V2 liquidity management |
+| [uniswapV3Helper.js](../src/utils/uniswapV3Helper.js) | Uniswap V3 protocol integration |
+| [swaprSdk.js](../src/utils/swaprSdk.js) | Swapr SDK integration |
 
 ---
 

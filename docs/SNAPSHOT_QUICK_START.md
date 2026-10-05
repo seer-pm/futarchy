@@ -163,7 +163,7 @@ useSnapshotData(snapshotProposalId, {
 
 For complete documentation, see:
 - [SNAPSHOT_INTEGRATION.md](./SNAPSHOT_INTEGRATION.md) - Full integration guide
-- [SNAPSHOT_SUMMARY.md](../SNAPSHOT_SUMMARY.md) - Implementation summary
+- [SNAPSHOT_SUMMARY.md](./SNAPSHOT_SUMMARY.md) - Implementation summary
 
 ## 🎉 You're Ready!
 

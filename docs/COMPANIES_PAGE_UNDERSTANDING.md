@@ -309,4 +309,4 @@ query GetAggregatorCompanies {
 ---
 
 **Document Created:** 2026-01-30
-**Location:** `/futarchy-web/COMPANIES_PAGE_UNDERSTANDING.md`
+**Location:** `docs/COMPANIES_PAGE_UNDERSTANDING.md`

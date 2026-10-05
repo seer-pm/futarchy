@@ -6,8 +6,11 @@ on:
       - '.github/workflows/auto-qa.yml'
       - '.github/workflows/auto-qa-live.yml'
       - 'auto-qa/**'
+      - 'src/**'
+      - 'futarchy-sdk/**'
       - 'package.json'
-      - 'src/utils/proposalLifecycle.js'
+      - 'package-lock.json'
+      - '.eslintrc.json'
   push:
     branches:
       - main
@@ -15,15 +18,18 @@ on:
       - '.github/workflows/auto-qa.yml'
       - '.github/workflows/auto-qa-live.yml'
       - 'auto-qa/**'
+      - 'src/**'
+      - 'futarchy-sdk/**'
       - 'package.json'
-      - 'src/utils/proposalLifecycle.js'
+      - 'package-lock.json'
+      - '.eslintrc.json'
   workflow_dispatch:
 
 jobs:
   unit:
     name: Deterministic auto-qa
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -33,6 +39,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+
+      # Several suites import the real modules, which need ethers and viem.
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
 
       - name: Run deterministic auto-qa tests
         run: npm run auto-qa:test:unit
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node version and install command match the Netlify build (netlify.toml).
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      # next lint exits non-zero on errors only; warnings are reported but pass.
+      - name: Run lint
+        run: npm run lint
