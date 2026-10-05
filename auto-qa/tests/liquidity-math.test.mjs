@@ -14,8 +14,8 @@ const POOL_DATA_SRC = readFileSync(
     new URL('../../src/hooks/usePoolData.js', import.meta.url),
     'utf8',
 );
-const MARKET_PAGE_SRC = readFileSync(
-    new URL('../../src/components/futarchyFi/marketPage/MarketPageShowcase.jsx', import.meta.url),
+const MARKET_HERO_SRC = readFileSync(
+    new URL('../../src/components/futarchyFi/marketPage/showcase/MarketHero.jsx', import.meta.url),
     'utf8',
 );
 const LIQUIDITY_SUMMARY_SRC = readFileSync(
@@ -65,6 +65,6 @@ test('market stat classifies reserve sides and applies the pool price', () => {
     assert.match(LIQUIDITY_SUMMARY_SRC, /companyTokenAmount \* price/);
     // Reserves across all ranges are TVL, not tradable depth near the price:
     // the stat is labelled TVL and its tooltip says so.
-    assert.match(MARKET_PAGE_SRC, /label="TVL"/);
-    assert.match(MARKET_PAGE_SRC, /tooltipNote="[^"]*not tradable depth/);
+    assert.match(MARKET_HERO_SRC, /label="TVL"/);
+    assert.match(MARKET_HERO_SRC, /tooltipNote="[^"]*not tradable depth/);
 });
