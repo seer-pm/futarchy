@@ -19,6 +19,7 @@ import {
   safeWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import SafeAutoConnector from '../components/futarchyFi/SafeAutoConnector';
+import RecentWalletReconnector from '../components/futarchyFi/RecentWalletReconnector';
 import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
 import { SubgraphRefreshProvider } from '../contexts/SubgraphRefreshContext';
 
@@ -141,7 +142,7 @@ const customTheme = {
 
 const Providers = ({ children }) => {
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           chains={chains}
@@ -168,6 +169,7 @@ const Providers = ({ children }) => {
           initialChain={gnosis}
           coolMode={false}
         >
+          <RecentWalletReconnector />
           <SafeAutoConnector />
           <SubgraphRefreshProvider>
             {children}

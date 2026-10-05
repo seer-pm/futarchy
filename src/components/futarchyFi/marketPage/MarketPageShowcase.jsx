@@ -28,6 +28,7 @@ import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from '../../../const
 import { useContractConfig } from '../../../hooks/useContractConfig';
 import { useChainValidation } from '../../../hooks/useChainValidation';
 import { getRealityQuestionUrl } from '../../debug/constants/chainConfig';
+import { fetchResolutionTime } from '../../../utils/onChainResolution';
 import { computeImpactPercent, formatImpactPercent, normalizeRealityQuestionUrl } from '../../../utils/marketPageUtils.mjs';
 import WrongNetworkModal from '../../common/WrongNetworkModal';
 import CreatePoolModal from './CreatePoolModal';
@@ -39,7 +40,6 @@ import { useCurrency, useUpdateCurrencyFromConfig } from '../../../contexts/Curr
 import { useSdaiRate } from '../../../hooks/useSdaiRate';
 import { useBalanceManager } from '../../../hooks/useBalanceManager';
 import { useExternalSpotPrice } from '../../../hooks/useExternalSpotPrice';
-import { CowSdk } from '@gnosis.pm/cow-sdk';
 import AddLiquidityModal from './AddLiquidityModal';
 import { PendingOrderToast, ProcessingToast, SafeTransactionToast } from './showcase/toasts';
 import { TwapCountdown } from './showcase/TwapCountdown';
@@ -52,19 +52,6 @@ import { SnapshotWidget } from './showcase/SnapshotWidget';
 const subgraphPoolFetcher = createSubgraphPoolFetcher();
 
 const DEFAULT_TWAP_DESCRIPTION = "The Futarchy Test is considered passed if the time-weighted average price (TWAP) of the \u201cpass\u201d (yes) outcome over the final 24 hours of the Issuance KIP\u2019s voting period is greater than or equal to that of the \u201cfail\u201d (no) outcome. If not, the proposal fails the futarchy test, regardless of the Kleros DAO vote result.";
-
-// Token ABI (unchanged, used by multiple features)
-const WXDAI_ABI = [
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function allowance(address owner, address spender) external view returns (uint256)",
-  "function balanceOf(address account) external view returns (uint256)"
-];
-
-// WXDAI Token Contract on Gnosis Chain
-const DEFAULT_BASE_CURRENCY_TOKEN_ADDRESS = DEFAULT_BASE_TOKENS_CONFIG.currency.address;
-
-// ConditionalTokens Contract
-const CONDITIONAL_TOKENS_ADDRESS = "0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce";
 
 // Opens only on user action, and it is one of the heaviest components in
 // the market bundle — load it on demand.
@@ -870,7 +857,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
 
   const [isCollateralModalOpen, setIsCollateralModalOpen] = useState(false);
   const [collateralModalType, setCollateralModalType] = useState('add');
-  const [isApproved, setIsApproved] = useState(false);
   // Use centralized balance manager
   const { balances: rawBalances, isLoading: isLoadingPositions, error: balanceError, refetch: refetchBalances } = useBalanceManager(config, address, isConnected);
 
@@ -1037,31 +1023,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     }
   };
 
-  const checkAllowance = async () => {
-    if (!address) return;
-
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const wxdaiContract = new ethers.Contract(
-        DEFAULT_BASE_CURRENCY_TOKEN_ADDRESS,
-        WXDAI_ABI,
-        provider
-      );
-
-      const allowance = await wxdaiContract.allowance(address, CONDITIONAL_TOKENS_ADDRESS);
-      setIsApproved(allowance.gt(0));
-    } catch (error) {
-      console.error('Failed to check allowance:', error);
-    }
-  };
-
-  // Check allowance when address changes
-  useEffect(() => {
-    if (address) {
-      checkAllowance();
-    }
-  }, [address]);
-
   // Fetch market data when config is loaded
   useEffect(() => {
     if (config && config.marketInfo) {
@@ -1101,14 +1062,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       }
     };
   }, []);
-
-  // Add wagmi account change effect
-  useEffect(() => {
-    if (address) {
-      checkAllowance();
-      // Balance fetching is handled by useBalanceManager
-    }
-  }, [address, isConnected]);
 
   // Modal handlers
   const handleOpenCollateralModal = (type) => {
@@ -1181,6 +1134,18 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     return close ? Number(close) : null;
   }, [config?._registryMetadata, config?.marketInfo?.metadata]);
 
+  // Registry metadata has no resolution date; read when the Reality.eth
+  // question became final.
+  const [resolutionTime, setResolutionTime] = useState(null);
+  useEffect(() => {
+    if (!config?.marketInfo?.resolved || config.marketInfo.resolvedTime || !config?.MARKET_ADDRESS) return;
+    let cancelled = false;
+    fetchResolutionTime(config.MARKET_ADDRESS, config.chainId).then((seconds) => {
+      if (!cancelled) setResolutionTime(seconds);
+    });
+    return () => { cancelled = true; };
+  }, [config?.marketInfo?.resolved, config?.marketInfo?.resolvedTime, config?.MARKET_ADDRESS, config?.chainId]);
+
   // ---> State for pending order check (count instead of ID) <---
   const [isLoadingPendingOrder, setIsLoadingPendingOrder] = useState(false);
   // const [pendingOrderId, setPendingOrderId] = useState(null); // Remove single ID state
@@ -1202,15 +1167,16 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       setShowPendingOrderToast(false);
 
       try {
-        const chainId = 100; // Gnosis Chain
-        const cowSdk = new CowSdk(chainId);
-        const ordersData = await cowSdk.cowApi.getOrders({ owner: address, limit: 10 }); // Limit query slightly
+        // CoW orders only come from the WXDAI -> sDAI modal, which is Gnosis-only.
+        const response = await fetch(`https://api.cow.fi/xdai/api/v1/account/${address}/orders?limit=10`);
+        if (!response.ok) throw new Error(`CoW API responded ${response.status}`);
+        const ordersData = await response.json();
 
         console.log('[Pending Order Check] Received orders:', ordersData);
 
         // ---> Filter for all pending orders and get count <----
         const pendingOrders = ordersData.filter(order =>
-          order.status === 'open' || order.status === 'submitted'
+          order.status === 'open' || order.status === 'presignaturePending'
         );
         const count = pendingOrders.length;
 
@@ -1281,10 +1247,12 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
               }`}>
               <StatDisplay
                 label="Impact (spot)"
-                value={formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
-                valueClassName={(computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11'}
+                // After resolution the losing side's tokens are worthless, so the
+                // gap between the two pools no longer measures anything.
+                value={config?.marketInfo?.resolved ? '—' : formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
+                valueClassName={config?.marketInfo?.resolved ? 'text-white' : ((computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
                 Icon={ImpactIcon}
-                isLoading={!pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
+                isLoading={!config?.marketInfo?.resolved && !pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
               />
 
               <StatDisplay
@@ -1346,6 +1314,9 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                   // If resolved, show resolution time
                   if (config?.marketInfo?.resolved && config?.marketInfo?.resolvedTime) {
                     return new Date(config.marketInfo.resolvedTime).toLocaleDateString();
+                  }
+                  if (config?.marketInfo?.resolved && resolutionTime) {
+                    return new Date(resolutionTime * 1000).toLocaleDateString();
                   }
 
                   // Check if we have end time
@@ -1460,10 +1431,11 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                     });
                   }
 
-                  // Resolve Question badge
+                  // Reality.eth question badge. It is a link, not an action, so it
+                  // stops saying "Resolve" once the market is resolved.
                   if (marketData.question_link) {
                     badges.push({
-                      text: 'Resolve Question',
+                      text: config?.marketInfo?.resolved ? 'Resolution Question' : 'Resolve Question',
                       colorScheme: 'violet',
                       link: marketData.question_link
                     });

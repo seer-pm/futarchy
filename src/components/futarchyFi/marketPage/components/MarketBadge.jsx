@@ -29,7 +29,7 @@ const MarketBadge = ({ text, colorScheme = 'default', link, onClick }) => {
   const commonClasses = `h-7 py-1 px-3 text-sm font-semibold rounded-lg border-2 flex items-center justify-center gap-1 transition-colors duration-200 whitespace-nowrap`;
 
   // Apply a more subtle glow effect only to interactive badges
-  const interactiveBadges = ['Market Summary', 'Track Progress', 'Prediction Market', 'Resolve Question', 'Add Liquidity', 'Arbitrage Contract'];
+  const interactiveBadges = ['Market Summary', 'Track Progress', 'Prediction Market', 'Resolve Question', 'Resolution Question', 'Add Liquidity', 'Arbitrage Contract'];
   const isInteractive = interactiveBadges.includes(text) || link || onClick;
 
   const glowClass = isInteractive ? 'animate-subtle-pulse drop-shadow-[0_0_2px_rgba(255,255,255,0.4)]' : '';

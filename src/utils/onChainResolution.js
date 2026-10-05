@@ -144,3 +144,44 @@ export async function fetchOnChainResolution(proposalAddress, conditionalTokensA
         outcome: { yes: 'Yes', no: 'No', invalid: 'Invalid' }[result.outcome] || null,
     };
 }
+
+// Reality.eth v3 contracts per chain (same as REALITY_CONTRACTS in
+// utils/marketPageUtils.mjs).
+const REALITY_BY_CHAIN = {
+    1: '0x5b7dD1E86623548AF054A4985F7fc8Ccbb554E2c',
+    100: '0xE78996A233895bE74a66F451f1019cA9734205cc',
+};
+
+const QUESTION_ID = '0xb06a5c52';       // questionId()
+const GET_FINALIZE_TS = '0xacae8f4e';   // getFinalizeTS(bytes32)
+
+/**
+ * When a proposal's Reality.eth question became final, in Unix seconds.
+ *
+ * Registry metadata carries no resolution date, so this is the date a
+ * resolved market shows. It is the moment the answer could no longer be
+ * challenged; the resolve() transaction that reports it can land later.
+ *
+ * @param {string} proposalAddress - FutarchyProposal contract address
+ * @param {number|string} chainId - Chain the proposal lives on
+ * @returns {Promise<number|null>} null when unknown, not final yet, or the read fails
+ */
+export async function fetchResolutionTime(proposalAddress, chainId, { getProvider = getRpcProvider } = {}) {
+    const address = String(proposalAddress || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(address)) return null;
+    const chain = normalizeChainId(chainId);
+    try {
+        const provider = getProvider(chain);
+        const questionId = await ethCall(provider, address, QUESTION_ID);
+        if (!isWord(questionId) || BigInt(questionId) === 0n) return null;
+        const finalizeTs = await ethCall(provider, REALITY_BY_CHAIN[chain], `${GET_FINALIZE_TS}${questionId.slice(2)}`);
+        if (!isWord(finalizeTs)) return null;
+        const seconds = Number(BigInt(finalizeTs));
+        // 0 = never answered, 1 = created unanswered, 2 = pending arbitration.
+        if (seconds <= 2 || seconds * 1000 > Date.now()) return null;
+        return seconds;
+    } catch (error) {
+        console.warn('[OnChainResolution] Resolution time read failed:', error?.message);
+        return null;
+    }
+}
