@@ -251,7 +251,9 @@ const Proposals = ({
   );
 };
 
-const ProposalStatus = ({ approvalStatus }) => {
+// approvalStatus picks the colours; the text is the market status label when
+// the caller has one (resolveMarketStatus in utils/proposalLifecycle.js).
+const ProposalStatus = ({ approvalStatus, marketStatus }) => {
   const { borderColor, textColor, bgColor, statusText } = (() => {
     switch (approvalStatus) {
       case "approved":
@@ -286,7 +288,7 @@ const ProposalStatus = ({ approvalStatus }) => {
                     ${borderColor} ${textColor} ${bgColor} 
                     border font-medium text-xs leading-4 whitespace-nowrap`}
       >
-        {statusText}
+        {marketStatus?.labelWithOutcome || statusText}
       </div>
     </div>
   );
@@ -382,6 +384,7 @@ export const ProposalsCard = ({
   metadata,
   chainId,
   resolutionStatus,
+  marketStatus,
   visibility = 'public',
   isOwner = false,
 }) => {
@@ -516,7 +519,7 @@ export const ProposalsCard = ({
                       Hidden
                     </span>
                   )}
-                  <ProposalStatus approvalStatus={approvalStatus} />
+                  <ProposalStatus approvalStatus={approvalStatus} marketStatus={marketStatus} />
                 </div>
               </div>
               <div className="flex flex-col p-3 gap-3">
@@ -606,6 +609,7 @@ export const MobileProposalsCard = ({
   metadata,
   chainId,
   resolutionStatus,
+  marketStatus,
   visibility = 'public',
   isOwner = false,
 }) => {
@@ -733,7 +737,7 @@ export const MobileProposalsCard = ({
                     Hidden
                   </span>
                 )}
-                <ProposalStatus approvalStatus={approvalStatus} />
+                <ProposalStatus approvalStatus={approvalStatus} marketStatus={marketStatus} />
               </div>
             </div>
 

@@ -3,8 +3,13 @@ import { PRECISION_CONFIG } from '../components/futarchyFi/marketPage/constants/
 import { fetchMarketEventData, parseContractSource } from '../adapters/subgraphConfigAdapter';
 import { invalidateCache } from '../services/requestCache';
 import { fetchOnChainResolution } from '../utils/onChainResolution';
+import { needsOnChainResolution, resolveMarketStatus } from '../utils/proposalLifecycle';
 import { resolveProposalId } from '../utils/marketPageUtils.mjs';
 import { fetchProposalMetadataFromRegistry, extractChainFromMetadata, extractSpotPriceFromMetadata, extractStartCandleFromMetadata, extractCloseTimestampFromMetadata, extractTwapFromMetadata, extractResolutionFromMetadata, extractDisplayConfigFromMetadata, extractSnapshotIdFromMetadata } from '../adapters/registryAdapter';
+
+// marketInfo.finalOutcome wording. The redeem panel picks its side from it
+// (getRedeemSide in utils/redeemPlan.js), so Invalid stays distinct from Yes/No.
+const FINAL_OUTCOME_BY_OUTCOME = { yes: 'Yes', no: 'No', invalid: 'Invalid' };
 
 /**
  * Hook to fetch and manage contract configuration data from the Registry/subgraph
@@ -226,23 +231,30 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
         }
 
         // Resolution status: prefer metadata, but fall back to the on-chain
-        // ConditionalTokens payout state when metadata says unresolved/missing.
-        const metadataResolved = (data.resolution_outcome !== null && data.resolution_outcome !== undefined)
-          || data.resolution_status === 'resolved'
-          || data._registryMetadata?.resolution_status === 'resolved'
-          || (data._registryMetadata?.resolution_outcome !== null && data._registryMetadata?.resolution_outcome !== undefined);
+        // ConditionalTokens payout state when metadata doesn't settle it
+        // (unresolved, missing, or resolved without an outcome).
+        const statusInputs = {
+          resolution_status: data.resolution_status,
+          resolution_outcome: data.resolution_outcome,
+          _registryMetadata: data._registryMetadata,
+          metadata: { finalOutcome: metadata?.finalOutcome },
+          onChainResolution: null,
+          endTime: data._registryMetadata?.closeTimestamp || data.end_date || data.end_time,
+        };
 
-        let onChainResolution = null;
-        if (!metadataResolved && metadata?.contractInfos?.conditionalTokens) {
-          onChainResolution = await fetchOnChainResolution(
+        if (needsOnChainResolution(statusInputs) && metadata?.contractInfos?.conditionalTokens) {
+          statusInputs.onChainResolution = await fetchOnChainResolution(
             extractedProposalId,
             metadata.contractInfos.conditionalTokens,
             metadata?.chain || 100
           );
-          if (onChainResolution?.resolved) {
-            console.log('[Config] Market resolved on-chain but not in metadata; enabling redemption UI', onChainResolution);
+          if (statusInputs.onChainResolution?.resolved) {
+            console.log('[Config] Market resolved on-chain but not in metadata; enabling redemption UI', statusInputs.onChainResolution);
           }
         }
+
+        const marketStatus = resolveMarketStatus(statusInputs);
+        const isMarketResolved = marketStatus.state === 'resolved';
 
         // Transform API data into the format needed by the application
         const transformedConfig = {
@@ -423,7 +435,7 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
             title: (data._registryMetadata?.displayNameQuestion || data._registryMetadata?.title || data.title),
             description: (data._registryMetadata?.description || data.proposal_markdown || metadata?.description),
             outcomes: metadata?.outcomes,
-            endTime: data._registryMetadata?.closeTimestamp || data.end_date || data.end_time, // Support both field names, prioritize Registry closeTimestamp
+            endTime: statusInputs.endTime, // Support both field names, prioritize Registry closeTimestamp
             // Extract display text from metadata if available
             // Registry displayNameQuestion = display_text_0 (title/question)
             // Registry displayNameEvent = display_text_1 (event name)
@@ -447,14 +459,16 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
             arbitrageContractAddress: metadata?.arbitrageContractAddress || null,
             // Include question link from metadata (check both nested and direct paths)
             questionLink: metadata?.metadata?.question_link || metadata?.questionLink || null,
-            // Add resolved status - only resolved if there's an actual outcome or resolution_status indicates completion
-            // Fall back to _registryMetadata for resolution fields (market subgraph doesn't have these),
-            // then to the on-chain ConditionalTokens payout state (metadata can lag behind resolution)
-            resolved: metadataResolved || onChainResolution?.resolved === true,
-            resolutionStatus: data.resolution_status || data._registryMetadata?.resolution_status
-              || (onChainResolution?.resolved ? 'resolved' : null),
-            finalOutcome: data.resolution_outcome || data._registryMetadata?.resolution_outcome || metadata?.finalOutcome
-              || onChainResolution?.outcome || null,
+            // Resolution fields, all from resolveMarketStatus (utils/proposalLifecycle.js):
+            // registry metadata first (the market subgraph has none), then the
+            // on-chain ConditionalTokens payout state (metadata can lag behind resolution).
+            // The active / awaiting-resolution split depends on the clock, so
+            // components derive it from these with resolveMarketStatus(marketInfo).
+            resolved: isMarketResolved,
+            resolutionStatus: isMarketResolved
+              ? 'resolved'
+              : (data.resolution_status || data._registryMetadata?.resolution_status || null),
+            finalOutcome: FINAL_OUTCOME_BY_OUTCOME[marketStatus.outcome] || null,
             // TWAP configuration (prioritize Registry metadata, then direct metadata)
             twapStartTimestamp: data._registryMetadata?.twapStartTimestamp || metadata?.twapStartTimestamp || null,
             twapDurationHours: data._registryMetadata?.twapDurationHours || metadata?.twapDurationHours || 24,

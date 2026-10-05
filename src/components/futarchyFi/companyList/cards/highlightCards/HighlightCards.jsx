@@ -154,12 +154,12 @@ const Timestamp = ({ endTime }) => {
 };
 
 // Component to show completed status badge
-const CompletedStatusBadge = ({ label }) => (
-  <div className={`w-fit px-2 py-0.5 text-start rounded-full text-xs font-medium mt-1 ${label === 'Resolved'
+const CompletedStatusBadge = ({ marketStatus }) => (
+  <div className={`w-fit px-2 py-0.5 text-start rounded-full text-xs font-medium mt-1 ${marketStatus.state === 'resolved'
     ? 'bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400'
     : 'bg-futarchyGold9/35 border border-futarchyGold9 text-futarchyGold11 dark:border-futarchyGold6 dark:bg-futarchyGold7/15 dark:text-futarchyGold6'
     }`}>
-    {label === 'Resolved' ? '✓ Resolved' : 'Closed'}
+    {marketStatus.state === 'resolved' ? `✓ ${marketStatus.label}` : marketStatus.label}
   </div>
 );
 
@@ -184,11 +184,8 @@ const HighlightCard = ({
   status: statusProp, // "Loading", "Done", "Error"
   marketId: marketIdProp,
   useMockData = false,
-  // New props for resolved events
-  isResolved = false,
-  isClosed = false,
-  resolutionOutcome,
-  finalOutcome,
+  // resolveMarketStatus() result for ended or resolved events
+  marketStatus = null,
   impact: impactProp,
   companySymbol = 'GNO',
   currencySymbol,
@@ -232,7 +229,7 @@ const HighlightCard = ({
   };
 
   const { marketName, endTime, proposalCreationTimestamp, companyLogoUrl, status, marketId } = data;
-  const isComplete = isResolved || isClosed;
+  const isComplete = !!marketStatus && marketStatus.state !== 'active';
 
   // Extract display titles from metadata (similar to EventHighlightCard)
   const displayTitle0 = metadata?.display_title_0 || null;
@@ -339,27 +336,12 @@ const HighlightCard = ({
   const formattedEventProbability = renderValue(eventProbability, (v) => `${(v * 100).toFixed(0)}%`);
   const impactDisplay = renderValue(impact);
 
-  // Get final outcome for resolved events
-  // Debug for KIP-77
-  if (isResolved && marketNameProp?.includes('KIP-77')) {
-    console.log(`[HighlightCard] KIP-77 specific debug:`, {
-      resolutionOutcome,
-      finalOutcome,
-      marketId: marketIdProp,
-      marketName: marketNameProp
-    });
-  }
-
-  const outcome = finalOutcome || resolutionOutcome;
-  const isYesOutcome = outcome?.toLowerCase() === 'yes';
-  const completionLabel = outcome ? 'Resolved' : 'Closed';
-
   const statItems = isComplete ? [
-    // For completed events, show outcome when available; otherwise mark as closed.
+    // For completed events, show the outcome when it is known; otherwise the status.
     {
-      label: outcome ? "Outcome" : "Status",
-      value: outcome ? outcome.toUpperCase() : 'Closed',
-      colorClass: isYesOutcome ? "text-futarchyBlue9 dark:text-futarchyBlue9" : "text-futarchyGold8 dark:text-futarchyGold8",
+      label: marketStatus.outcomeLabel ? "Outcome" : "Status",
+      value: marketStatus.outcomeLabel || marketStatus.shortLabel,
+      colorClass: marketStatus.outcome === 'yes' ? "text-futarchyBlue9 dark:text-futarchyBlue9" : "text-futarchyGold8 dark:text-futarchyGold8",
     },
     {
       label: "Impact",
@@ -471,7 +453,7 @@ const HighlightCard = ({
                 marketName || "Untitled Market"
               )}
             </h3>
-            {isComplete ? <CompletedStatusBadge label={completionLabel} /> : <Timestamp endTime={endTime} />}
+            {isComplete ? <CompletedStatusBadge marketStatus={marketStatus} /> : <Timestamp endTime={endTime} />}
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import dynamic from 'next/dynamic';
 import TripleChart from '@components/chart/TripleChart';
 import ChartParameters from '../tripleChart/chartParameters/ChartParameters';
 import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from '../../../../constants/addresses';
+import { resolveMarketStatus } from '../../../../utils/proposalLifecycle';
 
 // Renders only when the useSubgraph query param asks for it.
 const SubgraphChart = dynamic(() => import("@components/chart/SubgraphChart"), { ssr: false });
@@ -70,10 +71,11 @@ const MarketChartSection = ({
                 : null}
               config={config}
               resolutionDetails={(() => {
-                if (config?.marketInfo?.resolved && config?.marketInfo?.finalOutcome) {
+                const { outcomeLabel } = resolveMarketStatus(config?.marketInfo);
+                if (outcomeLabel) {
                   return {
                     label: 'OUTCOME',
-                    value: config.marketInfo.finalOutcome.toUpperCase(),
+                    value: outcomeLabel,
                     link: config.marketInfo.trackProgressLink
                   };
                 }

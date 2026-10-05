@@ -113,12 +113,15 @@ test('proposals resolved on-chain are marked resolved despite stale metadata', a
     const { proposals } = await hook.fetchProposalsFromAggregator('0xagg');
     const p = byAddress(proposals);
 
-    assert.equal(p[GNOSIS_RESOLVED].status, 'resolved');
-    assert.equal(p[GNOSIS_RESOLVED].resolutionStatus, 'resolved');
-    assert.equal(p[GNOSIS_RESOLVED].resolutionOutcome, 'yes');
-    assert.equal(p[GNOSIS_RESOLVED].isClosed, true);
-    assert.equal(p[GNOSIS_OPEN].status, 'ongoing');
-    assert.equal(p[MAINNET_OPEN].status, 'ongoing');
+    // Cards read their status through resolveMarketStatus.
+    const resolved = hook.resolveMarketStatus(p[GNOSIS_RESOLVED]);
+    assert.equal(resolved.state, 'resolved');
+    assert.equal(resolved.outcome, 'yes');
+    assert.equal(resolved.showCountdown, false);
+    assert.deepEqual(p[GNOSIS_RESOLVED].onChainResolution, { resolved: true, outcome: 'yes' });
+    assert.equal(hook.resolveMarketStatus(p[GNOSIS_OPEN]).state, 'active');
+    assert.equal(hook.resolveMarketStatus(p[MAINNET_OPEN], 1_800_000_000).state, 'active');
+    assert.equal(p[GNOSIS_OPEN].onChainResolution, null);
 
     // conditionId + denominator + YES and NO numerators per proposal, on its own chain.
     assert.equal(rpcCalls.length, 12);
@@ -142,5 +145,18 @@ test('metadata that already records the outcome skips the on-chain read', async 
     const { proposals } = await hook.fetchProposalsFromAggregator('0xagg');
 
     assert.equal(rpcCalls.length, 0);
-    assert.equal(proposals[0].resolutionOutcome, 'no');
+    assert.equal(hook.resolveMarketStatus(proposals[0]).state, 'resolved');
+    assert.equal(hook.resolveMarketStatus(proposals[0]).outcome, 'no');
+});
+
+test('fetchUnsettledResolutions reads the chain only for proposals metadata does not settle', async () => {
+    const { rpcCalls } = setup();
+    const resolutions = await hook.fetchUnsettledResolutions([
+        { proposalAddress: GNOSIS_RESOLVED, chainId: 100, metadata: {} },
+        { proposalAddress: GNOSIS_OPEN, chainId: 100, metadata: { resolution_status: 'resolved', resolution_outcome: 'no' } },
+        { proposalAddress: null, chainId: 100, metadata: {} },
+    ]);
+
+    assert.equal(rpcCalls.length, 4);
+    assert.deepEqual([...resolutions.entries()], [[`100:${GNOSIS_RESOLVED}`, { resolved: true, outcome: 'yes' }]]);
 });

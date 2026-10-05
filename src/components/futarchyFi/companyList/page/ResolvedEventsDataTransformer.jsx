@@ -1,7 +1,7 @@
 import { collectAndFetchPoolPrices, attachPrefetchedPrices } from "../../../../utils/SubgraphBulkPriceFetcher";
 import { fetchProposalsFromAggregator } from "../../../../hooks/useAggregatorProposals";
 import { DEFAULT_AGGREGATOR } from "../../../../config/subgraphEndpoints";
-import { getProposalEndTime, hasResolutionOutcome, isClosedProposal, isResolvedProposal } from "../../../../utils/proposalLifecycle";
+import { resolveMarketStatus } from "../../../../utils/proposalLifecycle";
 
 const filterRecentClosedEvents = (events) => {
   // Bypassing the recent filter so all closed markets are shown permanently
@@ -34,29 +34,22 @@ export const fetchResolvedEventHighlightData = async (_companyId = "all", limit 
         return p.isOwner || p.isEditor;
       }
 
-      return isResolvedProposal(p) || isClosedProposal(p, nowSeconds);
+      return resolveMarketStatus(p, nowSeconds).state !== 'active';
     });
 
     console.log(`[ResolvedEventsDataTransformer] Found ${closedProposals.length} closed proposals from subgraph (of ${proposals.length} total)`);
     if (closedProposals.length === 0) return [];
 
     const closedEvents = closedProposals.map(proposal => {
-      const endTime = getProposalEndTime(proposal);
-      const hasOutcome = hasResolutionOutcome(proposal);
-      const isResolved = isResolvedProposal(proposal);
-      const isClosed = isClosedProposal(proposal, nowSeconds);
-      const resolutionOutcome = proposal.resolutionOutcome ?? proposal.resolution_outcome ?? null;
+      const marketStatus = resolveMarketStatus(proposal, nowSeconds);
+      const endTime = marketStatus.closeTime;
 
       return {
         eventId: proposal.eventId || proposal.proposalAddress,
         eventTitle: proposal.eventTitle || proposal.proposalTitle || 'Unknown Proposal',
         companyLogo: proposal.companyLogo || '/assets/fallback-company.png',
         authorName: proposal.authorName || 'Unknown Organization',
-        resolutionStatus: isResolved && hasOutcome
-          ? 'resolved'
-          : (isClosed ? 'closed' : (proposal.resolutionStatus || proposal.resolution_status)),
-        resolutionOutcome,
-        finalOutcome: proposal.finalOutcome ?? resolutionOutcome,
+        marketStatus,
         impact: typeof proposal.metadata?.impact === 'number'
           ? proposal.metadata.impact
           : (typeof proposal.metadata?.impact === 'string' ? parseFloat(proposal.metadata.impact) : 0),
@@ -76,9 +69,7 @@ export const fetchResolvedEventHighlightData = async (_companyId = "all", limit 
         isEditor: proposal.isEditor,
         fromSubgraph: proposal.fromSubgraph,
         proposalMetadataAddress: proposal.proposalMetadataAddress,
-        visibility: proposal.visibility,
-        isResolved,
-        isClosed: isClosed || isResolved
+        visibility: proposal.visibility
       };
     });
 

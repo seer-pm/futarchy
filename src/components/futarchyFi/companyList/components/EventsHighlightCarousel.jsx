@@ -183,13 +183,10 @@ const EventsHighlightCarousel = ({ companyId, useNewCard = false, aggregatorAddr
                 predictionPools={event.predictionPools}
                 poolAddresses={event.poolAddresses}
                 timeProgress={event.timeProgress}
-                startTime={event.startTime}
-                endTime={event.endTime}
-                countdownFinish={event.status === "approved" || event.status === "refused"}
                 status={event.status}
                 approvalStatus={event.approvalStatus}
                 metadata={event.metadata}
-                resolutionStatus={event.resolutionStatus}
+                market={event}
                 chainId={event.chainId}
                 prefetchedPrices={event.prefetchedPrices}
                 isOwner={event.isOwner}

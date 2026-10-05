@@ -10,16 +10,17 @@ const source = await readFile(sourcePath, 'utf8');
 const lifecycle = await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`);
 
 const {
-    applyOnChainResolution,
-    getProposalEndTime,
-    hasResolutionOutcome,
-    isClosedProposal,
     isProposalActive,
-    isProposalClosed,
-    isProposalResolved,
-    isResolvedProposal,
     normalizeUnixTimestamp,
+    resolveMarketStatus,
 } = lifecycle;
+
+// The lifecycle predicates the lists used to call one by one are all read off
+// resolveMarketStatus now; these keep the same questions.
+const stateOf = (proposal, now = NOW) => resolveMarketStatus(proposal, now).state;
+const isResolved = (proposal) => stateOf(proposal) === 'resolved';
+// "Recently Closed" takes everything that is not active: ended or resolved.
+const isClosedOrResolved = (proposal, now = NOW) => stateOf(proposal, now) !== 'active';
 
 const NOW = 1_780_000_000;
 const FUTURE = NOW + 86_400;
@@ -55,8 +56,8 @@ test('ended but unresolved metadata is not active and is closed', () => {
         closeTimestamp: PAST,
     };
 
-    assert.equal(isProposalResolved(staleMetadata), false);
-    assert.equal(isProposalClosed(staleMetadata, NOW), true);
+    assert.equal(isResolved(staleMetadata), false);
+    assert.equal(stateOf(staleMetadata), 'awaiting_resolution');
     assert.equal(isProposalActive(staleMetadata, NOW), false);
 });
 
@@ -70,10 +71,10 @@ test('recently closed predicate includes ended proposals even without resolution
         },
     };
 
-    assert.equal(isResolvedProposal(staleEndedProposal), false);
-    assert.equal(isClosedProposal(staleEndedProposal, NOW), true);
+    assert.equal(isResolved(staleEndedProposal), false);
+    assert.equal(stateOf(staleEndedProposal), 'awaiting_resolution');
     assert.equal(
-        isResolvedProposal(staleEndedProposal) || isClosedProposal(staleEndedProposal, NOW),
+        isClosedOrResolved(staleEndedProposal),
         true,
         'ended proposals with stale resolution metadata must route to Recently Closed'
     );
@@ -94,64 +95,73 @@ test('active and recently closed predicates do not overlap for ended or resolved
 
     for (const { metadata, proposal } of cases) {
         assert.equal(isProposalActive(metadata, NOW), false);
-        assert.equal(isResolvedProposal(proposal) || isClosedProposal(proposal, NOW), true);
+        assert.equal(isClosedOrResolved(proposal), true);
     }
 });
 
 test('proposal end time supports top-level and nested metadata shapes', () => {
-    assert.equal(getProposalEndTime({ endTime: FUTURE }), FUTURE);
-    assert.equal(getProposalEndTime({ closeTimestamp: FUTURE }), FUTURE);
-    assert.equal(getProposalEndTime({ end_time: FUTURE }), FUTURE);
-    assert.equal(getProposalEndTime({ metadata: { endTime: FUTURE } }), FUTURE);
-    assert.equal(getProposalEndTime({ metadata: { closeTimestamp: FUTURE } }), FUTURE);
-    assert.equal(getProposalEndTime({}), null);
+    const endTimeOf = (proposal) => resolveMarketStatus(proposal, NOW).closeTime;
+    assert.equal(endTimeOf({ endTime: FUTURE }), FUTURE);
+    assert.equal(endTimeOf({ closeTimestamp: FUTURE }), FUTURE);
+    assert.equal(endTimeOf({ end_time: FUTURE }), FUTURE);
+    assert.equal(endTimeOf({ metadata: { endTime: FUTURE } }), FUTURE);
+    assert.equal(endTimeOf({ metadata: { closeTimestamp: FUTURE } }), FUTURE);
+    assert.equal(endTimeOf({}), null);
 });
 
 test('resolved proposal predicate supports status and outcome aliases', () => {
-    assert.equal(isResolvedProposal({ resolution_status: 'resolved' }), true);
-    assert.equal(isResolvedProposal({ resolutionStatus: 'resolved' }), true);
-    assert.equal(isResolvedProposal({ status: 'resolved' }), true);
-    assert.equal(isResolvedProposal({ resolution_outcome: 'yes' }), true);
-    assert.equal(isResolvedProposal({ resolutionOutcome: 'no' }), true);
-    assert.equal(isResolvedProposal({ finalOutcome: 0 }), true);
-    assert.equal(isResolvedProposal({ metadata: { resolution_status: 'resolved' } }), true);
-    assert.equal(isResolvedProposal({ metadata: { finalOutcome: 'yes' } }), true);
-    assert.equal(isResolvedProposal({ resolution_status: 'pending', resolution_outcome: '' }), false);
+    assert.equal(isResolved({ resolution_status: 'resolved' }), true);
+    assert.equal(isResolved({ resolutionStatus: 'resolved' }), true);
+    assert.equal(isResolved({ status: 'resolved' }), true);
+    assert.equal(isResolved({ resolution_outcome: 'yes' }), true);
+    assert.equal(isResolved({ resolutionOutcome: 'no' }), true);
+    assert.equal(isResolved({ finalOutcome: 0 }), true);
+    assert.equal(isResolved({ metadata: { resolution_status: 'resolved' } }), true);
+    assert.equal(isResolved({ metadata: { finalOutcome: 'yes' } }), true);
+    assert.equal(isResolved({ resolution_status: 'pending', resolution_outcome: '' }), false);
 });
 
-test('hasResolutionOutcome treats null, undefined, and empty string as missing only', () => {
-    assert.equal(hasResolutionOutcome({ resolution_outcome: null }), false);
-    assert.equal(hasResolutionOutcome({ resolution_outcome: undefined }), false);
-    assert.equal(hasResolutionOutcome({ resolution_outcome: '' }), false);
-    assert.equal(hasResolutionOutcome({ resolution_outcome: 0 }), true);
-    assert.equal(hasResolutionOutcome({ metadata: { finalOutcome: 'no' } }), true);
+test('a recorded outcome treats null, undefined, and empty string as missing only', () => {
+    assert.equal(isResolved({ resolution_outcome: null }), false);
+    assert.equal(isResolved({ resolution_outcome: undefined }), false);
+    assert.equal(isResolved({ resolution_outcome: '' }), false);
+    assert.equal(isResolved({ resolution_outcome: 0 }), true);
+    assert.equal(isResolved({ metadata: { finalOutcome: 'no' } }), true);
+    assert.equal(resolveMarketStatus({ metadata: { finalOutcome: 'no' } }).outcome, 'no');
 });
 
-test('applyOnChainResolution marks a metadata-unresolved proposal resolved with its outcome', () => {
-    const proposal = { status: 'ongoing', resolutionStatus: 'unresolved', resolution_status: null, endTime: null };
-    applyOnChainResolution(proposal, { resolved: true, outcome: 'no' });
+test('an on-chain resolution marks a metadata-unresolved proposal resolved with its outcome', () => {
+    const proposal = {
+        resolutionStatus: 'unresolved',
+        resolution_status: null,
+        endTime: null,
+        onChainResolution: { resolved: true, outcome: 'no' },
+    };
 
-    assert.equal(isResolvedProposal(proposal), true);
-    assert.equal(isClosedProposal(proposal, NOW), true);
-    assert.equal(hasResolutionOutcome(proposal), true);
-    assert.equal(proposal.resolutionOutcome, 'no');
-    assert.equal(proposal.finalOutcome, 'no');
+    assert.equal(isResolved(proposal), true);
+    assert.equal(isClosedOrResolved(proposal), true);
+    assert.equal(resolveMarketStatus(proposal, NOW).outcome, 'no');
+    assert.equal(resolveMarketStatus(proposal, NOW).outcomeLabel, 'NO');
 });
 
-test('applyOnChainResolution keeps an outcome metadata already recorded and ignores unresolved results', () => {
-    const recorded = { resolution_status: 'closed', resolutionOutcome: 'yes', resolution_outcome: 'yes' };
-    applyOnChainResolution(recorded, { resolved: true, outcome: 'no' });
-    assert.equal(recorded.resolution_outcome, 'yes');
-    assert.equal(recorded.resolution_status, 'resolved');
+test('an on-chain resolution keeps an outcome metadata already recorded, and unresolved results change nothing', () => {
+    const recorded = {
+        resolution_status: 'closed',
+        resolutionOutcome: 'yes',
+        resolution_outcome: 'yes',
+        onChainResolution: { resolved: true, outcome: 'no' },
+    };
+    assert.equal(resolveMarketStatus(recorded, NOW).outcome, 'yes');
+    assert.equal(stateOf(recorded), 'resolved');
 
-    const open = { status: 'ongoing', endTime: FUTURE };
     for (const result of [{ resolved: false, outcome: null }, null, undefined]) {
-        applyOnChainResolution(open, result);
-        assert.equal(isResolvedProposal(open), false);
-        assert.equal(isClosedProposal(open, NOW), false);
+        const open = { endTime: FUTURE, onChainResolution: result };
+        assert.equal(isResolved(open), false);
+        assert.equal(isClosedOrResolved(open), false);
     }
 });
 
 test('a proposal with no close time is never closed by time alone', () => {
-    assert.equal(isClosedProposal({ endTime: null }, NOW), false);
+    assert.equal(isClosedOrResolved({ endTime: null }), false);
+    assert.equal(stateOf({ endTime: null }), 'active');
 });

@@ -9,35 +9,47 @@
  * metadata reported `resolution_status === 'resolved'`) still rendered
  * with the "Ongoing" badge instead of "Approved" / "Refused".
  *
- * The fix codified a precedence rule: when `resolution_status === 'resolved'`,
- * the proposal is "approved" if the outcome is `'yes'` and "refused"
- * otherwise — taking priority over any `approval_status` from upstream.
+ * The fix codified a precedence rule: a resolved proposal is "approved" if
+ * the outcome is `'yes'` and "refused" if it is `'no'` — taking priority over
+ * any `approval_status` from upstream.
  *
- * The `resolved` flag in `useContractConfig.js` has its own multi-source
- * truthiness rule that we also pin here.
+ * The milestones page and the market page used to decide "resolved" with two
+ * different rules (status only vs. status or outcome). Both now ask
+ * resolveMarketStatus (src/utils/proposalLifecycle.js), so the subgraph path
+ * and the `resolved` flag below run the real resolver; the bucket is the
+ * card's colour theme, and the badge text is the resolver's label.
  *
  * Spec mirrors:
- *   src/components/futarchyFi/proposalsList/page/proposalsPage/ProposalsPage.jsx:258-260      (subgraph path)
- *   src/components/futarchyFi/proposalsList/page/proposalsPage/ProposalsPageDataTransformer.jsx:752-754 (supabase path)
- *   src/hooks/useContractConfig.js:480-484                                                    (resolved flag)
- *
- * If those line ranges change, update the references — the rules
- * themselves should remain stable.
+ *   src/components/futarchyFi/proposalsList/page/proposalsPage/ProposalsPage.jsx   (subgraph path: APPROVAL_STATUS_BY_OUTCOME)
+ *   ProposalsPageDataTransformer.jsx                                               (supabase path, since removed)
+ *   src/hooks/useContractConfig.js                                                 (resolved flag: resolveMarketStatus(statusInputs))
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(`../../src/${path}`, import.meta.url), 'utf8');
+const { resolveMarketStatus } = await import(
+    `data:text/javascript;charset=utf-8,${encodeURIComponent(await read('utils/proposalLifecycle.js'))}`
+);
+const PROPOSALS_PAGE_SRC = await read('components/futarchyFi/proposalsList/page/proposalsPage/ProposalsPage.jsx');
 
 /**
- * Mirror of ProposalsPage.jsx:258-260 (subgraph path bucketer).
+ * Mirror of the subgraph path bucketer in ProposalsPage.jsx.
  * No upstream `approval_status` to consider on this path — anything
- * unresolved is "ongoing".
+ * without a yes/no outcome keeps the "ongoing" theme.
  */
+const APPROVAL_STATUS_BY_OUTCOME = { yes: 'approved', no: 'refused' };
 function bucketSubgraph(proposalMeta) {
-    return proposalMeta.resolution_status === 'resolved'
-        ? (proposalMeta.resolution_outcome === 'yes' ? 'approved' : 'refused')
-        : 'ongoing';
+    return APPROVAL_STATUS_BY_OUTCOME[resolveMarketStatus(proposalMeta).outcome] || 'ongoing';
 }
+
+test('PR #28 — the milestones page buckets with the mirrored rule', () => {
+    assert.match(PROPOSALS_PAGE_SRC, /const APPROVAL_STATUS_BY_OUTCOME = \{ yes: "approved", no: "refused" \};/);
+    assert.match(PROPOSALS_PAGE_SRC, /p\.marketStatus = resolveMarketStatus\(p\);/);
+    assert.match(PROPOSALS_PAGE_SRC, /p\.approvalStatus = APPROVAL_STATUS_BY_OUTCOME\[p\.marketStatus\.outcome\] \|\| 'ongoing';/);
+});
 
 /**
  * Mirror of ProposalsPageDataTransformer.jsx:752-754 (supabase path bucketer).
@@ -50,19 +62,15 @@ function bucketSupabase(proposal) {
 }
 
 /**
- * Mirror of useContractConfig.js:480-484 (`resolved` flag derivation).
+ * The `resolved` flag of useContractConfig.js, which is the resolver's state.
  * "Resolved" if ANY of:
- *   - data.resolution_outcome is non-null
+ *   - data.resolution_outcome is recorded
  *   - data.resolution_status === 'resolved'
  *   - registry metadata's resolution_status === 'resolved'
- *   - registry metadata's resolution_outcome is non-null
+ *   - registry metadata's resolution_outcome is recorded
  */
 function isResolved(data) {
-    const reg = data?._registryMetadata;
-    return (data?.resolution_outcome !== null && data?.resolution_outcome !== undefined)
-        || data?.resolution_status === 'resolved'
-        || reg?.resolution_status === 'resolved'
-        || (reg?.resolution_outcome !== null && reg?.resolution_outcome !== undefined);
+    return resolveMarketStatus(data).state === 'resolved';
 }
 
 // ---------------------------------------------------------------------------
@@ -83,27 +91,48 @@ test('PR #28 — subgraph: resolved + outcome=no → refused', () => {
     );
 });
 
-test('PR #28 — subgraph: not-resolved → ongoing (regardless of any other field)', () => {
+test('PR #28 — subgraph: not-resolved → ongoing', () => {
     // Pre-PR-#28 bug: this was the ONLY branch the code took, so resolved
     // proposals were misbucketed.
     for (const status of [null, undefined, 'open', 'pending', 'in_progress']) {
-        assert.equal(bucketSubgraph({ resolution_status: status, resolution_outcome: 'yes' }), 'ongoing',
+        assert.equal(bucketSubgraph({ resolution_status: status }), 'ongoing',
             `status=${status} should yield ongoing`);
+        assert.equal(bucketSubgraph({ resolution_status: status, resolution_outcome: null }), 'ongoing',
+            `status=${status} with a null outcome should yield ongoing`);
     }
 });
 
-test('PR #28 — subgraph: resolved + missing outcome → refused (fail-closed)', () => {
-    // The fix uses a strict equality `=== 'yes'`, so any non-"yes" outcome
-    // (including null/undefined) buckets to refused. Codifying this so a
-    // future regression that flips it to "approved" surfaces immediately.
-    assert.equal(
-        bucketSubgraph({ resolution_status: 'resolved', resolution_outcome: null }),
-        'refused', 'missing outcome on a resolved proposal must NOT bucket to approved'
-    );
-    assert.equal(
-        bucketSubgraph({ resolution_status: 'resolved' }),
-        'refused'
-    );
+test('PR #28 — subgraph: a recorded outcome resolves the proposal even when the status lags', () => {
+    // Same rule as the `resolved` flag below: the market page already called
+    // these resolved while this page said "Ongoing".
+    for (const status of [null, undefined, 'open', 'pending', 'in_progress']) {
+        assert.equal(bucketSubgraph({ resolution_status: status, resolution_outcome: 'yes' }), 'approved',
+            `status=${status} with outcome yes should yield approved`);
+        assert.equal(bucketSubgraph({ resolution_status: status, resolution_outcome: 'no' }), 'refused',
+            `status=${status} with outcome no should yield refused`);
+    }
+});
+
+test('PR #28 — subgraph: resolved + missing outcome is never approved (fail-closed)', () => {
+    // Only an explicit "yes" buckets to approved, so a future regression that
+    // flips a missing outcome to "approved" surfaces immediately. Without an
+    // outcome there is no side to name: the card reads "Resolved" (the chain
+    // fills the outcome in when it has one) rather than "Refused".
+    for (const meta of [
+        { resolution_status: 'resolved', resolution_outcome: null },
+        { resolution_status: 'resolved' },
+    ]) {
+        assert.notEqual(bucketSubgraph(meta), 'approved',
+            'missing outcome on a resolved proposal must NOT bucket to approved');
+        assert.equal(resolveMarketStatus(meta).state, 'resolved');
+        assert.equal(resolveMarketStatus(meta).labelWithOutcome, 'Resolved');
+    }
+});
+
+test('PR #28 — subgraph: an invalid resolution is neither approved nor refused', () => {
+    const meta = { resolution_status: 'resolved', resolution_outcome: 'invalid' };
+    assert.equal(bucketSubgraph(meta), 'ongoing');
+    assert.equal(resolveMarketStatus(meta).labelWithOutcome, 'Resolved: INVALID');
 });
 
 // ---------------------------------------------------------------------------

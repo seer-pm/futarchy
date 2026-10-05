@@ -160,10 +160,7 @@ const ResolvedEventsCarousel = ({ companyId = "all", limit = 10, aggregatorAddre
               endTime={event.endTime}
               proposalCreationTimestamp={event.endTime} // For closed events, use endTime as proposal time
               status="Done"
-              isResolved={event.isResolved}
-              isClosed={event.isClosed}
-              resolutionOutcome={event.resolutionOutcome}
-              finalOutcome={event.finalOutcome}
+              marketStatus={event.marketStatus}
               impact={event.impact}
               companySymbol={event.companySymbol}
               poolAddresses={event.poolAddresses}

@@ -1,7 +1,7 @@
 import { collectAndFetchPoolPrices, attachPrefetchedPrices } from "../../../../utils/SubgraphBulkPriceFetcher";
 import { fetchProposalsFromAggregator } from "../../../../hooks/useAggregatorProposals";
 import { DEFAULT_AGGREGATOR } from "../../../../config/subgraphEndpoints";
-import { isClosedProposal, isResolvedProposal } from "../../../../utils/proposalLifecycle";
+import { resolveMarketStatus } from "../../../../utils/proposalLifecycle";
 import {
   filterEventsByMinimumLiquidity,
   MIN_ACTIVE_MARKET_LIQUIDITY_USD,
@@ -57,7 +57,7 @@ export const fetchEventHighlightData = async (_companyId = "all", options = {}) 
     // stale/missing resolution metadata, but they should not disappear from the
     // homepage; Recently Closed owns that state.
     const lifecycleActiveEvents = subgraphEvents.filter(p =>
-      !isResolvedProposal(p) && !isClosedProposal(p, nowSeconds)
+      resolveMarketStatus(p, nowSeconds).state === 'active'
     );
 
     // "Active" means economically usable, not merely unresolved. Read real

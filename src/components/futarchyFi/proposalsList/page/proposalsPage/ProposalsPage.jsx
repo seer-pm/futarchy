@@ -19,13 +19,20 @@ import { useChainId } from "wagmi";
 import OrganizationManagerModal from "../../../../debug/OrganizationManagerModal";
 import { SHOW_DATA_DEBUG } from "../../../../../config/featureFlags";
 import { fetchOnChainResolutions, resolutionKey } from "../../../../../utils/onChainResolution";
-import { applyOnChainResolution } from "../../../../../utils/proposalLifecycle";
+import {
+  describeMarketStatus,
+  needsOnChainResolution,
+  resolveMarketStatus,
+} from "../../../../../utils/proposalLifecycle";
 
 const PROPOSAL_IMAGES = {
   "ethereum-budget": "/assets/ethereum-budget-picture.webp",
   "gnosis-pay": "/assets/gnosis-pay.png",
   "protocol-upgrade": "/assets/protocol-update-picture.webp",
 };
+
+// Card colour theme for a resolved outcome; everything else uses "ongoing".
+const APPROVAL_STATUS_BY_OUTCOME = { yes: "approved", no: "refused" };
 
 const DEFAULT_COMPANY_ID = "0x3Fd2e8E71f75eED4b5c507706c413E33e0661bBf"; // Gnosis DAO
 
@@ -183,11 +190,11 @@ const ProposalsPage = ({
                 ? `${p.displayNameQuestion} ${p.displayNameEvent || ''}`
                 : 'Untitled Proposal',
               description: p.description || '',
-              approvalStatus: proposalMeta.resolution_status === 'resolved'
-                ? (proposalMeta.resolution_outcome === 'yes' ? 'approved' : 'refused')
-                : 'ongoing',
+              // Inputs of resolveMarketStatus; marketStatus is derived below,
+              // once the on-chain state is known.
               resolution_status: proposalMeta.resolution_status || null,
               resolution_outcome: proposalMeta.resolution_outcome || null,
+              onChainResolution: null,
               // Visibility: 'public' (default) or 'hidden'. Hidden proposals are
               // filtered from the public list below and shown to the org owner
               // with a "Hidden" badge (mirrors EventHighlightCard's convention).
@@ -217,20 +224,23 @@ const ProposalsPage = ({
 
         // Registry resolution metadata lags the chain (KIP-90 stayed "Ongoing"
         // after it resolved), so read the ConditionalTokens payout state for
-        // whatever it still calls ongoing — batched, two RPC POSTs per chain.
-        const ongoing = transformedProposals.filter((p) => p.approvalStatus === 'ongoing');
-        if (ongoing.length > 0) {
-          const resolutions = await fetchOnChainResolutions(ongoing.map((p) => ({
+        // whatever it doesn't settle — batched, two RPC POSTs per chain.
+        const unsettled = transformedProposals.filter(needsOnChainResolution);
+        if (unsettled.length > 0) {
+          const resolutions = await fetchOnChainResolutions(unsettled.map((p) => ({
             proposalAddress: p.proposalID,
             chainId: p.chainId,
             conditionalTokens: p.metadata?.contractInfos?.conditionalTokens,
           })));
-          for (const p of ongoing) {
+          for (const p of unsettled) {
             const result = resolutions.get(resolutionKey(p.chainId, p.proposalID));
-            if (!result?.resolved) continue;
-            applyOnChainResolution(p, result);
-            p.approvalStatus = p.resolution_outcome === 'yes' ? 'approved' : 'refused';
+            if (result?.resolved) p.onChainResolution = result;
           }
+        }
+
+        for (const p of transformedProposals) {
+          p.marketStatus = resolveMarketStatus(p);
+          p.approvalStatus = APPROVAL_STATUS_BY_OUTCOME[p.marketStatus.outcome] || 'ongoing';
         }
 
         // Sort by total volume (highest first), fallback to timestamp
@@ -261,9 +271,10 @@ const ProposalsPage = ({
   // Update the filter options structure
   const filterOptions = [
     { value: "All", label: "All Milestones", icon: DropdownListIcon },
-    { value: "Active", label: "Active", icon: DropdownOngoingIcon },
-    { value: "Approved", label: "Approved", icon: DropdownCheckIcon },
-    { value: "Refused", label: "Refused", icon: DropdownCancelIcon },
+    { value: "Active", label: describeMarketStatus("active").label, icon: DropdownOngoingIcon },
+    { value: "Awaiting", label: describeMarketStatus("awaiting_resolution").label, icon: DropdownOngoingIcon },
+    { value: "Approved", label: describeMarketStatus("resolved", "yes").labelWithOutcome, icon: DropdownCheckIcon },
+    { value: "Refused", label: describeMarketStatus("resolved", "no").labelWithOutcome, icon: DropdownCancelIcon },
   ];
 
   // Update the filter logic to handle new options and debug mode
@@ -295,11 +306,13 @@ const ProposalsPage = ({
         case "All":
           return true;
         case "Active":
-          return proposal.approvalStatus === "ongoing" || proposal.approvalStatus === "on_going";
+          return proposal.marketStatus?.state === "active";
+        case "Awaiting":
+          return proposal.marketStatus?.state === "awaiting_resolution";
         case "Approved":
-          return proposal.approvalStatus === "approved";
+          return proposal.marketStatus?.outcome === "yes";
         case "Refused":
-          return proposal.approvalStatus === "refused";
+          return proposal.marketStatus?.outcome === "no";
         default:
           return false;
       }
@@ -311,7 +324,7 @@ const ProposalsPage = ({
   const activeProposalsCount = useMemo(() => {
     return proposals.filter((proposal) =>
       isVisibleToViewer(proposal) &&
-      (proposal.approvalStatus === "ongoing" || proposal.approvalStatus === "on_going")
+      proposal.marketStatus?.state === "active"
     ).length;
   }, [proposals, isOwner, debugMode]);
 
