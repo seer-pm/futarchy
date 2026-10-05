@@ -162,7 +162,7 @@ be present where the build runs. Netlify sets them in `netlify.toml`.
 
 ### Testing Approach
 
-- **Unit tier**: Node's built-in `node:test` in `auto-qa/tests/` (775 tests, mostly
+- **Unit tier**: Node's built-in `node:test` in `auto-qa/tests/` (about 770 tests, mostly
   source-pinning and pure-logic specs; no live network). Run `npm run auto-qa:test:unit`.
   Tests read source files by path, so moving or renaming a pinned file needs the test updated.
 - **Live tier**: `npm run auto-qa:test:live` runs `auto-qa/live/` (endpoint liveness,

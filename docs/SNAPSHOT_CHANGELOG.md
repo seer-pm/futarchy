@@ -468,10 +468,10 @@ A: Yes! Works for binary votes (Yes/No), ternary (For/Against/Abstain), or any n
 
 ### Resources
 
-- **Full Documentation**: [docs/SNAPSHOT_INTEGRATION.md](docs/SNAPSHOT_INTEGRATION.md)
-- **Quick Start**: [docs/SNAPSHOT_QUICK_START.md](docs/SNAPSHOT_QUICK_START.md)
+- **Full Documentation**: [docs/SNAPSHOT_INTEGRATION.md](SNAPSHOT_INTEGRATION.md)
+- **Quick Start**: [docs/SNAPSHOT_QUICK_START.md](SNAPSHOT_QUICK_START.md)
 - **Summary**: [SNAPSHOT_SUMMARY.md](SNAPSHOT_SUMMARY.md)
-- **Test Script**: [test-snapshot-api.js](test-snapshot-api.js)
+- **Test Script**: [test-snapshot-api.js](../test-snapshot-api.js)
 - **Snapshot GraphQL**: https://hub.snapshot.org/graphql
 - **Snapshot Website**: https://snapshot.box/
 
