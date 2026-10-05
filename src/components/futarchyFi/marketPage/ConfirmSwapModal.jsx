@@ -21,7 +21,7 @@ import { formatTokenAmount } from '../../../utils/precisionFormatter';
 import { getEthersSigner, getEthersProvider } from '../../../utils/ethersAdapters';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
-import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, describeQuoteError } from '../../../utils/txErrors';
+import { SAFE_TRANSACTION_SENT, isSafeTransactionSent, isUserRejection, describeTxError, assertReceiptSucceeded, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, PRICE_MOVED_WHILE_SIGNING, describeQuoteError } from '../../../utils/txErrors';
 import { minReceiveFromQuote, compareQuotes, slippagePctToBps, slippageBpsForMinimum, executionPriceFor } from '../../../utils/swapQuoteMath';
 import { quoteSeerSwap, executeSeerSwap, getSeerPublicClient, SEER_ROUTE_NAMES, SEER_DEFAULT_SWAP_ROUTER } from '../../../utils/seerSwap';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
@@ -675,16 +675,17 @@ const ConfirmSwapModal = memo(({
         return "An unexpected transaction error occurred. Please try again.";
     };
 
-    // Effect to auto-clear error messages after a delay
+    // Effect to auto-clear error messages after a delay. The reason for a
+    // failed trade stays: clearing it left the dialog on a bare "Trade Failed".
     useEffect(() => {
         let timer;
-        if (error) {
+        if (error && orderStatus !== 'failed') {
             timer = setTimeout(() => {
                 setError(null);
             }, 7000); // Clear error after 7 seconds
         }
         return () => clearTimeout(timer); // Cleanup timer if component unmounts or error changes
-    }, [error]);
+    }, [error, orderStatus]);
 
     // Add fallback precision values
     const DEFAULT_PRECISION = {
@@ -1460,6 +1461,25 @@ const ConfirmSwapModal = memo(({
                 setProcessingStep(null);
                 return;
             }
+            const quotedAt = Date.now();
+            const confirmedMinimum = quotedTrade.minimumAmountOut();
+
+            // The swap is sent after the collateral split and the approval have
+            // been signed and mined, which can outlast the quote's five-minute
+            // deadline. This rebuilds it just before sending, never for less
+            // than the minimum confirmed above.
+            const requoteForSend = async () => {
+                const toleranceBps = slippagePctToBps(getSafeSlippageTolerance());
+                let fresh = await fetchFreshQuote(amountInWei, toleranceBps);
+                if (fresh.minimumAmountOut() < confirmedMinimum) {
+                    const tighterBps = slippageBpsForMinimum(fresh.amountOut, confirmedMinimum, toleranceBps);
+                    fresh = tighterBps === null ? null : await fetchFreshQuote(amountInWei, tighterBps);
+                }
+                if (!fresh || fresh.minimumAmountOut() < confirmedMinimum) {
+                    throw new Error(PRICE_MOVED_WHILE_SIGNING);
+                }
+                return fresh;
+            };
 
             // --- Step 1: Collateral (Remains the same, unrelated to swap method) ---
             const needsCollateral = transactionData.action === 'Buy' ||
@@ -1496,6 +1516,8 @@ const ConfirmSwapModal = memo(({
                 connector,
                 isSafe: isSafeConnection(walletClient),
                 useUnlimitedApproval,
+                requote: requoteForSend,
+                quotedAt,
                 onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
                 onApprovalComplete: () => {
                     markSubstepCompleted(2, 1);
@@ -1569,7 +1591,9 @@ const ConfirmSwapModal = memo(({
                 }
             }
 
-            let errorMessage = formatTransactionError({ ...error, message: detailedError }, transactionResultHash);
+            let errorMessage = error.message === PRICE_MOVED_WHILE_SIGNING
+                ? PRICE_MOVED_WHILE_SIGNING
+                : formatTransactionError({ ...error, message: detailedError }, transactionResultHash);
             // Mined but reverted (a CALL_EXCEPTION carrying its receipt): with no
             // revert reason, the usual cause is a price move past the tolerance
             if (error?.receipt && detailedError === error.message) {
@@ -1577,7 +1601,9 @@ const ConfirmSwapModal = memo(({
             }
             setError(errorMessage);
             setOrderStatus('failed'); // Set failed status
-            setTransactionResultHash(null);
+            // A swap that was mined and reverted keeps its hash, so the failed
+            // panel can link to it.
+            if (!error?.receipt) setTransactionResultHash(null);
             setIsProcessing(false); // Unlock UI on failure
             setProcessingStep(null); // Reset step visualization
             setCurrentSubstep({ step: 1, substep: 1 });
