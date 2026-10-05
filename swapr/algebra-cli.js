@@ -32,13 +32,17 @@ const GAS_CONFIG = {
   // Show detailed gas price logs for each transaction
   showGasPriceLog: true,
   
-  // Gas limits for different operations
+  // Gas limits for different operations.
+  // A transaction reserves its whole limit in a block. Gnosis blocks hold 17M
+  // gas, so the old 15M-16M limits only fitted an almost empty block and the
+  // transaction sat pending whenever the chain was busy. These leave room over
+  // the measured use (create pool 6.8M, mint 0.66M, split 0.39M).
   GAS_LIMITS: {
     SWAP: 350000,
-    MINT_POSITION: 15000000,
-    CREATE_POOL: 16000000,  // Set to 16M (under network limit of ~17M)
+    MINT_POSITION: 2000000,
+    CREATE_POOL: 9000000,
     APPROVAL: 100000,
-    SPLIT_TOKENS: 15000000,
+    SPLIT_TOKENS: 1500000,
     CREATE_PROPOSAL: 5000000,  // Increased from 2M to 5M for complex proposal creation
     COLLECT: 500000,          // New: For collect operations (increased from default 100k)
     DECREASE_LIQUIDITY: 500000, // New: For decrease liquidity operations
