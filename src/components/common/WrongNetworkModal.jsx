@@ -164,7 +164,7 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative w-full max-w-[393px] md:max-w-[480px]">
-        <div className="relative flex flex-col w-full bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-2xl p-5 md:p-6 gap-6">
+        <div className="relative flex flex-col w-full max-h-[calc(100dvh-3rem)] overflow-y-auto bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-2xl p-5 md:p-6 gap-6">
           <div className="flex items-start gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-futarchyCrimson3 text-futarchyCrimson11">
               <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">

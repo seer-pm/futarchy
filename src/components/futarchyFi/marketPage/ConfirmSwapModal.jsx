@@ -1813,20 +1813,20 @@ const ConfirmSwapModal = memo(({
     const modalContent = (
         <>
             <motion.div // This is the backdrop
-                className="fixed inset-0 bg-black/50 z-[99999] overflow-y-auto"
+                className="fixed inset-0 bg-black/50 z-[99999]"
                 onClick={onClose}
                 variants={backdropVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
             >
-                <div className="flex min-h-full items-center justify-center p-4">
+                <div className="flex h-full items-center justify-center p-4">
                     <div // This is the modal content panel
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative my-8"
+                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[calc(100dvh-2rem)]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* All original modal content starts here */}
-                        <div className="flex justify-between items-center p-4 border-b border-futarchyGray6 dark:border-futarchyDarkGray6">
+                        <div className="flex shrink-0 justify-between items-center p-4 border-b border-futarchyGray6 dark:border-futarchyDarkGray6">
                             <h2 className="text-xl font-semibold text-futarchyGray12 dark:text-futarchyGray3">
                                 {transactionData.action === 'Redeem'
                                     ? 'Confirm Redeem'
@@ -1842,6 +1842,8 @@ const ConfirmSwapModal = memo(({
                             </button>
                         </div>
 
+                        {/* Scrolls inside the dialog; the page behind never has to */}
+                        <div className="flex-1 min-h-0 overflow-y-auto">
                         {/* SWAP ROUTE */}
                         <div className="p-4">
                             <span className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-1">Swap Route:</span>
@@ -2538,8 +2540,10 @@ const ConfirmSwapModal = memo(({
                             </div>
                         )}
 
+                        </div>
+
                         {/* Main Action Button */}
-                        <div className="px-4 flex items-center justify-center">
+                        <div className="shrink-0 px-4 pt-3 flex items-center justify-center border-t border-futarchyGray6 dark:border-futarchyDarkGray6">
                             {/* Show ConnectButton if wallet not connected */}
                             {!account ? (
                                 <div className="w-full mb-4">
