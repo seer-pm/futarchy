@@ -16,7 +16,7 @@ import WrongNetworkModal from '../../common/WrongNetworkModal';
 import useLatestPrices from '../../../hooks/useLatestPrices';
 import { useCurrency, useUpdateCurrencyFromConfig } from '../../../contexts/CurrencyContext';
 import { useSdaiRate } from '../../../hooks/useSdaiRate';
-import { PendingOrderToast, ProcessingToast, SafeTransactionToast } from './showcase/toasts';
+import { ProcessingToast, SafeTransactionToast } from './showcase/toasts';
 import { YourViewCard } from './showcase/YourViewCard';
 import { PROPOSALS_USING_SUBGRAPH_TRADES, useMarketPageParams } from './showcase/useMarketPageParams';
 import { useHeroCollapse } from './showcase/useHeroCollapse';
@@ -31,7 +31,6 @@ import { useCollateralFlow } from './showcase/useCollateralFlow';
 import { useMarketData } from './showcase/useMarketData';
 import { useConfirmSwapState } from './showcase/useConfirmSwapState';
 import { useMarketTiming } from './showcase/useMarketTiming';
-import { usePendingCowOrders } from './showcase/usePendingCowOrders';
 import { MarketHero } from './showcase/MarketHero';
 import { MarketChartSection } from './showcase/MarketChartSection';
 import { MarketTabsSection } from './showcase/MarketTabsSection';
@@ -226,21 +225,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   }, [latestPrices]);
 
   const timing = useMarketTiming(config);
-  const { pendingOrderCount } = usePendingCowOrders(address, isConnected);
-
-  // <-- Add state for the new modal -->
-  const [isSwapNativeModalOpen, setIsSwapNativeModalOpen] = useState(false);
-
-  // <-- Add functions to control the new modal -->
-  const openSwapNativeModal = () => {
-    setIsSwapNativeModalOpen(true);
-  };
-
-  const closeSwapNativeModal = () => {
-    setIsSwapNativeModalOpen(false);
-    // Optional: Refresh balances after closing the swap modal
-    refetchBalances();
-  };
 
   const rate = { sdaiRate, isLoadingRate, rateError };
   const badgeModals = {
@@ -368,7 +352,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         {/* Balance Stats Container */}
                         <MarketBalancePanel
                           positions={positions}
-                          openSwapNativeModal={openSwapNativeModal}
                           address={address}
                           handleOpenCollateralModal={handleOpenCollateralModal}
                           isLoadingPositions={isLoadingPositions}
@@ -400,8 +383,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             collateral={collateral}
             confirmSwap={confirmSwap}
             badgeModals={badgeModals}
-            isSwapNativeModalOpen={isSwapNativeModalOpen}
-            closeSwapNativeModal={closeSwapNativeModal}
             isDebugMode={isDebugMode}
             handleSafeTransaction={handleSafeTransaction}
             address={address}
@@ -420,11 +401,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             positions={positions}
             config={config}
           />
-
-          {/* ---> Add Pending Order Toast Rendering <--- */}
-          <PendingOrderToast count={pendingOrderCount} userAddress={address} />
-          {/* Ensure this is rendered outside conditional blocks if needed,
-              or adjust placement based on desired stacking context */}
 
           {safeToastVisible && (
             <SafeTransactionToast onClose={() => setSafeToastVisible(false)} />

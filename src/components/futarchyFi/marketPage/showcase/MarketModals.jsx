@@ -14,7 +14,6 @@ const ConfirmSwapModal = dynamic(() => import('../ConfirmSwapModal'), { ssr: fal
 const CollateralModal = dynamic(() => import("../collateralModal/CollateralModal"), { ssr: false });
 
 // Opens only from the native-swap action — load it on demand.
-const SwapNativeToCurrencyModal = dynamic(() => import("../SwapNativeToCurrencyModal"), { ssr: false });
 
 // Debug-only editor, opened from the proposal menu — load it on demand.
 const EditProposalModal = dynamic(() => import('../../../debug/EditProposalModal'), { ssr: false });
@@ -23,8 +22,6 @@ const MarketModals = ({
   collateral,
   confirmSwap,
   badgeModals,
-  isSwapNativeModalOpen,
-  closeSwapNativeModal,
   isDebugMode,
   handleSafeTransaction,
   address,
@@ -150,15 +147,6 @@ const MarketModals = ({
         )}
       </AnimatePresence>
 
-      {/* <-- Render the new SwapNativeToCurrencyModal --> */}
-      <AnimatePresence>
-        {isSwapNativeModalOpen && (
-          <SwapNativeToCurrencyModal
-            isOpen={isSwapNativeModalOpen}
-            onClose={closeSwapNativeModal}
-          />
-        )}
-      </AnimatePresence>
       {isPredictionMarketModalOpen && (
         <PredictionMarketModal
           isOpen={isPredictionMarketModalOpen}

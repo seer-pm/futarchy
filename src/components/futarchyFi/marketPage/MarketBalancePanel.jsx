@@ -266,7 +266,6 @@ const LoadingState = () => (
 
 const MarketBalancePanel = ({
   positions,
-  openSwapNativeModal,
   address,
   handleOpenCollateralModal,
   isLoadingPositions = false,
