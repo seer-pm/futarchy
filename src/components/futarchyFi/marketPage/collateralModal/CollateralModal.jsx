@@ -1170,7 +1170,7 @@ const CollateralModal = ({
         const marketAddress = config?.MARKET_ADDRESS || MARKET_ADDRESS;
 
         // Initialize Cartridge
-        const cartridge = new FutarchyCartridge(routerAddress);
+        const cartridge = new FutarchyCartridge(routerAddress, { isSafeConnection });
 
         if (action === "add") {
           // --- SDK SPLIT (ADD) ---

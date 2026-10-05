@@ -109,12 +109,15 @@ export const quoteSeerSwap = async ({ chainId, account, tokenIn, tokenOut, amoun
  * Returns the swap's transaction hash (a safeTxHash from a Safe).
  * A Safe that queues the approval throws SAFE_TRANSACTION_SENT, like the
  * other approval helpers, so the caller shows it as sent rather than failed.
+ * Pass `isSafe` from useSafeConnection(): a Safe connected over WalletConnect
+ * cannot be told from the wallet client and connector alone.
  */
 export const executeSeerSwap = async ({
     trade,
     account,
     walletClient,
     connector,
+    isSafe = isSafeWallet(walletClient, connector),
     useUnlimitedApproval = false,
     onApprovalNeeded,
     onApprovalComplete,
@@ -134,7 +137,7 @@ export const executeSeerSwap = async ({
             account,
             chain: walletClient.chain,
         });
-        if (isSafeWallet(walletClient, connector)) throw new Error(SAFE_TRANSACTION_SENT);
+        if (isSafe) throw new Error(SAFE_TRANSACTION_SENT);
         const receipt = await client.waitForTransactionReceipt({ hash: approveHash });
         assertReceiptSucceeded(receipt, approveHash);
     }

@@ -178,6 +178,10 @@ export class FutarchyCartridge {
         this.swapMode = options.swapMode || 'swapr'; // 'swapr' | 'uniswap'
         this.swapRouter = options.swapRouter || null; // for v3 or UR address for v4
         this.swapConfig = options.swapConfig || null; // full config (e.g., { universalRouter, permit2, quoterV4 })
+        // (walletClient) => boolean. The app passes useSafeConnection()'s check,
+        // which also recognises a Safe connected over WalletConnect; that is only
+        // visible in the session's peer metadata, not on the wallet client.
+        this.isSafeConnection = options.isSafeConnection || isSafeWallet;
 
         // Define operations this cartridge provides
         this.operations = {
@@ -267,7 +271,7 @@ export class FutarchyCartridge {
         };
 
         let receipt;
-        if (isSafeWallet(walletClient)) {
+        if (this.isSafeConnection(walletClient)) {
             if (!useBlockExplorer) {
                 throw new Error("SAFE_TRANSACTION_SENT");
             } else {
@@ -327,7 +331,7 @@ export class FutarchyCartridge {
         };
 
         let receipt;
-        if (isSafeWallet(walletClient)) {
+        if (this.isSafeConnection(walletClient)) {
             if (!useBlockExplorer) {
                 throw new Error("SAFE_TRANSACTION_SENT");
             } else {
@@ -387,7 +391,7 @@ export class FutarchyCartridge {
         };
 
         let receipt;
-        if (isSafeWallet(walletClient)) {
+        if (this.isSafeConnection(walletClient)) {
             if (!useBlockExplorer) {
                 throw new Error("SAFE_TRANSACTION_SENT");
             } else {
@@ -448,7 +452,7 @@ export class FutarchyCartridge {
         };
 
         let receipt;
-        if (isSafeWallet(walletClient)) {
+        if (this.isSafeConnection(walletClient)) {
             if (!useBlockExplorer) {
                 throw new Error("SAFE_TRANSACTION_SENT");
             } else {
@@ -556,7 +560,7 @@ export class FutarchyCartridge {
         };
 
         let receipt;
-        if (isSafeWallet(walletClient)) {
+        if (this.isSafeConnection(walletClient)) {
             if (!useBlockExplorer) {
                 throw new Error("SAFE_TRANSACTION_SENT");
             } else {
@@ -1406,7 +1410,7 @@ export class FutarchyCartridge {
             };
 
             let receipt;
-            if (isSafeWallet(walletClient)) {
+            if (this.isSafeConnection(walletClient)) {
                 if (!useBlockExplorer) {
                     throw new Error("SAFE_TRANSACTION_SENT");
                 }

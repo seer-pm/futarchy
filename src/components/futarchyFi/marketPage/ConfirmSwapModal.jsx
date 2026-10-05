@@ -1494,6 +1494,7 @@ const ConfirmSwapModal = memo(({
                 account,
                 walletClient,
                 connector,
+                isSafe: isSafeConnection(walletClient),
                 useUnlimitedApproval,
                 onApprovalNeeded: () => setCurrentSubstep({ step: 2, substep: 1 }),
                 onApprovalComplete: () => {
