@@ -50,9 +50,10 @@ const useBalanceManager = (config, address, isConnected) => {
     return {
       BASE_TOKENS_CONFIG: config.BASE_TOKENS_CONFIG,
       MERGE_CONFIG: config.MERGE_CONFIG,
-      CONDITIONAL_TOKENS_ADDRESS: config.CONDITIONAL_TOKENS_ADDRESS
+      CONDITIONAL_TOKENS_ADDRESS: config.CONDITIONAL_TOKENS_ADDRESS,
+      MARKET_ADDRESS: config.MARKET_ADDRESS
     };
-  }, [config?.BASE_TOKENS_CONFIG, config?.MERGE_CONFIG, config?.CONDITIONAL_TOKENS_ADDRESS]);
+  }, [config?.BASE_TOKENS_CONFIG, config?.MERGE_CONFIG, config?.CONDITIONAL_TOKENS_ADDRESS, config?.MARKET_ADDRESS]);
 
   // IMPORTANT: Use null for initial state, NOT '0'
   // null = "not loaded yet" -> shows loading spinner

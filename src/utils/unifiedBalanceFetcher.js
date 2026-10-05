@@ -14,6 +14,7 @@
  */
 
 import { ethers } from 'ethers';
+import { fetchPositionIds } from './positionIds';
 import { getBestRpcProvider } from './getBestRpc';
 import { readOrNull } from './balanceReadState';
 
@@ -100,23 +101,6 @@ function formatBalanceSafely(balance) {
 }
 
 /**
- * Helper to calculate total (unwrapped + wrapped).
- * Unknown if either part failed to load.
- */
-function calculateTotal(unwrapped, wrapped) {
-  if (unwrapped === null || wrapped === null) return null;
-  try {
-    const unwrappedBN = ethers.utils.parseUnits(unwrapped || '0', 18);
-    const wrappedBN = ethers.utils.parseUnits(wrapped || '0', 18);
-    const totalBN = unwrappedBN.add(wrappedBN);
-    return ethers.utils.formatUnits(totalBN, 18);
-  } catch (error) {
-    console.error('[UNIFIED-BALANCE] Error calculating total:', error);
-    return '0';
-  }
-}
-
-/**
  * Safe contract call wrapper with error handling.
  * Resolves to null (never 0) on failure and records the read in `failed`.
  */
@@ -141,6 +125,7 @@ async function safeContractCall(contractCall, description, failed) {
  * Fetch all balances and positions for a user
  *
  * @param {Object} config - Contract configuration with BASE_TOKENS_CONFIG, MERGE_CONFIG, CONDITIONAL_TOKENS_ADDRESS
+ *   and MARKET_ADDRESS (the proposal; needed to find its ERC1155 position ids)
  * @param {string} address - User wallet address
  * @param {number} chainId - Chain ID (1 for Ethereum, 100 for Gnosis)
  * @returns {Promise<Object>} Object containing all balances and positions.
@@ -158,7 +143,7 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
     throw new Error('Config and address are required');
   }
 
-  const { BASE_TOKENS_CONFIG, MERGE_CONFIG, CONDITIONAL_TOKENS_ADDRESS } = config;
+  const { BASE_TOKENS_CONFIG, MERGE_CONFIG, CONDITIONAL_TOKENS_ADDRESS, MARKET_ADDRESS } = config;
 
   if (!BASE_TOKENS_CONFIG || !MERGE_CONFIG || !CONDITIONAL_TOKENS_ADDRESS) {
     throw new Error('Invalid config: missing required fields');
@@ -224,19 +209,17 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
     provider
   );
 
-  // Position IDs for batch query
-  const positionIds = [
-    MERGE_CONFIG.currencyPositions.yes.positionId,
-    MERGE_CONFIG.currencyPositions.no.positionId,
-    MERGE_CONFIG.companyPositions.yes.positionId,
-    MERGE_CONFIG.companyPositions.no.positionId
-  ];
-
-  console.log('[UNIFIED-BALANCE] 📋 Position IDs:', positionIds);
-
   // Fetch all balances in parallel
   console.log('[UNIFIED-BALANCE] 🔄 Fetching all balances in parallel...');
   const failedReads = [];
+
+  // Position IDs for batch query, derived from the proposal: each market has
+  // its own. If they cannot be read, the unwrapped balances are unknown (null).
+  const readPositionIds = async () => {
+    if (!MARKET_ADDRESS) throw new Error('No market address to derive position ids from');
+    const ids = await fetchPositionIds({ provider, chainId, proposal: MARKET_ADDRESS, conditionalTokens: CONDITIONAL_TOKENS_ADDRESS });
+    return [ids.currencyYes, ids.currencyNo, ids.companyYes, ids.companyNo];
+  };
 
   const [
     // Base tokens
@@ -266,10 +249,10 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
 
     // ERC1155 positions (batch query)
     safeContractCall(
-      () => conditionalTokensContract.balanceOfBatch(
+      () => readPositionIds().then((positionIds) => conditionalTokensContract.balanceOfBatch(
         Array(positionIds.length).fill(address),
         positionIds
-      ),
+      )),
       `ERC1155 position balances`,
       failedReads
     ).then(result => Array.isArray(result) ? result : [null, null, null, null])
@@ -303,23 +286,13 @@ export async function fetchAllBalancesAndPositions(config, address, chainId = 10
     wrappedCompanyNo: formatBalanceSafely(wrappedCompanyNoBalance)
   };
 
-  // Calculate totals
-  formattedBalances.totalCurrencyYes = calculateTotal(
-    formattedBalances.currencyYes,
-    formattedBalances.wrappedCurrencyYes
-  );
-  formattedBalances.totalCurrencyNo = calculateTotal(
-    formattedBalances.currencyNo,
-    formattedBalances.wrappedCurrencyNo
-  );
-  formattedBalances.totalCompanyYes = calculateTotal(
-    formattedBalances.companyYes,
-    formattedBalances.wrappedCompanyYes
-  );
-  formattedBalances.totalCompanyNo = calculateTotal(
-    formattedBalances.companyNo,
-    formattedBalances.wrappedCompanyNo
-  );
+  // The amounts every panel treats as available. Only wrapped tokens can be
+  // traded, merged or redeemed through the router, so unwrapped ERC1155
+  // balances are reported above but not counted here.
+  formattedBalances.totalCurrencyYes = formattedBalances.wrappedCurrencyYes;
+  formattedBalances.totalCurrencyNo = formattedBalances.wrappedCurrencyNo;
+  formattedBalances.totalCompanyYes = formattedBalances.wrappedCompanyYes;
+  formattedBalances.totalCompanyNo = formattedBalances.wrappedCompanyNo;
 
   console.log('[UNIFIED-BALANCE] ✅ Balance fetch finished:', formattedBalances);
 

@@ -358,7 +358,6 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
           MERGE_CONFIG: {
             currencyPositions: {
               yes: {
-                positionId: '0x0da8ddb6e1511c1b897fa0fdabac151efbe8a6a1cee0d042035a10bd8ca50566',
                 wrap: {
                   tokenName: metadata.currencyTokens?.yes?.tokenName || 'YES_sDAI',
                   tokenSymbol: metadata.currencyTokens?.yes?.tokenSymbol || 'YES_sDAI',
@@ -366,7 +365,6 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
                 }
               },
               no: {
-                positionId: '0xc493e87c029b70d6dd6a58ea51d2bb5e7c5e19a61833547e3f3876242665b501',
                 wrap: {
                   tokenName: metadata.currencyTokens?.no?.tokenName || 'NO_sDAI',
                   tokenSymbol: metadata.currencyTokens?.no?.tokenSymbol || 'NO_sDAI',
@@ -376,7 +374,6 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
             },
             companyPositions: {
               yes: {
-                positionId: '0x15883231add67852d8d5ae24898ec21779cc1a99897a520f12ba52021266e218',
                 wrap: {
                   tokenName: metadata.companyTokens?.yes?.tokenName || 'YES_GNO',
                   tokenSymbol: metadata.companyTokens?.yes?.tokenSymbol || 'YES_GNO',
@@ -384,7 +381,6 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
                 }
               },
               no: {
-                positionId: '0x50b02574e86d37993b7a6ebd52414f9deea42ecfe9c3f1e8556a6d91ead41cc7',
                 wrap: {
                   tokenName: metadata.companyTokens?.no?.tokenName || 'NO_GNO',
                   tokenSymbol: metadata.companyTokens?.no?.tokenSymbol || 'NO_GNO',
