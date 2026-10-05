@@ -307,6 +307,15 @@ const MarketBalancePanel = ({
     parseFloat(positions?.companyNo?.total || 0)
   ).toString();
 
+  // Outcome positions held unwrapped (ERC1155). They cannot be traded or
+  // merged here, so they are listed apart from the balances above.
+  const unwrappedHoldings = [
+    [positions?.currencyYes?.unwrapped, `YES ${getCurrencySymbol()}`],
+    [positions?.currencyNo?.unwrapped, `NO ${getCurrencySymbol()}`],
+    [positions?.companyYes?.unwrapped, `YES ${getCompanySymbol()}`],
+    [positions?.companyNo?.unwrapped, `NO ${getCompanySymbol()}`],
+  ].filter(([amount]) => parseFloat(amount) > 0);
+
   return (
     <div className="flex flex-col bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
       {/* Balance Header with Collateral Dropdown */}
@@ -401,6 +410,12 @@ const MarketBalancePanel = ({
               )}
             </div>
           </>
+        )}
+        {address && unwrappedHoldings.length > 0 && (
+          <p className="mt-3 text-xs text-futarchyGray11 dark:text-white/70">
+            Held unwrapped, not counted above and not tradable here:{' '}
+            {unwrappedHoldings.map(([amount, label]) => `${formatBalance(amount, '')} ${label}`).join(', ')}
+          </p>
         )}
       </div>
     </div>

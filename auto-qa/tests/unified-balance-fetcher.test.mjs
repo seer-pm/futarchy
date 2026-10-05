@@ -14,8 +14,8 @@
  *      to null, never '0': a zero balance on an RPC hiccup looks like
  *      the user's funds are gone. NEVER throws.
  *
- *   3. calculateTotal — BigNumber.add of unwrapped + wrapped, formatted
- *      back to ether. null (unknown) if either part failed to load.
+ *   3. Totals — the amount the panels treat as available is the wrapped
+ *      balance only; unwrapped ERC1155 balances are reported apart.
  *
  *   4. safeContractCall — wraps every contract call via readOrNull; on
  *      error resolves to null (NOT throw, NOT 0) and records the read in
@@ -58,18 +58,6 @@ function formatBalanceSafelyMirror(balance, formatEther) {
         return formatted === 'NaN' ? null : formatted;
     } catch {
         return null;
-    }
-}
-
-// --- spec mirror of calculateTotal (BigInt-safe to test without ethers) ---
-function calculateTotalMirror(unwrapped, wrapped) {
-    if (unwrapped === null || wrapped === null) return null;
-    try {
-        const u = BigInt(unwrapped || '0');
-        const w = BigInt(wrapped || '0');
-        return (u + w).toString();
-    } catch {
-        return '0';
     }
 }
 
@@ -199,40 +187,20 @@ test('source — formatBalanceSafely guards on null + "NaN" string (BOTH paths)'
 });
 
 // ---------------------------------------------------------------------------
-// calculateTotal — sum unwrapped + wrapped
+// Totals — wrapped only
 // ---------------------------------------------------------------------------
 
-test('calculateTotal spec mirror — sums unwrapped + wrapped', () => {
-    assert.equal(calculateTotalMirror('100', '50'), '150');
-});
-
-test('calculateTotal spec mirror — a failed part (null) makes the total unknown', () => {
-    assert.equal(calculateTotalMirror(null, '50'), null);
-    assert.equal(calculateTotalMirror('100', null), null);
-});
-
-test('calculateTotal spec mirror — empty/undefined inputs treated as 0', () => {
-    assert.equal(calculateTotalMirror('', ''), '0');
-    assert.equal(calculateTotalMirror(undefined, undefined), '0');
-});
-
-test('calculateTotal spec mirror — invalid input returns "0" (try/catch)', () => {
-    // BigInt('not a number') throws; the catch returns '0'.
-    assert.equal(calculateTotalMirror('not a number', '0'), '0');
-});
-
-test('source — calculateTotal uses parseUnits/formatUnits with 18 decimals (ether scale)', () => {
-    // Pinned: 18 decimals is the canonical ether scale. Drift would
-    // silently over/under-count by orders of magnitude.
-    assert.match(SRC,
-        /parseUnits\(unwrapped\s*\|\|\s*['"]0['"],\s*18\)/,
-        `calculateTotal unwrapped parseUnits decimal drifted from 18`);
-    assert.match(SRC,
-        /parseUnits\(wrapped\s*\|\|\s*['"]0['"],\s*18\)/,
-        `calculateTotal wrapped parseUnits decimal drifted from 18`);
-    assert.match(SRC,
-        /formatUnits\(totalBN,\s*18\)/,
-        `calculateTotal formatUnits decimal drifted from 18`);
+test('source — totals are the wrapped balances (unwrapped positions are not spendable)', () => {
+    // Pinned: every panel reads total* as "available to trade, merge or
+    // redeem", and the router only moves wrapped tokens. Adding the
+    // unwrapped ERC1155 balance back in would let a trade be sized against
+    // tokens it cannot use.
+    for (const key of ['CurrencyYes', 'CurrencyNo', 'CompanyYes', 'CompanyNo']) {
+        assert.ok(
+            SRC.includes(`formattedBalances.total${key} = formattedBalances.wrapped${key};`),
+            `total${key} must be the wrapped balance`);
+    }
+    assert.doesNotMatch(SRC, /calculateTotal/);
 });
 
 // ---------------------------------------------------------------------------
@@ -319,14 +287,26 @@ test('source — both exports default chainId to 100 (Gnosis)', () => {
 // Position IDs batched as 4-tuple (currencyYes/No, companyYes/No)
 // ---------------------------------------------------------------------------
 
-test('source — positionIds batch is 4-tuple in canonical order: currencyYes, currencyNo, companyYes, companyNo', () => {
+test('source — positionIds come from the proposal, in canonical order: currencyYes, currencyNo, companyYes, companyNo', () => {
     // Pinned: the destructure later (positionBalances[0..3]) maps
     // back to currencyYes/currencyNo/companyYes/companyNo in this exact
     // order. A regression that re-orders the IDs silently swaps the
     // displayed balances.
     assert.match(SRC,
-        /positionIds\s*=\s*\[\s*MERGE_CONFIG\.currencyPositions\.yes\.positionId,\s*MERGE_CONFIG\.currencyPositions\.no\.positionId,\s*MERGE_CONFIG\.companyPositions\.yes\.positionId,\s*MERGE_CONFIG\.companyPositions\.no\.positionId\s*\]/,
+        /return\s*\[\s*ids\.currencyYes,\s*ids\.currencyNo,\s*ids\.companyYes,\s*ids\.companyNo\s*\]/,
         `positionIds order drifted from [currencyYes, currencyNo, companyYes, companyNo]`);
+    // Each market has its own ids: they are derived from MARKET_ADDRESS,
+    // never read from constants in the config.
+    assert.match(SRC,
+        /fetchPositionIds\(\{\s*provider,\s*chainId,\s*proposal:\s*MARKET_ADDRESS,\s*conditionalTokens:\s*CONDITIONAL_TOKENS_ADDRESS\s*\}\)/);
+    assert.doesNotMatch(SRC, /\.positionId\b/);
+});
+
+test('config — no hardcoded position ids', () => {
+    for (const file of ['src/hooks/useContractConfig.js', 'src/components/futarchyFi/marketPage/constants/contracts.js']) {
+        const text = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
+        assert.doesNotMatch(text, /positionId:/, `${file} must not carry position ids`);
+    }
 });
 
 test('source — positionBalances destructured in same order as positionIds (mapping invariant)', () => {
