@@ -40,7 +40,6 @@ import { quoteSeerSwap } from '../../../utils/seerSwap';
 import { formatUnits } from 'viem';
 
 // Opens only from the native-swap action — load it on demand.
-const SwapNativeToCurrencyModal = dynamic(() => import("./SwapNativeToCurrencyModal"), { ssr: false });
 
 // Opens only on user action, and it is one of the heaviest components in
 // the market bundle — load it on demand.
@@ -121,7 +120,6 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
   const [selectedAction, setSelectedAction] = useState('Buy'); // 'Buy' or 'Sell'
   const { selectedCurrency } = useCurrency();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [isNativeSwapModalOpen, setIsNativeSwapModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(null);
   const [currentSubstep, setCurrentSubstep] = useState({ step: 1, substep: 0 });
@@ -719,89 +717,79 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
       return;
     }
 
-    if (selectedCurrency === 'WXDAI' && !redirectToCOW) {
-      // Original behavior: Open native swap modal
-      console.log("Opening WXDAI -> SDAI native swap modal with amount:", amount);
-      setConfirmModalData(null);
-      setIsNativeSwapModalOpen(true);
-      setIsConfirmModalOpen(false);
-    } else {
-      // Direct to ConfirmSwapModal (for SDAI mode or WXDAI with redirectToCOW)
-      console.log("Preparing data for direct ConfirmSwapModal opening");
+    console.log("Preparing data for direct ConfirmSwapModal opening");
 
-      // Calculate expected receive amount based on current price
-      // Use the new Algebra pool prices for accurate calculation
-      let expectedReceiveAmount = '0';
-      let receiveToken = '';
-      const inputAmount = parseFloat(amount);
+    // Calculate expected receive amount based on current price
+    // Use the new Algebra pool prices for accurate calculation
+    let expectedReceiveAmount = '0';
+    let receiveToken = '';
+    const inputAmount = parseFloat(amount);
 
 
-      // Use the appropriate price based on the selected outcome
-      const currentPrice = selectedOutcome === 'approved' ? prices?.yesPrice : prices?.noPrice;
+    // Use the appropriate price based on the selected outcome
+    const currentPrice = selectedOutcome === 'approved' ? prices?.yesPrice : prices?.noPrice;
 
-      // If we have a valid quote preview from the new helper, use it!
-      if (USING_FUTARCHY_QUOTER && quoterPreview?.amountOut && !quoterPreview.error) {
-        console.log('[Confirm] Using cached quote from FutarchyQuoteHelper');
-        expectedReceiveAmount = quoterPreview.amountOut;
+    // If we have a valid quote preview from the new helper, use it!
+    if (USING_FUTARCHY_QUOTER && quoterPreview?.amountOut && !quoterPreview.error) {
+      console.log('[Confirm] Using cached quote from FutarchyQuoteHelper');
+      expectedReceiveAmount = quoterPreview.amountOut;
 
-        if (selectedAction === 'Buy') {
-          receiveToken = (selectedOutcome === 'approved' ? 'YES_' : 'NO_') + getCompanySymbol();
-        } else {
-          receiveToken = getCurrencySymbol();
-        }
-      } else if (chainId !== 1 && chainId !== 100 && currentPrice && currentPrice > 0) {
-        // Fallback to legacy calc — spot price estimate with conservative fee deduction
-        const APPROX_POOL_FEE = 0.01; // 1% conservative estimate for pool fees
-        if (selectedAction === 'Buy') {
-          // Buying company token with currency
-          const rawExpected = (inputAmount / currentPrice) * (1 - APPROX_POOL_FEE);
-          expectedReceiveAmount = formatWith(rawExpected, 'balance');
-          receiveToken = (selectedOutcome === 'approved' ? 'YES_' : 'NO_') + getCompanySymbol();
-        } else {
-          // Selling company token for currency
-          const rawExpected = (inputAmount * currentPrice) * (1 - APPROX_POOL_FEE);
-          expectedReceiveAmount = formatWith(rawExpected, 'balance');
-          receiveToken = getCurrencySymbol();
-        }
+      if (selectedAction === 'Buy') {
+        receiveToken = (selectedOutcome === 'approved' ? 'YES_' : 'NO_') + getCompanySymbol();
+      } else {
+        receiveToken = getCurrencySymbol();
       }
-      console.log("[SHOWCASE] Confirm Data:", {
-        USING_FUTARCHY_QUOTER,
-        quoterPreview,
-        priceAfter: quoterPreview?.priceAfter,
-      });
-
-      const directConfirmData = {
-        outcome: selectedOutcome === 'approved' ? 'Event Will Occur' : 'Event Won\'t Occur',
-        amount: selectedAction === 'Sell'
-          ? `${amount} ${getCompanySymbol()}`
-          : `${amount} ${getCurrencySymbol()}`,
-        action: selectedAction, // This correctly passes 'Buy' or 'Sell'
-        timestamp: new Date().toISOString(),
-        expectedReceiveAmount,
-        receiveToken,
-        inputAmountRaw: amount,
-        amountInRaw: amountRawWei, // Raw wei value to avoid precision loss (null if user typed manually)
-        selectedOutcome,
-        // Pass detailed quote data if available
-        priceAfter: (USING_FUTARCHY_QUOTER && quoterPreview?.priceAfter) ? quoterPreview.priceAfter : null,
-        minimumReceived: (USING_FUTARCHY_QUOTER && quoterPreview?.minimumReceived) ? quoterPreview.minimumReceived : null,
-        amountOutRaw: (USING_FUTARCHY_QUOTER && quoterPreview?.amountOutRaw) ? quoterPreview.amountOutRaw : null,
-        // Price impact of this trade, already included in the quoted output
-        priceImpact: quoterPreview?.priceImpactPct ?? null,
-
-        currentPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice) ? quoterPreview.currentPrice : null,
-        executionPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.executionPrice) ? quoterPreview.executionPrice : null,
-        isApproximate: !(USING_FUTARCHY_QUOTER && quoterPreview?.amountOut && !quoterPreview.error),
-        insufficientLiquidity: quoterPreview?.insufficientLiquidity || false,
-        outputDecimals: quoterPreview?.decimalsOut || 18,
-        swapSpender: quoterPreview?.swapSpender,
-        tradeAnywayAcknowledged,
-      };
-      console.log("Opening ConfirmSwapModal directly with data:", directConfirmData);
-      setConfirmModalData(directConfirmData);
-      setIsConfirmModalOpen(true);
-      setIsNativeSwapModalOpen(false);
+    } else if (chainId !== 1 && chainId !== 100 && currentPrice && currentPrice > 0) {
+      // Fallback to legacy calc — spot price estimate with conservative fee deduction
+      const APPROX_POOL_FEE = 0.01; // 1% conservative estimate for pool fees
+      if (selectedAction === 'Buy') {
+        // Buying company token with currency
+        const rawExpected = (inputAmount / currentPrice) * (1 - APPROX_POOL_FEE);
+        expectedReceiveAmount = formatWith(rawExpected, 'balance');
+        receiveToken = (selectedOutcome === 'approved' ? 'YES_' : 'NO_') + getCompanySymbol();
+      } else {
+        // Selling company token for currency
+        const rawExpected = (inputAmount * currentPrice) * (1 - APPROX_POOL_FEE);
+        expectedReceiveAmount = formatWith(rawExpected, 'balance');
+        receiveToken = getCurrencySymbol();
+      }
     }
+    console.log("[SHOWCASE] Confirm Data:", {
+      USING_FUTARCHY_QUOTER,
+      quoterPreview,
+      priceAfter: quoterPreview?.priceAfter,
+    });
+
+    const directConfirmData = {
+      outcome: selectedOutcome === 'approved' ? 'Event Will Occur' : 'Event Won\'t Occur',
+      amount: selectedAction === 'Sell'
+        ? `${amount} ${getCompanySymbol()}`
+        : `${amount} ${getCurrencySymbol()}`,
+      action: selectedAction, // This correctly passes 'Buy' or 'Sell'
+      timestamp: new Date().toISOString(),
+      expectedReceiveAmount,
+      receiveToken,
+      inputAmountRaw: amount,
+      amountInRaw: amountRawWei, // Raw wei value to avoid precision loss (null if user typed manually)
+      selectedOutcome,
+      // Pass detailed quote data if available
+      priceAfter: (USING_FUTARCHY_QUOTER && quoterPreview?.priceAfter) ? quoterPreview.priceAfter : null,
+      minimumReceived: (USING_FUTARCHY_QUOTER && quoterPreview?.minimumReceived) ? quoterPreview.minimumReceived : null,
+      amountOutRaw: (USING_FUTARCHY_QUOTER && quoterPreview?.amountOutRaw) ? quoterPreview.amountOutRaw : null,
+      // Price impact of this trade, already included in the quoted output
+      priceImpact: quoterPreview?.priceImpactPct ?? null,
+
+      currentPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.currentPrice) ? quoterPreview.currentPrice : null,
+      executionPrice: (USING_FUTARCHY_QUOTER && quoterPreview?.executionPrice) ? quoterPreview.executionPrice : null,
+      isApproximate: !(USING_FUTARCHY_QUOTER && quoterPreview?.amountOut && !quoterPreview.error),
+      insufficientLiquidity: quoterPreview?.insufficientLiquidity || false,
+      outputDecimals: quoterPreview?.decimalsOut || 18,
+      swapSpender: quoterPreview?.swapSpender,
+      tradeAnywayAcknowledged,
+    };
+    console.log("Opening ConfirmSwapModal directly with data:", directConfirmData);
+    setConfirmModalData(directConfirmData);
+    setIsConfirmModalOpen(true);
   };
 
   // Called by ConfirmSwapModal on every successful swap. The modal stays open
@@ -809,7 +797,6 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
   // rather than on the parent's next poll.
   const handleTransactionComplete = () => {
     refetchBalances?.();
-    setIsNativeSwapModalOpen(false);
   };
 
   const handleConfirmModalClose = () => {
@@ -835,41 +822,6 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
   }, [isProcessing]);
 
   // Balance fetching is now handled by parent component's useBalanceManager
-
-  // Handler for when the native WXDAI->SDAI swap completes
-  const handleNativeSwapComplete = ({ executedAmount, outcome, action }) => {
-    console.log("[handleNativeSwapComplete] Function called.");
-    console.log("[handleNativeSwapComplete] Received:", executedAmount, "Next step:", outcome, action);
-    setIsNativeSwapModalOpen(false); // Close the native modal
-
-    if (!executedAmount) {
-      console.error("Native swap completed but no executed amount received.");
-      // Optionally show an error to the user
-      return;
-    }
-
-    try {
-      // Format the received amount (assuming 18 decimals for currency token)
-      const formattedAmount = formatBalance(ethers.utils.formatUnits(executedAmount, 18), getCurrencySymbol());
-
-      // Prepare data for the ConfirmSwapModal (next step)
-      const nextStepData = {
-        outcome: outcome === 'approved' ? 'Event Will Occur' : 'Event Won\'t Occur',
-        amount: formattedAmount, // Use the actual received SDAI amount
-        action: action, // Should be 'Buy' or 'Sell' for the position token
-        timestamp: new Date().toISOString(),
-      };
-
-      console.log("[handleNativeSwapComplete] Opening ConfirmSwapModal with data:", nextStepData);
-      setConfirmModalData(nextStepData); // Set the data for the confirm modal
-      setIsConfirmModalOpen(true); // Open the confirm modal
-      console.log("[handleNativeSwapComplete] States updated to open ConfirmSwapModal.");
-
-    } catch (formatError) {
-      console.error("Error formatting executed amount:", formatError);
-      // Optionally show an error
-    }
-  };
 
   // "Available" in the panel: wallet collateral plus the conditional tokens
   // already held for the selected side. value is the exact decimal string
@@ -1533,18 +1485,6 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
           })()}
           checkSellCollateral={true}
           onTransactionComplete={handleTransactionComplete}
-        />
-      )}
-
-      {/* Native WXDAI -> SDAI Swap Modal */}
-      {isNativeSwapModalOpen && (
-        <SwapNativeToCurrencyModal
-          isOpen={isNativeSwapModalOpen}
-          onClose={() => setIsNativeSwapModalOpen(false)}
-          initialAmount={amount}
-          nextStepOutcome={selectedOutcome}
-          nextStepAction={selectedAction}
-          onComplete={handleNativeSwapComplete}
         />
       )}
     </>

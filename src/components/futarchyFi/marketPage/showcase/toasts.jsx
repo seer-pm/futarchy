@@ -1,38 +1,5 @@
 
 
-const PendingOrderToast = ({ count, userAddress }) => {
-  // ---> Accept count and userAddress, return null if count is 0 <---
-  if (!count || count === 0 || !userAddress) return null;
-
-  // ---> Link to user's address page on CoW Explorer <---
-  const explorerUrl = `https://explorer.cow.fi/gc/address/${userAddress}`;
-
-  return (
-    <div
-      className="fixed bottom-6 right-6 bg-white rounded-lg shadow-lg border border-futarchyGray4 p-4 z-50 animate-slide-in-bottom"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-5 h-5 border-2 border-futarchyOrange9 border-t-transparent rounded-full animate-spin" />
-        <div className="flex flex-col">
-          <span className="text-sm font-medium text-futarchyGray12">
-            {/* ---> Show count in message <--- */}
-            {count} Pending CoW Swap Order{count > 1 ? 's' : ''}
-          </span>
-          <a
-            href={explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-futarchyBlue11 hover:text-futarchyBlue9 underline"
-            title="View your orders on CoW Explorer"
-          >
-            View Orders
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const ProcessingToast = ({ step, onToastClick }) => {
   const steps = {
     'split': 'Splitting Position...',
@@ -102,4 +69,4 @@ const SafeTransactionToast = ({ onClose }) => {
   );
 };
 
-export { PendingOrderToast, ProcessingToast, SafeTransactionToast };
+export { ProcessingToast, SafeTransactionToast };
