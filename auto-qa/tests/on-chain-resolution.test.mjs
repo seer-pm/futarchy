@@ -136,3 +136,51 @@ test('both payout slots paying out reads as invalid, never as YES', async () => 
     );
     assert.deepEqual(results.get(resolutionKey(100, INVALID)), { resolved: true, outcome: 'invalid' });
 });
+
+// --- resolution time ------------------------------------------------------
+
+const { fetchResolutionTime } = resolution;
+const REALITY_GNOSIS = '0xE78996A233895bE74a66F451f1019cA9734205cc';
+
+function realityProvider({ questionId = word(7), finalizeTs, calls = [] }) {
+    return {
+        async send(_method, [{ to, data }]) {
+            calls.push({ to, data });
+            if (data === '0xb06a5c52') return questionId;
+            if (data === `0xacae8f4e${questionId.slice(2)}`) return word(finalizeTs);
+            throw new Error('unexpected call');
+        },
+    };
+}
+
+test('resolution-time selectors match the FutarchyProposal / Reality signatures', () => {
+    assert.equal(ethers.utils.id('questionId()').slice(0, 10), '0xb06a5c52');
+    assert.equal(ethers.utils.id('getFinalizeTS(bytes32)').slice(0, 10), '0xacae8f4e');
+});
+
+test('fetchResolutionTime reads the finalize timestamp from the chain\'s Reality contract', async () => {
+    const calls = [];
+    const seconds = await fetchResolutionTime(RESOLVED_YES, 100, {
+        getProvider: () => realityProvider({ finalizeTs: 1790954815, calls }),
+    });
+    assert.equal(seconds, 1790954815);
+    assert.equal(calls[0].to, RESOLVED_YES);
+    assert.equal(calls[1].to, REALITY_GNOSIS);
+});
+
+test('fetchResolutionTime returns null for unanswered, arbitrated or still-open questions', async () => {
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    for (const finalizeTs of [0, 1, 2, future]) {
+        const seconds = await fetchResolutionTime(RESOLVED_YES, 100, {
+            getProvider: () => realityProvider({ finalizeTs }),
+        });
+        assert.equal(seconds, null, `finalizeTs ${finalizeTs}`);
+    }
+});
+
+test('fetchResolutionTime returns null on a bad address or a failed read', async () => {
+    assert.equal(await fetchResolutionTime('not-an-address', 100, { getProvider: () => realityProvider({ finalizeTs: 5 }) }), null);
+    assert.equal(await fetchResolutionTime(RESOLVED_YES, 100, {
+        getProvider: () => ({ async send() { throw new Error('rpc down'); } }),
+    }), null);
+});
