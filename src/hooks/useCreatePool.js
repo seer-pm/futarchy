@@ -6,8 +6,10 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useAccount, useChainId, useSwitchChain } from 'wagmi';
-import { ethers } from 'ethers';
+import { useAccount, useChainId, useConfig, useSwitchChain } from 'wagmi';
+import { getPublicClient, getWalletClient } from 'wagmi/actions';
+import { parseAbi, toEventSelector } from 'viem';
+import { assertReceiptSucceeded } from '../utils/txErrors';
 import { CHAIN_CONFIG, getExplorerTxUrl } from '../components/debug/constants/chainConfig';
 
 // Position Manager ABI - different for Uniswap V3 vs Algebra
@@ -52,6 +54,7 @@ export function useCreatePool() {
     const { address, isConnected } = useAccount();
     const chainId = useChainId();
     const { switchChainAsync } = useSwitchChain();
+    const wagmiConfig = useConfig();
 
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const [txHash, setTxHash] = useState(null);
@@ -98,19 +101,12 @@ export function useCreatePool() {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            // Get fresh provider/signer after chain switch
-            if (!window.ethereum) {
-                throw new Error('No wallet provider found');
-            }
-
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const signer = provider.getSigner();
-
-            // Verify chain
-            const network = await provider.getNetwork();
-            if (network.chainId !== targetChainId) {
-                throw new Error(`Chain mismatch: expected ${targetChainId}, got ${network.chainId}`);
-            }
+            // The connected wallet's client for the target chain. (This used to
+            // sign through window.ethereum, which is whichever extension won the
+            // injection race, not necessarily the wallet the user connected.)
+            // It throws if the wallet is still on another chain.
+            const walletClient = await getWalletClient(wagmiConfig, { chainId: targetChainId });
+            const publicClient = getPublicClient(wagmiConfig, { chainId: targetChainId });
 
             // Get AMM token order
             const { ammToken0, ammToken1, needsReorder } = getAMMOrder(token0, token1);
@@ -129,48 +125,31 @@ export function useCreatePool() {
                 amm: config.amm
             });
 
-            // Create position manager contract
-            const abi = config.amm === 'uniswap' ? UNISWAP_V3_NFPM_ABI : ALGEBRA_NFPM_ABI;
-            const positionManager = new ethers.Contract(
-                config.positionManager,
-                abi,
-                signer
-            );
-
             setStatus({ type: 'pending', message: 'Creating pool transaction...' });
 
-            // Call createAndInitializePoolIfNecessary
-            let tx;
-            if (config.amm === 'uniswap') {
-                const fee = feeTier || config.defaultFeeTier || 3000;
-                tx = await positionManager.createAndInitializePoolIfNecessary(
-                    ammToken0,
-                    ammToken1,
-                    fee,
-                    sqrtPriceX96,
-                    { gasLimit: 5000000 }
-                );
-            } else {
-                // Algebra (no fee tier)
-                tx = await positionManager.createAndInitializePoolIfNecessary(
-                    ammToken0,
-                    ammToken1,
-                    sqrtPriceX96,
-                    { gasLimit: 16000000 } // Algebra needs higher gas
-                );
-            }
+            // Call createAndInitializePoolIfNecessary; the wallet estimates gas.
+            const isUniswap = config.amm === 'uniswap';
+            const hash = await walletClient.writeContract({
+                address: config.positionManager,
+                abi: parseAbi(isUniswap ? UNISWAP_V3_NFPM_ABI : ALGEBRA_NFPM_ABI),
+                functionName: 'createAndInitializePoolIfNecessary',
+                // Algebra has no fee tier
+                args: isUniswap
+                    ? [ammToken0, ammToken1, feeTier || config.defaultFeeTier || 3000, sqrtPriceX96]
+                    : [ammToken0, ammToken1, sqrtPriceX96],
+            });
 
-            setTxHash(tx.hash);
+            setTxHash(hash);
             setStatus({ type: 'pending', message: 'Waiting for confirmation...' });
 
-            console.log('[useCreatePool] Transaction submitted:', tx.hash);
+            console.log('[useCreatePool] Transaction submitted:', hash);
 
             // Wait for confirmation
-            const receipt = await tx.wait();
+            const receipt = assertReceiptSucceeded(await publicClient.waitForTransactionReceipt({ hash }), hash);
 
             // Try to extract pool address from Initialize event
             let createdPoolAddress = null;
-            const initTopic = ethers.utils.id('Initialize(uint160,int24)');
+            const initTopic = toEventSelector('Initialize(uint160,int24)');
             for (const log of (receipt.logs || [])) {
                 if (log.topics && log.topics[0] === initTopic && log.address) {
                     createdPoolAddress = log.address;
@@ -186,7 +165,7 @@ export function useCreatePool() {
             });
 
             return {
-                txHash: tx.hash,
+                txHash: hash,
                 poolAddress: createdPoolAddress,
                 receipt
             };
@@ -212,7 +191,7 @@ export function useCreatePool() {
         } finally {
             setIsCreating(false);
         }
-    }, [isConnected, address, chainId, switchChainAsync]);
+    }, [isConnected, address, chainId, switchChainAsync, wagmiConfig]);
 
     /**
      * Reset the hook state
