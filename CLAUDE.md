@@ -98,11 +98,13 @@ docs/                  # Notes and integration write-ups; docs/archive/ holds ol
      parallel (`utils/FutarchyQuoteHelper.js` on Gnosis) supplies current price,
      price after and impact
 
-3. **Split, merge, redeem**: `futarchy-sdk/executors/FutarchyCartridge.js`
-   - Used by `CollateralModal.jsx` and `RedemptionModal.jsx`. It is the only
-     executor the app imports; the other cartridges in `futarchy-sdk/executors/`
-     (`SwaprAlgebraCartridge`, `UniswapRouterCartridge`, `CoWSwapCartridge`, ...)
-     are not used by `src/`
+3. **Split and merge**: `src/utils/collateralActions.js`
+   - `splitCollateral` / `mergeCollateral` (approval, then the futarchy router
+     call) for both `CollateralModal.jsx` and the trade dialog's automatic split
+   - **Redeem**: `futarchy-sdk/executors/FutarchyCartridge.js`, used by
+     `RedemptionModal.jsx`. It is the only executor the app imports; the other
+     cartridges in `futarchy-sdk/executors/` (`SwaprAlgebraCartridge`,
+     `UniswapRouterCartridge`, `CoWSwapCartridge`, ...) are not used by `src/`
 
 4. **Web3 Integration**:
    - `src/providers/providers.jsx` - Wagmi configuration
