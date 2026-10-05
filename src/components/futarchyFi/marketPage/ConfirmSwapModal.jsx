@@ -1514,7 +1514,7 @@ const ConfirmSwapModal = memo(({
             >
                 <div className="flex h-full items-center justify-center p-4">
                     <div // This is the modal content panel
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[calc(100dvh-2rem)]"
+                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[80dvh]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* All original modal content starts here */}
