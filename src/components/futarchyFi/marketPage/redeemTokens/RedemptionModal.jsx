@@ -6,8 +6,6 @@ import { formatBalance } from "../../../../utils/formatters";
 import { ethers } from "ethers";
 import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import {
-  ERC20_ABI,
-  FUTARCHY_ROUTER_ABI,
   FUTARCHY_ROUTER_ADDRESS,
   MARKET_ADDRESS
 } from "../constants/contracts";
@@ -19,12 +17,6 @@ import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { isSafeWallet } from "../../../../utils/ethersAdapters";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
 import { getRedeemSide, describeRedeemError } from "../../../../utils/redeemPlan";
-
-const DEFAULT_REDEEM_GAS_LIMIT = 700000;
-const REDEEM_GAS_LIMIT_BY_CHAIN = {
-  1: 500000,   // Ethereum Mainnet
-  100: 500000, // Gnosis Chain
-};
 
 // MetaMask icon component
 const MetamaskIcon = () => (
@@ -410,99 +402,6 @@ const StepWithSubsteps = ({
   );
 };
 
-// Helper function to convert wagmi wallet client to ethers signer (same as CollateralModal)
-const getEthersSigner = (walletClient, publicClient) => {
-  console.log('[DEBUG] getEthersSigner called with:', {
-    walletClient: !!walletClient,
-    walletClientAccount: walletClient?.account?.address,
-    publicClient: !!publicClient,
-    connectorType: walletClient?.connector?.name || 'unknown'
-  });
-
-  if (!walletClient) {
-    console.warn('[DEBUG] No walletClient provided to getEthersSigner');
-    return null;
-  }
-
-  const isMetaMaskConnector = walletClient?.connector?.name?.toLowerCase().includes('metamask') ||
-    walletClient?.connector?.name?.toLowerCase().includes('injected');
-
-  if (isMetaMaskConnector && typeof window !== 'undefined' && window.ethereum) {
-    try {
-      console.log('[DEBUG] User connected via MetaMask, attempting Web3Provider signer...');
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const connectedAddr = walletClient?.account?.address;
-      const providerSigner = connectedAddr ? provider.getSigner(connectedAddr) : provider.getSigner();
-
-      providerSigner.getAddress = async function () {
-        console.log('[DEBUG] getAddress called on Web3Provider signer, returning:', connectedAddr);
-        return connectedAddr;
-      };
-
-      console.log('[DEBUG] Web3Provider signer setup complete for MetaMask connection');
-      return providerSigner;
-    } catch (error) {
-      console.warn('[DEBUG] Failed to create Web3Provider signer, falling back to custom implementation:', error);
-    }
-  } else {
-    console.log('[DEBUG] User connected via non-MetaMask wallet, using viem-based signer for:', walletClient?.connector?.name);
-  }
-
-  const customSigner = {
-    _isSigner: true,
-    provider: null,
-
-    async getAddress() {
-      const address = walletClient.account.address;
-      console.log('[DEBUG] Custom signer getAddress called, returning:', address);
-      return address;
-    },
-    async getChainId() {
-      const chainId = walletClient.chain.id;
-      console.log('[DEBUG] Custom signer getChainId called, returning:', chainId);
-      return chainId;
-    },
-    async sendTransaction(transaction) {
-      const hash = await walletClient.sendTransaction(transaction);
-      console.log('Transaction sent via viem walletClient:', hash);
-
-      return {
-        hash,
-        wait: async (confirmations = 1) => {
-          try {
-            console.log(`Waiting for transaction ${hash} confirmation...`);
-            const receipt = await publicClient.waitForTransactionReceipt({
-              hash,
-              timeout: 60000,
-              confirmations
-            });
-            console.log('Transaction confirmed:', receipt);
-            return {
-              status: receipt.status === 'success' ? 1 : 0,
-              transactionHash: receipt.transactionHash,
-              blockNumber: receipt.blockNumber,
-              gasUsed: receipt.gasUsed,
-              confirmations: confirmations,
-              logs: receipt.logs
-            };
-          } catch (error) {
-            console.error('Transaction confirmation error:', error);
-            throw error;
-          }
-        }
-      };
-    },
-    async signMessage(message) {
-      return await walletClient.signMessage({
-        account: walletClient.account,
-        message
-      });
-    }
-  };
-
-  return customSigner;
-};
-
 const RedemptionModal = ({
   title,
   handleClose,
@@ -514,7 +413,6 @@ const RedemptionModal = ({
   isProcessing = false,
   error,
 
-  useSDK = true, // Default to true as requested
   useBlockExplorer = false,
   onSafeTransaction,
 }) => {
@@ -530,10 +428,6 @@ const RedemptionModal = ({
   const updateDebugInfo = (info) => {
     setDebugInfo(prev => ({ ...prev, ...info }));
   };
-  const connectedChainId = walletClient?.chain?.id ?? chainId ?? publicClient?.chain?.id;
-  const redeemGasLimit =
-    REDEEM_GAS_LIMIT_BY_CHAIN[connectedChainId] ?? DEFAULT_REDEEM_GAS_LIMIT;
-
   // Approval preference state
   const [useUnlimitedApproval, setUseUnlimitedApproval] = useState(false);
 
@@ -549,22 +443,6 @@ const RedemptionModal = ({
 
   // Determine if winning outcome is YES
   const isWinningOutcomeYes = getRedeemSide(config?.marketInfo?.finalOutcome) === 'yes';
-
-  const signer = useMemo(() => {
-    if (!walletClient) {
-      console.log('No wallet client available for signer creation');
-      return null;
-    }
-
-    const ethersSigner = getEthersSigner(walletClient, publicClient);
-
-    console.log('RedemptionModal signer created:', {
-      hasSigner: !!ethersSigner,
-      signerType: ethersSigner?._isSigner ? 'custom' : 'web3provider'
-    });
-
-    return ethersSigner;
-  }, [walletClient, publicClient]);
 
   // Calculate transaction parameters for each substep
   const transactionParams = useMemo(() => {
@@ -618,14 +496,12 @@ const RedemptionModal = ({
           parameters: {
             proposal: marketAddress,
             collateral1Amount_company: companyAmountInWei.toString(),
-            collateral2Amount_currency: currencyAmountInWei.toString(),
-            gasLimit: redeemGasLimit
+            collateral2Amount_currency: currencyAmountInWei.toString()
           },
           humanReadable: {
             proposal: `Market Address (${marketAddress})`,
             collateral1Amount_company: `${winningTokens.companyAmount} ${winningTokens.companySymbol}`,
             collateral2Amount_currency: `${winningTokens.currencyAmount} ${winningTokens.currencySymbol}`,
-            gasLimit: `${redeemGasLimit} wei`,
             purpose: "Redeem your winning outcome tokens for underlying collateral"
           }
         }
@@ -634,45 +510,7 @@ const RedemptionModal = ({
       console.error('Error calculating transaction parameters:', error);
       return null;
     }
-  }, [config, winningTokens, redeemGasLimit, useUnlimitedApproval]);
-
-  const handleTokenApproval = async (tokenAddress, spenderAddress, amount, tokenName = '') => {
-    if (!window.ethereum) {
-      throw new Error("Please install MetaMask!");
-    }
-
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const signer = provider.getSigner();
-    const userAddress = await signer.getAddress();
-
-    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-
-    const currentAllowance = await tokenContract.allowance(userAddress, spenderAddress);
-    console.log(`Current ${tokenName} allowance for ${spenderAddress}:`, ethers.utils.formatEther(currentAllowance));
-
-    if (currentAllowance.lt(amount)) {
-      console.log(`Approving ${tokenName} for ${spenderAddress}...`);
-      try {
-        const approveTx = await tokenContract.approve(
-          spenderAddress,
-          approvalAmountFor(amount, useUnlimitedApproval)
-        );
-        console.log('Approval transaction sent:', approveTx.hash);
-        await approveTx.wait();
-        console.log(`${tokenName} approved successfully`);
-
-        const newAllowance = await tokenContract.allowance(userAddress, spenderAddress);
-        console.log(`New ${tokenName} allowance:`, ethers.utils.formatEther(newAllowance));
-
-        if (newAllowance.lt(amount)) {
-          throw new Error('Allowance is still insufficient after approval');
-        }
-      } catch (error) {
-        console.error(`Failed to approve ${tokenName}:`, error);
-        throw error;
-      }
-    }
-  };
+  }, [config, winningTokens, useUnlimitedApproval]);
 
   // Update markSubstepCompleted to match ConfirmSwapModal pattern
   const markSubstepCompleted = (step, substepId) => {
@@ -699,7 +537,7 @@ const RedemptionModal = ({
   };
 
   const handleRedemption = async () => {
-    if (!isConnected || !account || !signer) {
+    if (!isConnected || !account || !walletClient) {
       setLocalError("Please connect your wallet first");
       return;
     }
@@ -736,159 +574,70 @@ const RedemptionModal = ({
         throw new Error("Missing router or market address from config");
       }
 
-      // --- SDK INTEGRATION START ---
-      if (useSDK) {
-        console.log('[RedemptionModal] Using SDK for redemption');
+      // Initialize Cartridge
+      const cartridge = new FutarchyCartridge(routerAddress);
 
-        // Initialize Cartridge
-        const cartridge = new FutarchyCartridge(routerAddress);
+      // Execute completeRedeemOutcomes
+      const iterator = cartridge.completeRedeemOutcomes({
+        proposal: marketAddress,
+        token1Address: winningTokens.companyTokenAddress,
+        token2Address: winningTokens.currencyTokenAddress,
+        amount1: winningTokens.companyAmount.toString(),
+        amount2: winningTokens.currencyAmount.toString(),
+        exactApproval: !useUnlimitedApproval,
+        useBlockExplorer
+      }, { publicClient, walletClient, account });
 
-        // Execute completeRedeemOutcomes
-        const iterator = cartridge.completeRedeemOutcomes({
-          proposal: marketAddress,
-          token1Address: winningTokens.companyTokenAddress,
-          token2Address: winningTokens.currencyTokenAddress,
-          amount1: winningTokens.companyAmount.toString(),
-          amount2: winningTokens.currencyAmount.toString(),
-          exactApproval: !useUnlimitedApproval,
-          useBlockExplorer
-        }, { publicClient, walletClient, account });
+      for await (const status of iterator) {
+        console.log('[RedemptionModal] SDK Status:', status);
 
-        for await (const status of iterator) {
-          console.log('[RedemptionModal] SDK Status:', status);
+        // SDK failures come back as { status: 'error', message, error } with no step
+        if (status.status === 'error') {
+          throw new Error(status.error || status.message);
+        }
+        const step = status.step || '';
+        const message = status.message || '';
 
-          // SDK failures come back as { status: 'error', message, error } with no step
-          if (status.status === 'error') {
-            throw new Error(status.error || status.message);
-          }
-          const step = status.step || '';
-          const message = status.message || '';
-
-          // Update debug info from SDK status
-          if (status.txHash) {
-            updateDebugInfo({
-              status: 'Transaction Sent',
-              message: status.message,
-              txHash: status.txHash
-            });
-          } else {
-            updateDebugInfo({
-              status: 'Processing',
-              message: status.message
-            });
-          }
-
-          // Map SDK steps to UI steps
-          if (step.includes('approving_token1')) {
-            setCurrentSubstep({ step: 1, substep: 1 });
-            if (step === 'token1_approved' || message.includes('Token 1 approved') || message.includes('Token 1 already approved')) {
-              markSubstepCompleted(1, 1);
-            }
-          } else if (step.includes('approving_token2')) {
-            // If token 1 was skipped or done quickly, ensure it's marked
-            markSubstepCompleted(1, 1);
-            setCurrentSubstep({ step: 1, substep: 2 });
-            if (step === 'token2_approved' || message.includes('Token 2 approved') || message.includes('Token 2 already approved')) {
-              markSubstepCompleted(1, 2);
-            }
-          } else if (step.includes('redeem')) {
-            markSubstepCompleted(1, 1);
-            markSubstepCompleted(1, 2);
-            setCurrentSubstep({ step: 1, substep: 3 });
-            if (step === 'complete') {
-              markSubstepCompleted(1, 3);
-              setCompletedSubsteps(prev => ({ ...prev, 1: { ...prev[1], completed: true } }));
-            }
-          } else if (step === 'complete') {
-            setLocalProcessingStep("completed");
-            setLocalIsProcessing(false);
-          }
+        // Update debug info from SDK status
+        if (status.txHash) {
+          updateDebugInfo({
+            status: 'Transaction Sent',
+            message: status.message,
+            txHash: status.txHash
+          });
+        } else {
+          updateDebugInfo({
+            status: 'Processing',
+            message: status.message
+          });
         }
 
-        console.log('[RedemptionModal] SDK Redemption Completed Successfully');
-        return;
+        // Map SDK steps to UI steps
+        if (step.includes('approving_token1')) {
+          setCurrentSubstep({ step: 1, substep: 1 });
+          if (step === 'token1_approved' || message.includes('Token 1 approved') || message.includes('Token 1 already approved')) {
+            markSubstepCompleted(1, 1);
+          }
+        } else if (step.includes('approving_token2')) {
+          // If token 1 was skipped or done quickly, ensure it's marked
+          markSubstepCompleted(1, 1);
+          setCurrentSubstep({ step: 1, substep: 2 });
+          if (step === 'token2_approved' || message.includes('Token 2 approved') || message.includes('Token 2 already approved')) {
+            markSubstepCompleted(1, 2);
+          }
+        } else if (step.includes('redeem')) {
+          markSubstepCompleted(1, 1);
+          markSubstepCompleted(1, 2);
+          setCurrentSubstep({ step: 1, substep: 3 });
+          if (step === 'complete') {
+            markSubstepCompleted(1, 3);
+            setCompletedSubsteps(prev => ({ ...prev, 1: { ...prev[1], completed: true } }));
+          }
+        } else if (step === 'complete') {
+          setLocalProcessingStep("completed");
+          setLocalIsProcessing(false);
+        }
       }
-      // --- SDK INTEGRATION END ---
-
-      // Convert amounts to wei
-      const currencyAmountInWei = ethers.utils.parseUnits(winningTokens.currencyAmount.toString(), 18);
-      const companyAmountInWei = ethers.utils.parseUnits(winningTokens.companyAmount.toString(), 18);
-
-      // Step 1: Approve company tokens first (Collateral1)
-      console.log('Approving company tokens (Collateral1)...');
-      setCurrentSubstep({ step: 1, substep: 1 });
-
-      await handleTokenApproval(
-        winningTokens.companyTokenAddress,
-        routerAddress,
-        companyAmountInWei,
-        `${winningTokens.companySymbol} (Collateral1)`
-      );
-
-      markSubstepCompleted(1, 1);
-      setCurrentSubstep({ step: 1, substep: 2 });
-
-      // Step 2: Approve currency tokens second (Collateral2)
-      console.log('Approving currency tokens (Collateral2)...');
-      await handleTokenApproval(
-        winningTokens.currencyTokenAddress,
-        routerAddress,
-        currencyAmountInWei,
-        `${winningTokens.currencySymbol} (Collateral2)`
-      );
-
-      markSubstepCompleted(1, 2);
-      setCurrentSubstep({ step: 1, substep: 3 });
-
-      // Execute redemption
-      const routerInterface = new ethers.utils.Interface(FUTARCHY_ROUTER_ABI);
-      const txData = routerInterface.encodeFunctionData('redeemProposal', [
-        marketAddress,
-        companyAmountInWei,
-        currencyAmountInWei,
-      ]);
-
-      console.log('Executing redeemProposal (direct tx send)...', {
-        proposal: marketAddress,
-        collateral1_company: companyAmountInWei.toString(),
-        collateral2_currency: currencyAmountInWei.toString(),
-        gasLimit: redeemGasLimit,
-        usingWalletClient: !!walletClient,
-      });
-
-      let redeemTxHash;
-
-      if (walletClient) {
-        redeemTxHash = await walletClient.sendTransaction({
-          account: walletClient.account,
-          to: routerAddress,
-          data: txData,
-          gas: BigInt(redeemGasLimit),
-          value: 0n,
-        });
-      } else {
-        const redeemTx = await signer.sendTransaction({
-          to: routerAddress,
-          data: txData,
-          gasLimit: ethers.BigNumber.from(redeemGasLimit),
-        });
-        redeemTxHash = redeemTx.hash;
-      }
-
-      console.log('Redemption transaction sent:', redeemTxHash);
-      await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
-      console.log('Redemption completed');
-
-      markSubstepCompleted(1, 3);
-
-      // Set completed
-      setCompletedSubsteps(prev => ({
-        ...prev,
-        1: { ...prev[1], completed: true }
-      }));
-
-      setLocalProcessingStep("completed");
-      setLocalIsProcessing(false);
 
     } catch (error) {
       console.error('Redemption failed:', error);

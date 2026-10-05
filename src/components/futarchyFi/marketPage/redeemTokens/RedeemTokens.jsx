@@ -268,7 +268,6 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
             connectedWalletAddress={address}
             config={config}
             winningTokens={winningTokens}
-            useSDK={true}
             useBlockExplorer={true}
           />
         </div>
