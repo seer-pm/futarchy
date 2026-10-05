@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from 'react';
-import { useAccount } from 'wagmi';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { formatUnits } from 'viem';
 import { formatBalance } from '../../../../utils/formatters';
 import RedemptionModal from './RedemptionModal';
-import { getRedeemSide, getRedeemAmounts, isPositiveAmount } from '../../../../utils/redeemPlan';
+import { getRedeemSide, getRedeemAmounts, isPositiveAmount, describeRedeemError } from '../../../../utils/redeemPlan';
+import { fetchUnwrappedWinnings, redeemUnwrappedWinnings } from '../../../../utils/unwrappedWinnings';
+import { useRequiredChain } from '../../../../hooks/useChainValidation';
+import { useSafeConnection } from '../../../../hooks/useSafeConnection';
 
 const RedeemButton = ({ onClick, disabled = false, isConnected = false, isWinningOutcomeYes = true }) => {
   const baseClasses = "font-semibold py-2 px-4 rounded text-sm border-2 transition-colors";
@@ -72,10 +76,72 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
     isPositiveAmount(winningTokens.currencyAmount) ||
     isPositiveAmount(winningTokens.companyAmount)
   );
-  const hasUnwrappedTokens = winningTokens && (
-    isPositiveAmount(winningTokens.unwrappedCurrencyAmount) ||
-    isPositiveAmount(winningTokens.unwrappedCompanyAmount)
-  );
+
+  // Winning positions held unwrapped (ERC1155 on ConditionalTokens). The router
+  // cannot redeem those, so they are read and redeemed on ConditionalTokens.
+  const publicClient = usePublicClient({ chainId: config?.chainId });
+  const { data: walletClient } = useWalletClient();
+  const requiredChain = useRequiredChain(config?.chainId);
+  const isSafeConnection = useSafeConnection();
+  const marketAddress = config?.MARKET_ADDRESS;
+  const conditionalTokens = config?.CONDITIONAL_TOKENS_ADDRESS;
+  const isResolved = !!config?.marketInfo?.resolved;
+  const [unwrapped, setUnwrapped] = useState(null);
+  const [isRedeemingUnwrapped, setIsRedeemingUnwrapped] = useState(false);
+  const [unwrappedMessage, setUnwrappedMessage] = useState(null);
+
+  const loadUnwrapped = useCallback(async () => {
+    if (!isResolved || !redeemSide || !address || !publicClient || !marketAddress || !conditionalTokens) {
+      setUnwrapped(null);
+      return;
+    }
+    try {
+      setUnwrapped(await fetchUnwrappedWinnings({
+        publicClient,
+        proposal: marketAddress,
+        conditionalTokens,
+        account: address,
+        side: redeemSide,
+      }));
+    } catch (error) {
+      console.warn('[RedeemTokens] Could not read unwrapped positions:', error?.shortMessage || error?.message);
+      setUnwrapped(null);
+    }
+  }, [isResolved, redeemSide, address, publicClient, marketAddress, conditionalTokens]);
+
+  useEffect(() => {
+    loadUnwrapped();
+  }, [loadUnwrapped]);
+
+  const unwrappedHoldings = (unwrapped?.positions || []).filter((position) => position.balance > 0n);
+  const hasUnwrappedTokens = unwrappedHoldings.length > 0;
+
+  const handleRedeemUnwrapped = async () => {
+    if (!walletClient || !unwrapped || isRedeemingUnwrapped) return;
+    if (requiredChain.isWrongChain) {
+      setUnwrappedMessage(`This market is on ${requiredChain.requiredChainName}. Switch your wallet to it to continue.`);
+      return;
+    }
+    setIsRedeemingUnwrapped(true);
+    setUnwrappedMessage('Confirm in your wallet...');
+    try {
+      await redeemUnwrappedWinnings({
+        publicClient,
+        walletClient,
+        conditionalTokens,
+        account: address,
+        winnings: unwrapped,
+        isSafe: isSafeConnection(walletClient),
+      });
+      setUnwrappedMessage('Unwrapped positions redeemed.');
+    } catch (error) {
+      setUnwrappedMessage(describeRedeemError(error));
+    } finally {
+      setIsRedeemingUnwrapped(false);
+      loadUnwrapped();
+      onBalancesChanged?.();
+    }
+  };
 
   const handleRedeemClick = () => {
     if (!isConnected || !hasRedeemableTokens) return;
@@ -174,14 +240,36 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
     );
   }
 
-  const unwrappedNotice = hasUnwrappedTokens && (
-    <p className="mt-4 text-xs text-futarchyGray9 text-center">
-      Not redeemable here (unwrapped ERC1155 positions; the router only redeems wrapped tokens):{' '}
-      {[
-        isPositiveAmount(winningTokens.unwrappedCurrencyAmount) && `${formatBalance(winningTokens.unwrappedCurrencyAmount, '')} ${winningTokens.currencySymbol}`,
-        isPositiveAmount(winningTokens.unwrappedCompanyAmount) && `${formatBalance(winningTokens.unwrappedCompanyAmount, '')} ${winningTokens.companySymbol}`,
-      ].filter(Boolean).join(', ')}
-    </p>
+  const unwrappedSymbol = (position) =>
+    position.role === 'company' ? winningTokens?.companySymbol : winningTokens?.currencySymbol;
+  const unwrappedDecimals = (position) => config?.BASE_TOKENS_CONFIG?.[position.role]?.decimals ?? 18;
+
+  const unwrappedNotice = (hasUnwrappedTokens || unwrappedMessage) && (
+    <div className="mt-4 flex flex-col items-center gap-2 text-xs text-futarchyGray9 text-center">
+      {hasUnwrappedTokens && (
+        <>
+          <p>
+            Held unwrapped (not counted above):{' '}
+            {unwrappedHoldings
+              .map((position) => `${formatBalance(formatUnits(position.balance, unwrappedDecimals(position)), '')} ${unwrappedSymbol(position)}`)
+              .join(', ')}
+          </p>
+          {unwrapped.redeemable ? (
+            <button
+              type="button"
+              onClick={handleRedeemUnwrapped}
+              disabled={isRedeemingUnwrapped || !walletClient}
+              className="px-3 py-1.5 rounded-lg border border-futarchyGray62 dark:border-futarchyGray11/70 hover:text-futarchyGray12 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRedeemingUnwrapped ? 'Redeeming...' : 'Redeem unwrapped'}
+            </button>
+          ) : (
+            <p>These belong to a nested market and can&apos;t be redeemed to collateral here.</p>
+          )}
+        </>
+      )}
+      {unwrappedMessage && <p>{unwrappedMessage}</p>}
+    </div>
   );
 
   return (
@@ -251,10 +339,14 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
           </div>
         ) : (
           <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
-            <p className="mb-2">No redeemable tokens found</p>
-            <p className="text-xs text-futarchyGray9">
-              You don&apos;t have any {winningOutcome.toLowerCase()} outcome tokens to redeem.
-            </p>
+            {!hasUnwrappedTokens && (
+              <>
+                <p className="mb-2">No redeemable tokens found</p>
+                <p className="text-xs text-futarchyGray9">
+                  You don&apos;t have any {winningOutcome.toLowerCase()} outcome tokens to redeem.
+                </p>
+              </>
+            )}
             {unwrappedNotice}
           </div>
         )}
