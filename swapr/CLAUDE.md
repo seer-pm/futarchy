@@ -12,14 +12,21 @@ The swapr directory contains automated tools for creating and managing futarchy 
 
 1. **automate-futarchy.js**
    - Main orchestration script that runs the complete workflow
-   - Executes: config → pool creation → file generation → API calls
-   - Usage: `npm run automate` (production) or `npm run automate-dry` (test)
+   - Executes: `futarchy:auto:config` (on-chain setup) → `generate-pools` → `call-proposal-pools`
+   - Usage: `npm run automate`, or `npm run automate-dry` to preview only the API calls
+     (the on-chain setup step still runs and sends transactions)
 
 2. **algebra-cli.js**
    - Core pool management engine with blockchain interactions
    - Handles token splitting, pool creation, liquidity management
    - Interactive mode: `npm run interactive`
    - Auto mode: `npm run futarchy:auto futarchy-config.json`
+   - Creating a proposal requires an explicit `openingTime` (UNIX seconds, when the
+     Reality.eth question opens for answers): auto mode aborts if the config has
+     none, interactive mode asks for it. There is no default
+   - Fixed gas limits per operation (`GAS_CONFIG.GAS_LIMITS`): create pool 9M,
+     mint position 2M, split 1.5M, create proposal 5M. Gnosis blocks hold 17M gas,
+     so larger limits leave transactions pending when the chain is busy
 
 3. **generate-pool-files.js**
    - Converts futarchy setup data to API-ready JSON files
@@ -30,6 +37,14 @@ The swapr directory contains automated tools for creating and managing futarchy 
    - Makes HTTP POST requests to create pools via API
    - Supports authentication and dry-run mode
    - Usage: `npm run call-pool-apis` or `npm run call-pool-apis-dry`
+   - `call-pools-by-proposal.js` does the same for one proposal
+     (`npm run call-proposal-pools <addr>`)
+
+5. **clear-pending.js**
+   - Clears a transaction of the CLI wallet that is stuck pending, by sending a
+     zero-value transfer to itself with the same nonce and a higher fee
+   - `node clear-pending.js` shows what is pending and sends nothing;
+     `node clear-pending.js --send` replaces the oldest pending transaction
 
 ## Configuration
 
@@ -37,7 +52,7 @@ The swapr directory contains automated tools for creating and managing futarchy 
 ```json
 {
   "marketName": "Proposal title",
-  "openingTime": unix_timestamp,
+  "openingTime": unix_timestamp,   // Required when the config creates a proposal
   "display_text_1": "First line",
   "display_text_2": "Second line",
   "companyToken": {              // Company token configuration
@@ -83,7 +98,7 @@ The system creates 6 pools based on configuration:
 
 ### Price Calculation
 - YES Price = spotPrice × (1 + impact × (1 - probability))
-- NO Price = spotPrice × (1 - impact × probability))
+- NO Price = spotPrice × (1 - impact × probability)
 
 ## Common Workflows
 
@@ -115,7 +130,7 @@ npm run futarchy:auto futarchy-config.json
 ```bash
 # Add liquidity interactively
 npm run interactive
-# Select option 8
+# Select option 0 (Add Liquidity)
 
 # Remove liquidity
 npm run remove
@@ -134,39 +149,38 @@ npm run call-pool-apis
 
 ### algebra-cli.js
 
-**setupFutarchyPoolsAuto(configPath)**
+**`setupFutarchyPoolsAuto <configFile>`** (command)
 - Main entry point for automated setup
-- Creates proposal, splits tokens, creates pools, adds liquidity
+- Reads the config (`readConfigFile`, `parseConfigValues`), calls
+  `createNewProposal(true, config)` when no `proposalAddress` is given, then
+  `setupPoolsFromFutarchyProposal(proposalAddress, config)`
 - Handles all 6 pool types automatically
 
-**splitTokensViaAdapter(collateralToken, amount)**
-- Splits collateral into conditional tokens
-- Returns YES/NO token addresses
-- Handles allowances automatically
+**splitTokensViaAdapter(tokenToObtainSymbol, tokenToObtainAddr, amountNeededWei, underlyingTokenSymbol, underlyingTokenAddr, futarchyAdapterContract, proposalContractAddr)**
+- Splits the underlying token through the adapter when the wallet holds less of
+  the conditional token than needed
+- Handles allowances through `ensureAllowance`
 
-**addLiquidity(poolInfo)**
+**addLiquidity(t0Addr, t1Addr, poolAddr, defaultAmt0, defaultAmt1, autoMode)**
 - Adds liquidity with price verification
 - Supports inverted token pairs
-- Includes slippage protection
 
-**createNewProposal(marketName, openingTime)**
-- Creates new futarchy proposal
+**createNewProposal(autoMode, config)**
+- Creates new futarchy proposal through the factory
 - Returns proposal address
-- Sets up conditional tokens
+- Requires `openingTime` (see above)
 
 ### automate-futarchy.js
 
-**runAutomation(isDryRun)**
-- Orchestrates complete workflow
-- Handles errors gracefully
-- Provides color-coded output
+**main()**
+- Orchestrates complete workflow by running the npm scripts in order
+- `--dry-run` switches only the API step to its preview script
 
 ### generate-pool-files.js
 
-**processPoolsForCompany(setupData, targetDir)**
-- Filters pools for API requirements
-- Includes metadata in first pool
-- Generates curl commands
+**generatePoolFile(poolData, proposalData, poolIndex, allPools, companyId, config)**
+- Writes the API payload for one pool from the latest `futarchy-pool-setup-*.json`
+- Includes `companyId` from `futarchy-config.json` in the first pool's metadata
 
 ## Error Handling
 
@@ -185,9 +199,12 @@ Common issues and solutions:
    - Check RPC endpoints are responsive
 
 4. **API Failures**
-   - Check bearer token in .env
+   - Check `JWT` / `BEARER_TOKEN` and `POOL_CREATION_URL` in .env
    - Verify API endpoint is correct
    - Use dry-run mode for testing
+
+5. **Transaction Stuck Pending**
+   - Later runs queue behind it; inspect and replace it with `clear-pending.js`
 
 ## Security Notes
 
@@ -197,21 +214,20 @@ Common issues and solutions:
    - Use separate keys for testing
 
 2. **Gas Management**
-   - Default gas limits prevent excessive spending
-   - Can override in config if needed
-   - Monitor transaction costs
+   - Gas limits are fixed per operation in `GAS_CONFIG.GAS_LIMITS` (`algebra-cli.js`)
+   - Gas price is automatic; `GAS_PRICE_GWEI` in .env pins it
 
 3. **Allowances**
-   - System manages token allowances
-   - Resets before setting new ones
-   - Verify approval addresses
+   - `ensureAllowance` skips the approval when the current allowance is enough
+   - It approves the exact amount needed; `APPROVE_MAX=true` in .env switches to
+     unlimited approvals
 
 ## Testing Approach
 
 1. **Dry Run Mode**
-   - Use `npm run automate-dry`
-   - Preview all operations
-   - No blockchain transactions
+   - `npm run call-pool-apis-dry` / `npm run call-proposal-pools-dry <addr>` send nothing
+   - `npm run automate-dry` previews the API calls only; its first step still
+     creates pools on-chain
 
 2. **Manual Verification**
    - Check pool creation on explorer
@@ -248,14 +264,16 @@ npm run merge <addr>      # Merge conditional tokens
 
 ## Integration with Main App
 
-The pools created by these tools are consumed by:
-- `src/hooks/useFutarchy.js` - For trading operations
-- `src/futarchyJS/futarchyConfig.js` - For pool addresses
-- `src/components/refactor/strategies/` - For swap execution
+The main app does not import anything from this directory. It reads a market's
+proposal, pool and token addresses at runtime from the registry and subgraph:
+- `src/hooks/useContractConfig.js` (through `src/adapters/`) - market configuration
+- `src/utils/seerSwap.js` - quotes and executes trades in those pools through `@seer-pm/sdk`
+- `futarchy-sdk/executors/FutarchyCartridge.js` - split, merge and redeem
 
 ## Important Constants
 
 Key addresses and values are in:
-- `constants.js` - Token addresses, pool factories
+- `algebra-cli.js` (top of file) - default token, factory and adapter addresses
+  (`DEFAULT_COMPANY_TOKEN`, `DEFAULT_FACTORY_ADDRESS`, `DEFAULT_ADAPTER_ADDRESS`, ...), ABIs, `GAS_CONFIG`
 - `futarchy-config.json` - Market parameters
-- `.env` - Private keys, API tokens
+- `.env` - `PRIVATE_KEY`, `RPC_URL`, API URL and token (see `env.example`)
