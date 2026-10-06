@@ -209,12 +209,12 @@ const MarketHero = ({
                     });
                   }
 
-                  // Arbitrage Contract badge — links to Gnosisscan when set in metadata.
+                  // Arbitrage Contract badge — links to the market chain's explorer when set in metadata.
                   if (config?.marketInfo?.arbitrageContractAddress) {
                     badges.push({
                       text: 'Arbitrage Contract',
                       colorScheme: 'default',
-                      link: `https://gnosisscan.io/address/${config.marketInfo.arbitrageContractAddress}`
+                      link: `https://${config?.chainId === 1 ? 'etherscan.io' : 'gnosisscan.io'}/address/${config.marketInfo.arbitrageContractAddress}`
                     });
                   }
 

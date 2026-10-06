@@ -38,6 +38,7 @@ import { describeQuoteError } from '../../../utils/txErrors';
 import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMath';
 import { quoteSeerSwap } from '../../../utils/seerSwap';
 import { formatUnits } from 'viem';
+import { resolveMarketStatus } from '../../../utils/proposalLifecycle';
 
 // Opens only from the native-swap action — load it on demand.
 
@@ -937,7 +938,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
         {marketHasClosed && (
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm z-10 flex items-center justify-center">
             <span className="text-white text-2xl font-bold bg-black/50 px-6 py-3 rounded-lg">
-              Market Closed
+              {resolveMarketStatus(config?.marketInfo).labelWithOutcome}
             </span>
           </div>
         )}

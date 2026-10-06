@@ -308,7 +308,8 @@ const SubgraphChart = ({
         });
 
         const closeTimestamp = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
-        const isMarketClosedLocally = closeTimestamp && typeof closeTimestamp === 'number' && (Date.now() / 1000) > closeTimestamp;
+        // Closed by the clock or resolved (a market can be resolved before its close time)
+        const isMarketClosedLocally = resolveMarketStatus({ ...config?.marketInfo, closeTimestamp }).state !== 'active';
 
         // Create SPOT line - dashed, semi-transparent (same as TripleChart)
         const spotLine = chart.addSeries(LineSeries, {
@@ -589,13 +590,13 @@ const SubgraphChart = ({
                     {/* Spot/Status Logic */}
                     {(() => {
                         const ct = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
-                        const isMarketClosed = ct && typeof ct === 'number' && (Date.now() / 1000) > ct;
+                        const marketStatus = resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: ct });
 
-                        return isMarketClosed ? (
+                        return marketStatus.state !== 'active' ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 px-1 opacity-80">
                                 <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Status</span>
                                 <span className="text-[9px] md:text-[11px] font-bold text-futarchyGray12 dark:text-white mt-0.5">
-                                    {resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: ct }).label}
+                                    {marketStatus.label}
                                 </span>
                             </div>
                         ) : (

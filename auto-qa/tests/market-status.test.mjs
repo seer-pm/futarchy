@@ -276,6 +276,14 @@ test('the hero, the cards and the milestone badge print the resolver\'s wording'
 
     const chart = await read('components/chart/SubgraphChart.jsx');
     assert.doesNotMatch(chart, /Market Closed/);
+    // The spot line and the Spot / Status cell follow the resolver's state,
+    // so a market resolved before its close time stops showing spot.
+    assert.doesNotMatch(chart, /Date\.now\(\) \/ 1000\) > c/);
+    assert.match(chart, /marketStatus\.state !== 'active' \?/);
+
+    const tradePanel = await read('components/futarchyFi/marketPage/ShowcaseSwapComponent.jsx');
+    assert.match(tradePanel, /resolveMarketStatus\(config\?\.marketInfo\)\.labelWithOutcome/);
+    assert.doesNotMatch(tradePanel, /Market Closed/);
 
     const closedCard = await read('components/futarchyFi/companyList/cards/highlightCards/HighlightCards.jsx');
     assert.match(closedCard, /marketStatus\.outcomeLabel \|\| marketStatus\.shortLabel/);
