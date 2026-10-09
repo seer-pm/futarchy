@@ -540,7 +540,11 @@ const SubgraphChart = ({
             impact = denominator > 0 ? ((yesPrice - noPrice) / denominator) * 100 : 0;
         }
     }
-    const impactColorClass = impact >= 0 ? '!text-futarchyTeal7' : '!text-futarchyCrimson7';
+    // After resolution the losing side's tokens are worthless, so the gap
+    // between the two pools no longer measures anything (same as the header).
+    const impactCloseTimestamp = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
+    const isResolved = resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: impactCloseTimestamp }).state === 'resolved';
+    const impactColorClass = isResolved ? '' : (impact >= 0 ? '!text-futarchyTeal7' : '!text-futarchyCrimson7');
 
     // A failed fetch leaves prices null: show a dash instead of spinning forever.
     const fetchFailed = !!error && !loading;
@@ -616,7 +620,7 @@ const SubgraphChart = ({
                     <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 last:border-r-0 last:rounded-tr-3xl px-1">
                         <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact (spot)</span>
                         <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${impactColorClass}`}>
-                            {(yesPrice === null || noPrice === null) ? pendingValue() : formatImpactPercent(impact)}
+                            {isResolved ? '—' : (yesPrice === null || noPrice === null) ? pendingValue() : formatImpactPercent(impact)}
                         </span>
                     </div>
 
