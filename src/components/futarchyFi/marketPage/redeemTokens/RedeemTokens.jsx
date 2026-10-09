@@ -343,7 +343,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
               <>
                 <p className="mb-2">No redeemable tokens found</p>
                 <p className="text-xs text-futarchyGray9">
-                  You don&apos;t have any {winningOutcome.toLowerCase()} outcome tokens to redeem.
+                  You don&apos;t have any {winningOutcome.toUpperCase()} outcome tokens to redeem.
                 </p>
               </>
             )}

@@ -819,7 +819,6 @@ const RedemptionModal = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent dark:from-futarchyDarkGray3 dark:to-transparent pointer-events-none z-10" />
               <div className="max-h-[240px] overflow-y-auto pr-2 -mr-2">
                 <AnimatePresence>
                   {Object.entries(getUpdatedSteps() || {}).map(([step, data]) => (
