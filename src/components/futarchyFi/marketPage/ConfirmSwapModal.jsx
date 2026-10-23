@@ -1,6 +1,9 @@
 import React, { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import Button from '../../ui/Button';
+import { dialogBackdrop, dialogFrame, dialogPanel, dialogHeader, dialogTitle } from '../../ui/dialogClasses';
 import { ethers } from 'ethers';
 // Replace useMetaMask with wagmi hooks
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
@@ -137,29 +140,29 @@ const StepWithSubsteps = ({
     const getStepColors = () => {
         if (isStepCompleted) {
             return transactionData.action === 'Buy'
-                ? 'text-futarchyBlue11 bg-futarchyBlue3'
-                : 'text-futarchyCrimson11 bg-futarchyCrimson3';
+                ? 'text-seer-positive bg-seer-positive/10'
+                : 'text-seer-positive bg-seer-positive/10';
         }
         if (isStepActive) {
             return transactionData.action === 'Buy'
-                ? 'text-futarchyBlue11 bg-futarchyBlue3'
-                : 'text-futarchyCrimson11 bg-futarchyCrimson3';
+                ? 'text-seer-accent-text bg-seer-accent-soft'
+                : 'text-seer-accent-text bg-seer-accent-soft';
         }
-        return 'text-futarchyGray8 bg-futarchyGray4';
+        return 'text-seer-muted bg-seer-surface-raised';
     };
 
     const getSubstepColor = (isCompleted, isActive) => {
         if (isCompleted) {
             return transactionData.action === 'Buy'
-                ? 'text-futarchyBlue11'
-                : 'text-futarchyCrimson11';
+                ? 'text-seer-positive'
+                : 'text-seer-positive';
         }
         if (isActive) {
             return transactionData.action === 'Buy'
-                ? 'text-futarchyBlue11'
-                : 'text-futarchyCrimson11';
+                ? 'text-seer-accent-text'
+                : 'text-seer-accent-text';
         }
-        return 'text-futarchyGray8';
+        return 'text-seer-muted';
     };
 
     // Add debug logging
@@ -190,16 +193,16 @@ const StepWithSubsteps = ({
                     )}
                 </div>
                 <span className={`flex-1 ${isStepCompleted
-                    ? 'text-futarchyGray12 dark:text-futarchyGray112    '
+                    ? 'text-seer-text '
                     : isStepActive
-                        ? 'text-futarchyGray12 dark:text-futarchyGray112'
-                        : 'text-futarchyGray11 dark:text-futarchyGray112'
+                        ? 'text-seer-text'
+                        : 'text-seer-muted'
                     }`}>
                     {title}
                 </span>
                 <button
                     onClick={onToggle}
-                    className="text-futarchyBlue11 hover:text-futarchyBlue9 text-sm"
+                    className="text-seer-accent-text hover:underline underline-offset-2 text-sm"
                 >
                     {expanded ? 'Hide details' : 'Show details'}
                 </button>
@@ -260,10 +263,10 @@ const StepWithSubsteps = ({
                                         )}
                                     </div>
                                     <span className={`text-sm ${isSubstepCompleted
-                                        ? 'text-futarchyGray12 dark:text-futarchyGray112    '
+                                        ? 'text-seer-text '
                                         : isSubstepActive
-                                            ? 'text-futarchyGray12 dark:text-futarchyGray112'
-                                            : 'text-futarchyGray11 dark:text-futarchyGray112'
+                                            ? 'text-seer-text'
+                                            : 'text-seer-muted'
                                         }`}>
                                         {substep.text}
                                     </span>
@@ -1505,43 +1508,41 @@ const ConfirmSwapModal = memo(({
     const modalContent = (
         <>
             <motion.div // This is the backdrop
-                className="fixed inset-0 bg-black/50 z-[99999]"
+                className={`${dialogBackdrop} z-[99999]`}
                 onClick={onClose}
                 variants={backdropVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
             >
-                <div className="flex h-full items-center justify-center p-4">
+                <div className={dialogFrame}>
                     <div // This is the modal content panel
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl max-w-md w-full relative flex flex-col max-h-[80dvh]"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="confirm-swap-title"
+                        className={dialogPanel}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* All original modal content starts here */}
-                        <div className="flex shrink-0 justify-between items-center p-4 border-b border-futarchyGray6 dark:border-futarchyDarkGray6">
-                            <h2 className="text-xl font-semibold text-futarchyGray12 dark:text-futarchyGray3">
+                        <div className={dialogHeader}>
+                            <h2 id="confirm-swap-title" className={dialogTitle}>
                                 {transactionData.action === 'Redeem'
                                     ? 'Confirm Redeem'
                                     : `Confirm ${transactionData.action}`}
                             </h2>
-                            <button
-                                onClick={onClose}
-                                className="text-futarchyGray11 hover:text-futarchyGray12 dark:text-futarchyGray112 dark:hover:text-futarchyGray3"
-                            >
-                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <Button variant="ghost" size="sm" icon onClick={onClose} aria-label="Close" className="-mr-2">
+                                <XMarkIcon className="w-5 h-5" aria-hidden="true" />
+                            </Button>
                         </div>
 
                         {/* Scrolls inside the dialog; the page behind never has to */}
                         <div className="flex-1 min-h-0 overflow-y-auto">
                         {/* SWAP ROUTE */}
                         <div className="p-4">
-                            <span className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-1">Swap Route:</span>
-                            <span className="text-sm text-futarchyGray12 dark:text-futarchyGray112 font-medium">
+                            <span className="block text-sm font-medium text-seer-muted mb-1">Swap Route:</span>
+                            <span className="text-sm text-seer-text font-medium">
                                 {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
-                                <span className="text-xs block text-futarchyGray9 dark:text-futarchyGray9">(Best route from the Seer Lens quoter)</span>
+                                <span className="text-xs block text-seer-muted">(Best route from the Seer Lens quoter)</span>
                             </span>
                         </div>
 
@@ -1549,21 +1550,21 @@ const ConfirmSwapModal = memo(({
                         <div className="px-4 pb-2">
                             <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112/80">
+                                    <span className="text-sm font-medium text-seer-muted">
                                         Slippage Tolerance: {getSafeSlippageTolerance()}%
                                     </span>
                                     {slippageWarning && !showSlippageSettings && (
-                                        <span className="text-xs text-futarchyOrange11 dark:text-futarchyOrangeDark11">
+                                        <span className="text-xs text-seer-warning">
                                             {slippageWarning.split(' ').slice(0, 2).join(' ')}
                                         </span>
                                     )}
                                 </div>
                                 <button
                                     onClick={() => setShowSlippageSettings(!showSlippageSettings)}
-                                    className="p-1.5 rounded-lg hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray5 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-seer-surface-raised transition-colors"
                                     title="Configure slippage"
                                 >
-                                    <svg className="w-4 h-4 text-futarchyGray11 dark:text-futarchyGray112" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-4 h-4 text-seer-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1572,7 +1573,7 @@ const ConfirmSwapModal = memo(({
                             </div>
 
                             {showSlippageSettings && (
-                                <div className="mt-3 p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 rounded-lg">
+                                <div className="mt-3 p-3 bg-seer-surface-raised rounded-lg">
                                     <div className="flex gap-2 mb-2">
                                         {[1.0, 3.0, 5.0].map(value => (
                                             <button
@@ -1583,8 +1584,8 @@ const ConfirmSwapModal = memo(({
                                                     setSlippageWarning('');
                                                 }}
                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${slippageTolerance === value && !customSlippage
-                                                    ? 'bg-futarchyBlue11 text-white dark:bg-futarchyBlue11 dark:text-white'
-                                                    : 'bg-futarchyGray4 dark:bg-futarchyDarkGray4 text-futarchyGray11 dark:text-futarchyGray112 hover:bg-futarchyGray5 dark:hover:bg-futarchyDarkGray6'
+                                                    ? 'bg-pass text-white '
+                                                    : 'bg-seer-surface-raised text-seer-muted hover:bg-seer-surface-raised'
                                                     }`}
                                             >
                                                 {value}%
@@ -1599,9 +1600,9 @@ const ConfirmSwapModal = memo(({
                                                 step="0.1"
                                                 min="0"
                                                 max="50"
-                                                className="w-full px-3 py-1.5 pr-8 bg-futarchyGray4 dark:bg-futarchyDarkGray4 text-futarchyGray12 dark:text-futarchyGray3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-futarchyBlue11 dark:focus:ring-futarchyBlue9 border border-transparent dark:border-futarchyDarkGray6"
+                                                className="w-full px-3 py-1.5 pr-8 bg-seer-surface-raised text-seer-text rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-seer-accent-text focus:ring-seer-accent-text border border-transparent border-seer-border"
                                             />
-                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-futarchyGray11 dark:text-futarchyGray112 text-sm">
+                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-seer-muted text-sm">
                                                 %
                                             </span>
                                         </div>
@@ -1609,16 +1610,16 @@ const ConfirmSwapModal = memo(({
 
                                     {slippageWarning && (
                                         <div className={`text-xs mt-2 p-2 rounded-lg ${slippageWarning.includes('High slippage')
-                                            ? 'bg-futarchyCrimson3 dark:bg-futarchyCrimsonDark3 text-futarchyCrimson11 dark:text-futarchyCrimsonDark11'
+                                            ? 'bg-seer-negative/10 text-seer-negative'
                                             : slippageWarning.includes('Moderate slippage')
-                                                ? 'bg-futarchyOrange3 dark:bg-futarchyOrangeDark3 text-futarchyOrange11 dark:text-futarchyOrangeDark11'
-                                                : 'bg-futarchyYellow3 dark:bg-futarchyYellowDark3 text-futarchyYellow11 dark:text-futarchyYellowDark11'
+                                                ? 'bg-seer-warning/10 text-seer-warning'
+                                                : 'bg-fail-soft text-fail-text'
                                             }`}>
                                             {slippageWarning}
                                         </div>
                                     )}
 
-                                    <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-2">
+                                    <div className="text-xs text-seer-muted mt-2">
                                         Your transaction will revert if the price changes unfavorably by more than {getSafeSlippageTolerance()}%
                                     </div>
                                 </div>
@@ -1626,54 +1627,54 @@ const ConfirmSwapModal = memo(({
                         </div>
 
                         {/* Transaction Summary */}
-                        <div className="bg-futarchyGray4 dark:bg-futarchyDarkGray4 p-4 rounded-lg mb-4 mx-4">
+                        <div className="bg-seer-surface-raised p-4 rounded-lg mb-4 mx-4">
                             {/* ... all the transaction summary divs ... */}
-                            <h3 className="font-medium text-futarchyGray12 dark:text-futarchyGray112 mb-2">Transaction Summary</h3>
+                            <h3 className="font-medium text-seer-text mb-2">Transaction Summary</h3>
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
-                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Outcome</span>
+                                    <span className="text-seer-muted">Outcome</span>
                                     <span className={`font-medium ${transactionData.outcome === 'Event Will Occur'
-                                        ? 'text-futarchyGreen11 dark:text-futarchyGreenDark11'
-                                        : 'text-futarchyOrange11 dark:text-futarchyOrangeDark11'
+                                        ? 'text-pass-text'
+                                        : 'text-fail-text'
                                         }`}>
                                         {transactionData.outcome}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Type</span>
+                                    <span className="text-seer-muted">Type</span>
                                     <span className={`font-medium ${transactionData.action === 'Buy'
                                         ? (transactionData.outcome === 'Event Will Occur'
-                                            ? 'text-futarchyBlue11 dark:text-futarchyBlueDark11'
-                                            : 'text-futarchyOrange11 dark:text-futarchyOrangeDark11')
+                                            ? 'text-seer-positive'
+                                            : 'text-seer-positive')
                                         : transactionData.action === 'Redeem'
-                                            ? 'text-futarchyGreen11 dark:text-futarchyGreenDark11'
-                                            : 'text-futarchyCrimson11 dark:text-futarchyCrimsonDark11'
+                                            ? 'text-seer-positive'
+                                            : 'text-seer-negative'
                                         }`}>
                                         {transactionData.action}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Input Amount</span>
-                                    <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">{transactionData.amount}</span>
+                                    <span className="text-seer-muted">Input Amount</span>
+                                    <span className="text-seer-text font-medium">{transactionData.amount}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Protocol</span>
-                                    <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                    <span className="text-seer-muted">Protocol</span>
+                                    <span className="text-seer-text font-medium">
                                         {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
                                     </span>
                                 </div>
                                 {/* For Uniswap SDK (Chain 1 - Ethereum), show QuoterV2-based fields */}
                                 {selectedSwapMethod === 'uniswapSdk' && transactionData.insufficientLiquidity && (
-                                    <div className="bg-futarchyOrange3 dark:bg-futarchyOrangeDark3 border border-futarchyOrange7 dark:border-futarchyOrangeDark7 rounded-lg p-3 text-center">
-                                        <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 font-medium text-sm">Insufficient liquidity in this pool</span>
-                                        <p className="text-futarchyOrange11/70 dark:text-futarchyOrangeDark11/70 text-xs mt-1">This pool does not have enough in-range liquidity to execute this trade.</p>
+                                    <div className="bg-seer-warning/10 border border-seer-warning/40 rounded-lg p-3 text-center">
+                                        <span className="text-seer-warning font-medium text-sm">Insufficient liquidity in this pool</span>
+                                        <p className="text-seer-warning/70 text-xs mt-1">This pool does not have enough in-range liquidity to execute this trade.</p>
                                     </div>
                                 )}
                                 {selectedSwapMethod === 'uniswapSdk' && !transactionData.insufficientLiquidity && (
                                     <>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Expected Receive</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Expected Receive</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1698,13 +1699,13 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">
+                                            <span className="text-seer-muted">
                                                 Min. Receive ({getSafeSlippageTolerance()}% slippage)
                                                 {transactionData.isApproximate && (
-                                                    <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 ml-1" title="Estimate based on spot price — does not account for pool fees or concentrated liquidity. Actual output may differ.">~ approx</span>
+                                                    <span className="text-seer-warning ml-1" title="Estimate based on spot price — does not account for pool fees or concentrated liquidity. Actual output may differ.">~ approx</span>
                                                 )}
                                             </span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1726,8 +1727,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Current Pool Price</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Current Pool Price</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1744,8 +1745,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Execution Price</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Execution Price</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1762,8 +1763,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Pool Price After</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Pool Price After</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1783,8 +1784,8 @@ const ConfirmSwapModal = memo(({
                                         {(swapRouteData.data?.priceImpact !== null && swapRouteData.data?.priceImpact !== undefined) && (
                                             <>
                                                 <div className="flex justify-between">
-                                                    <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Price Impact</span>
-                                                    <span className={`font-medium ${Math.abs(swapRouteData.data.priceImpact) > 99 ? 'text-futarchyOrange11' : Math.abs(swapRouteData.data.priceImpact) > 2 ? 'text-futarchyCrimson11' : 'text-futarchyGreen11'}`}>
+                                                    <span className="text-seer-muted">Price Impact</span>
+                                                    <span className={`font-medium ${Math.abs(swapRouteData.data.priceImpact) > 99 ? 'text-seer-warning' : Math.abs(swapRouteData.data.priceImpact) > 2 ? 'text-seer-negative' : 'text-seer-positive'}`}>
                                                         {Math.abs(swapRouteData.data.priceImpact) > 99
                                                             ? 'Insufficient liquidity'
                                                             : `${Math.abs(swapRouteData.data.priceImpact) < 0.01
@@ -1794,21 +1795,21 @@ const ConfirmSwapModal = memo(({
                                                 </div>
                                                 {/* Warning for insufficient liquidity */}
                                                 {Math.abs(swapRouteData.data.priceImpact) > 99 && (
-                                                    <div className="mt-2 p-2 bg-futarchyOrange3 dark:bg-futarchyOrange11/10 border border-futarchyOrange11 rounded-lg">
-                                                        <p className="text-futarchyOrange11 font-medium text-sm">Insufficient Liquidity</p>
-                                                        <p className="text-futarchyOrange11 text-xs mt-1">
+                                                    <div className="mt-2 p-2 bg-seer-warning/10 border border-seer-warning/40 rounded-lg">
+                                                        <p className="text-seer-warning font-medium text-sm">Insufficient Liquidity</p>
+                                                        <p className="text-seer-warning text-xs mt-1">
                                                             This pool does not have enough liquidity to execute your trade. The price impact would be extreme.
                                                         </p>
                                                     </div>
                                                 )}
                                                 {/* Warning for high price impact (but not insufficient) */}
                                                 {Math.abs(swapRouteData.data.priceImpact) > 5 && Math.abs(swapRouteData.data.priceImpact) <= 99 && (
-                                                    <div className="mt-2 p-2 bg-futarchyCrimson3 dark:bg-futarchyCrimson11/10 border border-futarchyCrimson11 rounded-lg">
+                                                    <div className="mt-2 p-2 bg-seer-negative/10 border border-seer-negative/40 rounded-lg">
                                                         <div className="flex-1">
-                                                            <p className="text-futarchyCrimson11 font-medium text-sm">
+                                                            <p className="text-seer-negative font-medium text-sm">
                                                                 High Price Impact Warning
                                                             </p>
-                                                            <p className="text-futarchyCrimson11 text-xs mt-1">
+                                                            <p className="text-seer-negative text-xs mt-1">
                                                                 This trade will significantly move the pool price ({Math.abs(swapRouteData.data.priceImpact).toFixed(2)}%).
                                                                 Consider reducing trade size or splitting into multiple trades.
                                                             </p>
@@ -1821,16 +1822,16 @@ const ConfirmSwapModal = memo(({
                                 )}
                                 {/* For Algebra (Chain 100 - Gnosis), show Algebra Quoter fields */}
                                 {selectedSwapMethod === 'algebra' && transactionData.insufficientLiquidity && (
-                                    <div className="bg-futarchyOrange3 dark:bg-futarchyOrangeDark3 border border-futarchyOrange7 dark:border-futarchyOrangeDark7 rounded-lg p-3 text-center">
-                                        <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 font-medium text-sm">Insufficient liquidity in this pool</span>
-                                        <p className="text-futarchyOrange11/70 dark:text-futarchyOrangeDark11/70 text-xs mt-1">This pool does not have enough in-range liquidity to execute this trade.</p>
+                                    <div className="bg-seer-warning/10 border border-seer-warning/40 rounded-lg p-3 text-center">
+                                        <span className="text-seer-warning font-medium text-sm">Insufficient liquidity in this pool</span>
+                                        <p className="text-seer-warning/70 text-xs mt-1">This pool does not have enough in-range liquidity to execute this trade.</p>
                                     </div>
                                 )}
                                 {selectedSwapMethod === 'algebra' && !transactionData.insufficientLiquidity && (
                                     <>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Expected Receive</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Expected Receive</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1855,8 +1856,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Min. Receive ({getSafeSlippageTolerance()}% slippage)</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Min. Receive ({getSafeSlippageTolerance()}% slippage)</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1878,8 +1879,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Current Pool Price</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Current Pool Price</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1898,8 +1899,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Execution Price</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Execution Price</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1918,8 +1919,8 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Pool Price After</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Pool Price After</span>
+                                            <span className="text-seer-text font-medium">
                                                 {swapRouteData.isLoading ? (
                                                     <span className="inline-flex items-center gap-1">
                                                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1939,8 +1940,8 @@ const ConfirmSwapModal = memo(({
                                         </div>
                                         {(swapRouteData.data?.priceImpact !== null && swapRouteData.data?.priceImpact !== undefined) && (
                                             <div className="flex justify-between">
-                                                <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Price Impact</span>
-                                                <span className={`font-medium ${Math.abs(swapRouteData.data.priceImpact) > 99 ? 'text-futarchyOrange11' : Math.abs(swapRouteData.data.priceImpact) > 2 ? 'text-futarchyCrimson11' : 'text-futarchyGreen11'}`}>
+                                                <span className="text-seer-muted">Price Impact</span>
+                                                <span className={`font-medium ${Math.abs(swapRouteData.data.priceImpact) > 99 ? 'text-seer-warning' : Math.abs(swapRouteData.data.priceImpact) > 2 ? 'text-seer-negative' : 'text-seer-positive'}`}>
                                                     {Math.abs(swapRouteData.data.priceImpact) > 99
                                                         ? 'Insufficient liquidity'
                                                         : `${Math.abs(swapRouteData.data.priceImpact) < 0.01
@@ -1955,8 +1956,8 @@ const ConfirmSwapModal = memo(({
                                 {selectedSwapMethod !== 'uniswapSdk' && selectedSwapMethod !== 'algebra' && transactionData.expectedReceiveAmount && (
                                     <>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Expected Receive</span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-muted">Expected Receive</span>
+                                            <span className="text-seer-text font-medium">
                                                 {formatTokenAmount(transactionData.expectedReceiveAmount)} {transactionData.receiveToken ||
                                                     (transactionData.action === 'Buy'
                                                         ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol
@@ -1964,13 +1965,13 @@ const ConfirmSwapModal = memo(({
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-futarchyGray11 dark:text-futarchyGray112/80">
+                                            <span className="text-seer-muted">
                                                 Min. Receive ({getSafeSlippageTolerance()}% slippage)
                                                 {transactionData.isApproximate && (
-                                                    <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 ml-1" title="Estimate based on spot price — does not account for pool fees or concentrated liquidity. Actual output may differ.">~ approx</span>
+                                                    <span className="text-seer-warning ml-1" title="Estimate based on spot price — does not account for pool fees or concentrated liquidity. Actual output may differ.">~ approx</span>
                                                 )}
                                             </span>
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+                                            <span className="text-seer-text font-medium">
                                                 {formatTokenAmount(parseFloat(transactionData.expectedReceiveAmount) * (1 - getSafeSlippageTolerance() / 100))} {transactionData.receiveToken ||
                                                     (transactionData.action === 'Buy'
                                                         ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol
@@ -1981,10 +1982,10 @@ const ConfirmSwapModal = memo(({
                                 )}
                                 {selectedSwapMethod !== 'algebra' && selectedSwapMethod !== 'uniswapSdk' && (
                                     <div className="flex justify-between">
-                                        <span className="text-futarchyGray11 dark:text-futarchyGray112/80">
+                                        <span className="text-seer-muted">
                                             {transactionData.action === 'Redeem' ? 'Redemption Rate' : 'Est. Price'}
                                         </span>
-                                        <span className="text-futarchyGray12 dark:text-futarchyGray112 font-medium">
+                                        <span className="text-seer-text font-medium">
                                             {swapRouteData.isLoading ? 'Loading...' : swapRouteData.error ? '-' : (() => {
                                                 if (!swapRouteData.data?.swapPrice || Number(swapRouteData.data.swapPrice) <= 0 || !BASE_TOKENS_CONFIG || !BASE_TOKENS_CONFIG.currency || !BASE_TOKENS_CONFIG.company) {
                                                     return 'N/A';
@@ -2014,8 +2015,8 @@ const ConfirmSwapModal = memo(({
                                 )}
                                 {swapRouteData.data?.feeAmount && ethers.BigNumber.from(swapRouteData.data.feeAmount).gt(0) && (
                                     <div className="flex justify-between">
-                                        <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Est. Fee {swapRouteData.data?.protocolName ? `(${swapRouteData.data.protocolName})` : '(CoW)'}</span>
-                                        <span className="text-futarchyGray12 dark:text-futarchyGray112 font-medium">
+                                        <span className="text-seer-muted">Est. Fee {swapRouteData.data?.protocolName ? `(${swapRouteData.data.protocolName})` : '(CoW)'}</span>
+                                        <span className="text-seer-text font-medium">
                                             {formatBalance(
                                                 ethers.utils.formatUnits(swapRouteData.data.feeAmount, 18),
                                                 transactionData.amount.split(' ')[1]
@@ -2026,8 +2027,8 @@ const ConfirmSwapModal = memo(({
                                 {/* Price Impact is already shown above in the Algebra/Uniswap SDK sections */}
                                 {swapRouteData.data?.gasSpent && (
                                     <div className="flex justify-between">
-                                        <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Est. Gas</span>
-                                        <span className="text-futarchyGray12 dark:text-futarchyGray112 font-medium">
+                                        <span className="text-seer-muted">Est. Gas</span>
+                                        <span className="text-seer-text font-medium">
                                             {`~${swapRouteData.data?.gasSpent.toLocaleString()} gas`}
                                         </span>
                                     </div>
@@ -2036,16 +2037,16 @@ const ConfirmSwapModal = memo(({
                                     (transactionData.action === 'Buy' ||
                                         (checkSellCollateral && transactionData.action === 'Sell'))) && (
                                         <>
-                                            <div className="border-t border-futarchyGray6 dark:border-futarchyDarkGray6 my-2"></div>
+                                            <div className="border-t border-seer-border my-2"></div>
                                             <div className="flex justify-between">
-                                                <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Already Have</span>
-                                                <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">
+                                                <span className="text-seer-muted">Already Have</span>
+                                                <span className="text-seer-positive font-medium">
                                                     {formatTokenAmount(existingBalance)} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-futarchyGray11 dark:text-futarchyGray112/80">Need to Add</span>
-                                                <span className="text-futarchyBlue11 dark:text-futarchyBlueDark11 font-medium">
+                                                <span className="text-seer-muted">Need to Add</span>
+                                                <span className="text-seer-accent-text font-medium">
                                                     {formatTokenAmount(additionalCollateralNeeded)} {transactionData.action === 'Buy' ? (BASE_TOKENS_CONFIG?.currency?.symbol || 'CURRENCY') : (BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
                                                 </span>
                                             </div>
@@ -2063,13 +2064,13 @@ const ConfirmSwapModal = memo(({
                                         type="checkbox"
                                         checked={useUnlimitedApproval}
                                         onChange={(e) => setUseUnlimitedApproval(e.target.checked)}
-                                        className="mt-1 w-4 h-4 text-futarchyBlue9 bg-futarchyGray3 border-futarchyGray7 rounded focus:ring-futarchyBlue9 focus:ring-2 dark:bg-futarchyDarkGray4 dark:border-futarchyGray112"
+                                        className="mt-1 w-4 h-4 accent-seer-purple text-seer-purple bg-seer-surface-raised border-seer-border rounded focus:ring-seer-accent-text focus:ring-2"
                                     />
                                     <div className="flex-1">
-                                        <span className="text-sm font-medium text-futarchyGray12 dark:text-futarchyGray3 group-hover:text-futarchyBlue11 dark:group-hover:text-futarchyBlue9 transition-colors">
+                                        <span className="text-sm font-medium text-seer-text group-hover:text-seer-accent-text transition-colors">
                                             Max Approval
                                         </span>
-                                        <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-1">
+                                        <p className="text-xs text-seer-muted mt-1">
                                             Will request max allowance. Useful for saving gas on future requests.
                                         </p>
                                     </div>
@@ -2078,11 +2079,11 @@ const ConfirmSwapModal = memo(({
                         )}
 
                         {priceImpactTooHigh && (
-                            <div className="mx-4 mb-4 p-3 rounded-lg border border-futarchyCrimson7 bg-futarchyCrimson3 dark:bg-futarchyCrimson11/10">
-                                <p className="text-sm font-medium text-futarchyCrimson11">
+                            <div className="mx-4 mb-4 p-3 rounded-lg border border-seer-negative/40 bg-seer-negative/10">
+                                <p className="text-sm font-medium text-seer-negative">
                                     Price impact too high — pool depth insufficient for this size
                                 </p>
-                                <label className="mt-2 flex items-center gap-2 text-xs text-futarchyCrimson11 cursor-pointer">
+                                <label className="mt-2 flex items-center gap-2 text-xs text-seer-negative cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={tradeAnywayAcknowledged}
@@ -2094,20 +2095,20 @@ const ConfirmSwapModal = memo(({
                         )}
 
                         {requiredChain.isWrongChain && !isProcessing && !isFinalStateForCloseButton && (
-                            <div className="mb-6 p-4 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+                            <div className="mb-6 p-4 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm">
                                 This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || 'another network'}.
                             </div>
                         )}
 
                         {priceMoveNotice && (
-                            <div className="mb-6 p-4 bg-futarchyOrange3 dark:bg-futarchyOrange11/10 border border-futarchyOrange7 rounded-lg text-futarchyOrange11 text-sm">
+                            <div className="mb-6 p-4 bg-seer-warning/10 border border-seer-warning/40 rounded-lg text-seer-warning text-sm">
                                 {priceMoveNotice}
                             </div>
                         )}
 
                         {/* Error Display */}
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg text-red-700 dark:text-red-300 text-sm break-words max-h-32 overflow-y-auto">
+                            <div className="mb-6 p-4 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm break-words max-h-32 overflow-y-auto">
                                 {error}
                             </div>
                         )}
@@ -2116,7 +2117,7 @@ const ConfirmSwapModal = memo(({
                         {processingStep && (
                             <div className="mb-6 relative">
                                 {/* ... step display logic ... */}
-                                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent dark:from-futarchyDarkGray3 dark:to-transparent pointer-events-none z-10" />
+                                <div className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none z-10" />
                                 <div className="max-h-[240px] overflow-y-auto pr-2 -mr-2">
                                     {console.log("[ConfirmSwapCow Debug - Render] Rendering steps with stepsData:", stepsData)}
                                     {Object.entries(stepsData)
@@ -2147,21 +2148,21 @@ const ConfirmSwapModal = memo(({
 
                         {/* Post-Trade Summary Panel — Success */}
                         {isFinalStateForCloseButton && orderStatus === 'fulfilled' && (
-                            <div className="mx-4 mb-4 p-4 bg-futarchyGreen3 dark:bg-futarchyGreenDark3 border border-futarchyGreen7 dark:border-futarchyGreenDark7 rounded-lg space-y-2">
+                            <div className="mx-4 mb-4 p-4 bg-seer-positive/10 border border-seer-positive/40 rounded-lg space-y-2">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <svg className="w-5 h-5 text-futarchyGreen11 dark:text-futarchyGreenDark11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg className="w-5 h-5 text-seer-positive" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M20 6L9 17l-5-5" />
                                     </svg>
-                                    <span className="font-semibold text-sm text-futarchyGreen11 dark:text-futarchyGreenDark11">Trade Completed</span>
+                                    <span className="font-semibold text-sm text-seer-positive">Trade Completed</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-futarchyGreen11/70 dark:text-futarchyGreenDark11/70">You sent</span>
-                                    <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">{transactionData.amount}</span>
+                                    <span className="text-seer-positive/70">You sent</span>
+                                    <span className="text-seer-positive font-medium">{transactionData.amount}</span>
                                 </div>
                                 {transactionData.expectedReceiveAmount && (
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-futarchyGreen11/70 dark:text-futarchyGreenDark11/70">You received</span>
-                                        <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">
+                                        <span className="text-seer-positive/70">You received</span>
+                                        <span className="text-seer-positive font-medium">
                                             ~{formatTokenAmount(transactionData.expectedReceiveAmount)} {transactionData.receiveToken ||
                                                 (transactionData.action === 'Buy'
                                                     ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company.symbol
@@ -2171,23 +2172,23 @@ const ConfirmSwapModal = memo(({
                                 )}
                                 {transactionData.outcome && (
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-futarchyGreen11/70 dark:text-futarchyGreenDark11/70">Outcome</span>
-                                        <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">{transactionData.outcome}</span>
+                                        <span className="text-seer-positive/70">Outcome</span>
+                                        <span className="text-seer-positive font-medium">{transactionData.outcome}</span>
                                     </div>
                                 )}
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-futarchyGreen11/70 dark:text-futarchyGreenDark11/70">Protocol</span>
-                                    <span className="text-futarchyGreen11 dark:text-futarchyGreenDark11 font-medium">
+                                    <span className="text-seer-positive/70">Protocol</span>
+                                    <span className="text-seer-positive font-medium">
                                         {SEER_ROUTE_NAMES[swapChainId] || 'Seer'}
                                     </span>
                                 </div>
                                 {transactionResultHash && (
-                                    <div className="pt-1 border-t border-futarchyGreen7/40 dark:border-futarchyGreenDark7/40">
+                                    <div className="pt-1 border-t border-seer-positive/40 ">
                                         <a
                                             href={`${explorerConfig.url}${transactionResultHash}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="flex items-center gap-1 text-sm text-futarchyGreen11 dark:text-futarchyGreenDark11 hover:underline"
+                                            className="flex items-center gap-1 text-sm text-seer-positive hover:underline"
                                         >
                                             View on {explorerConfig.name}
                                             <span className="font-mono">({transactionResultHash.substring(0, 10)}…{transactionResultHash.substring(transactionResultHash.length - 8)})</span>
@@ -2204,13 +2205,13 @@ const ConfirmSwapModal = memo(({
 
                         {/* Post-Trade Summary Panel — Failed/Expired/Cancelled */}
                         {isFinalStateForCloseButton && orderStatus !== 'fulfilled' && (
-                            <div className="mx-4 mb-4 p-4 bg-futarchyCrimson3 dark:bg-futarchyCrimsonDark3 border border-futarchyCrimson7 dark:border-futarchyCrimsonDark7 rounded-lg space-y-2">
+                            <div className="mx-4 mb-4 p-4 bg-seer-negative/10 border border-seer-negative/40 rounded-lg space-y-2">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <svg className="w-5 h-5 text-futarchyCrimson11 dark:text-futarchyCrimsonDark11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg className="w-5 h-5 text-seer-negative" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                         <line x1="18" y1="6" x2="6" y2="18" />
                                         <line x1="6" y1="6" x2="18" y2="18" />
                                     </svg>
-                                    <span className="font-semibold text-sm text-futarchyCrimson11 dark:text-futarchyCrimsonDark11">
+                                    <span className="font-semibold text-sm text-seer-negative">
                                         Trade {orderStatus === 'expired' ? 'Expired' : orderStatus === 'cancelled' ? 'Cancelled' : 'Failed'}
                                     </span>
                                 </div>
@@ -2219,7 +2220,7 @@ const ConfirmSwapModal = memo(({
                                         href={`${explorerConfig.url}${transactionResultHash}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-1 text-sm text-futarchyCrimson11 dark:text-futarchyCrimsonDark11 hover:underline"
+                                        className="flex items-center gap-1 text-sm text-seer-negative hover:underline"
                                     >
                                         View on {explorerConfig.name}
                                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2235,7 +2236,7 @@ const ConfirmSwapModal = memo(({
                         </div>
 
                         {/* Main Action Button */}
-                        <div className="shrink-0 px-4 pt-3 flex items-center justify-center border-t border-futarchyGray6 dark:border-futarchyDarkGray6">
+                        <div className="shrink-0 px-4 pt-3 flex items-center justify-center border-t border-seer-border">
                             {/* Show ConnectButton if wallet not connected */}
                             {!account ? (
                                 <div className="w-full mb-4">
@@ -2268,7 +2269,7 @@ const ConfirmSwapModal = memo(({
                                                                 <button
                                                                     onClick={openConnectModal}
                                                                     type="button"
-                                                                    className="w-full py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80"
+                                                                    className="w-full py-3 px-4 rounded-control font-semibold transition-colors bg-seer-purple hover:bg-seer-purple-hover text-white "
                                                                 >
                                                                     Connect Wallet
                                                                 </button>
@@ -2284,13 +2285,13 @@ const ConfirmSwapModal = memo(({
                                 <div className="w-full mb-4 flex gap-3">
                                     <button
                                         onClick={onClose}
-                                        className="flex-1 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80"
+                                        className="flex-1 py-3 px-4 rounded-control font-semibold transition-colors bg-seer-purple hover:bg-seer-purple-hover text-white "
                                     >
                                         View Positions
                                     </button>
                                     <button
                                         onClick={onClose}
-                                        className="flex-1 py-3 px-4 rounded-lg font-medium transition-colors border border-futarchyGray7 dark:border-futarchyDarkGray7 text-futarchyGray11 dark:text-futarchyGray112 hover:bg-futarchyGray3 dark:hover:bg-futarchyDarkGray5"
+                                        className="flex-1 py-3 px-4 rounded-lg font-medium transition-colors border border-seer-border text-seer-muted hover:bg-seer-surface-raised"
                                     >
                                         Close
                                     </button>
@@ -2299,7 +2300,7 @@ const ConfirmSwapModal = memo(({
                                 <button
                                     onClick={requiredChain.switchToRequiredChain}
                                     disabled={requiredChain.isSwitching}
-                                    className="w-full mb-4 py-3 px-4 rounded-lg font-medium transition-colors bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80"
+                                    className="w-full mb-4 py-3 px-4 rounded-control font-semibold transition-colors bg-seer-purple hover:bg-seer-purple-hover text-white "
                                 >
                                     {requiredChain.isSwitching ? 'Switching network...' : `Switch to ${requiredChain.requiredChainName}`}
                                 </button>
@@ -2311,13 +2312,13 @@ const ConfirmSwapModal = memo(({
                                             : handleConfirmSwap
                                     }
                                     disabled={(isProcessing && !isFinalStateForCloseButton) || transactionData.insufficientLiquidity || quoteUnavailableForExecution || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
-                                    className={`w-full mb-4 py-3 px-4 rounded-lg font-medium transition-colors ${transactionData.insufficientLiquidity
-                                        ? 'bg-futarchyOrange7 text-futarchyOrange11 cursor-not-allowed opacity-60'
+                                    className={`w-full mb-4 py-3 px-4 rounded-control font-semibold transition-colors ${transactionData.insufficientLiquidity
+                                        ? 'bg-seer-warning text-seer-warning cursor-not-allowed opacity-60'
                                         : isFinalStateForCloseButton
-                                            ? 'bg-futarchyCrimson7 text-futarchyCrimson11 hover:bg-futarchyCrimson8 dark:bg-futarchyCrimsonDark7 dark:text-futarchyCrimsonDark11 dark:hover:bg-futarchyCrimsonDark8'
+                                            ? 'bg-seer-negative text-seer-negative hover:opacity-90 '
                                         : isProcessing
-                                            ? 'bg-futarchyGray6 text-futarchyGray11 dark:bg-futarchyDarkGray6 dark:text-futarchyDarkGray11 cursor-not-allowed'
-                                            : 'bg-black text-white hover:bg-black/90 dark:bg-futarchyGray3 dark:text-black dark:hover:bg-futarchyGray3/80'
+                                            ? 'bg-seer-surface-raised text-seer-muted cursor-not-allowed'
+                                            : 'bg-seer-purple hover:bg-seer-purple-hover text-white '
                                         }`}
                                 >
                                     {isFinalStateForCloseButton

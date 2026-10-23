@@ -17,6 +17,9 @@ import { useSafeConnection } from "../../../../hooks/useSafeConnection";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { splitCollateral, mergeCollateral } from "../../../../utils/collateralActions";
 import { isSafeTransactionSent, describeTxError } from "../../../../utils/txErrors";
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import Button from '../../../ui/Button';
+import { dialogPanelWide, dialogTitle } from '../../../ui/dialogClasses';
 
 
 // MetaMask icon component
@@ -35,12 +38,12 @@ const WalletInformation = ({ walletAddress, walletIcon }) => {
   };
 
   return (
-    <div className="flex flex-row bg-white dark:bg-futarchyDarkGray4 border border-futarchyGray6 rounded-lg p-3 md:p-4">
+    <div className="flex flex-row bg-seer-surface border border-seer-border rounded-lg p-3 md:p-4">
       <div className="flex flex-col gap-[2px]">
-        <div className="text-futarchyGray11 text-xs md:text-sm font-normal">
+        <div className="text-seer-muted text-xs md:text-sm font-normal">
           Connected Wallet
         </div>
-        <div className="flex flex-row items-center gap-[6px] text-futarchyGray12 dark:text-futarchyGray3 text-sm md:text-base font-medium">
+        <div className="flex flex-row items-center gap-[6px] text-seer-text text-sm md:text-base font-medium">
           {walletIcon} {truncateAddress(walletAddress)}
         </div>
       </div>
@@ -50,9 +53,9 @@ const WalletInformation = ({ walletAddress, walletIcon }) => {
 
 // AlertContainer component
 const AlertContainer = ({ alertContainerTitle, alertSupportText }) => (
-  <div className="relative flex flex-col bg-white border border-futarchyGray6 rounded-lg p-4 gap-1">
-    <div className="text-futarchyGray11 text-sm font-normal">
-      <div className="text-futarchyGray12 text-sm font-medium">
+  <div className="relative flex flex-col bg-seer-surface border border-seer-border rounded-lg p-4 gap-1">
+    <div className="text-seer-muted text-sm font-normal">
+      <div className="text-seer-text text-sm font-medium">
         {alertContainerTitle}
       </div>
       {alertSupportText}
@@ -62,21 +65,25 @@ const AlertContainer = ({ alertContainerTitle, alertSupportText }) => (
 
 // Toggle Switch Component
 const TokenToggle = ({ selectedToken, onToggle, getCurrencySymbol, getCompanySymbol }) => (
-  <div className="flex items-center gap-2 md:gap-4 p-2 md:p-4 bg-white dark:bg-futarchyDarkGray4 border border-futarchyGray6 rounded-lg">
+  <div role="group" aria-label="Collateral token" className="inline-flex self-start items-center gap-1 p-1 rounded-control border border-seer-border">
     <button
+      type="button"
+      aria-pressed={selectedToken === "currency"}
       onClick={() => onToggle("currency")}
-      className={`px-3 py-1 text-sm md:px-4 md:py-2 rounded-md font-medium transition-colors ${selectedToken === "currency"
-        ? "bg-futarchyGray12 text-white dark:bg-white dark:text-black"
-        : "bg-white text-futarchyGray11 hover:bg-futarchyGray3 dark:bg-futarchyGray12 dark:border dark:border-futarchyGray112/40 dark:hover:bg-futarchyDarkGray4 dark:hover:border-white dark:hover:text-white"
+      className={`h-8 px-3 text-[13px] rounded-control font-semibold transition-colors ${selectedToken === "currency"
+        ? "bg-seer-surface-raised text-seer-text"
+        : "text-seer-muted hover:text-seer-text"
         }`}
     >
       {getCurrencySymbol()}
     </button>
     <button
+      type="button"
+      aria-pressed={selectedToken === "company"}
       onClick={() => onToggle("company")}
-      className={`px-3 py-1 text-sm md:px-4 md:py-2 rounded-md font-medium transition-colors ${selectedToken === "company"
-        ? "bg-futarchyGray12 text-white dark:bg-white dark:text-black"
-        : "bg-white text-futarchyGray11 hover:bg-futarchyGray3 dark:bg-futarchyGray12 dark:border dark:border-futarchyGray112/40 dark:hover:bg-futarchyDarkGray4 dark:hover:border-white dark:hover:text-white"
+      className={`h-8 px-3 text-[13px] rounded-control font-semibold transition-colors ${selectedToken === "company"
+        ? "bg-seer-surface-raised text-seer-text"
+        : "text-seer-muted hover:text-seer-text"
         }`}
     >
       {getCompanySymbol()}
@@ -192,15 +199,15 @@ const StepWithSubsteps = ({
   const getStepColors = () => {
     if (processingStep === "completed") {
       return selectedTokenType === "currency"
-        ? "text-futarchyBlue11 bg-futarchyBlue3"
-        : "text-futarchyEmerald11 bg-futarchyEmerald3";
+        ? "text-seer-positive bg-seer-positive/10"
+        : "text-seer-positive bg-seer-positive/10";
     }
     if (isStepActive) {
       return selectedTokenType === "currency"
-        ? "text-futarchyBlue11 bg-futarchyBlue3"
-        : "text-futarchyEmerald11 bg-futarchyEmerald3";
+        ? "text-seer-accent-text bg-seer-accent-soft"
+        : "text-seer-accent-text bg-seer-accent-soft";
     }
-    return "text-futarchyGray8 bg-futarchyGray4";
+    return "text-seer-muted bg-seer-surface-raised";
   };
 
   // Determine which substep is currently active to decide if the main spinner should show
@@ -239,17 +246,17 @@ const StepWithSubsteps = ({
         </div>
         <span
           className={`flex-1 text-sm md:text-base ${processingStep === "completed"
-            ? "text-futarchyGray12 dark:text-futarchyGray3"
+            ? "text-seer-text"
             : isStepActive
-              ? "text-futarchyGray12 dark:text-futarchyGray3"
-              : "text-futarchyGray11 dark:text-futarchyGray3"
+              ? "text-seer-text"
+              : "text-seer-muted"
             }`}
         >
           {title}
         </span>
         <button
           onClick={onToggle}
-          className="text-futarchyBlue11 hover:text-futarchyBlue9 text-xs md:text-sm"
+          className="text-seer-accent-text hover:underline underline-offset-2 text-xs md:text-sm"
         >
           {expanded ? "Hide details" : "Show details"}
         </button>
@@ -273,12 +280,12 @@ const StepWithSubsteps = ({
                   <div
                     className={`w-4 h-4 rounded-full flex items-center justify-center ${isCompleted
                       ? selectedTokenType === "currency"
-                        ? "text-futarchyBlue11"
-                        : "text-futarchyEmerald11"
+                        ? "text-seer-positive"
+                        : "text-seer-positive"
                       : isActive
                         ? selectedTokenType === "currency"
-                          ? "text-futarchyBlue11"
-                          : "text-futarchyEmerald11"
+                          ? "text-seer-accent-text"
+                          : "text-seer-accent-text"
                         : ""
                       }`}
                   >
@@ -290,10 +297,10 @@ const StepWithSubsteps = ({
                   </div>
                   <span
                     className={`text-xs md:text-sm ${isCompleted
-                      ? "text-futarchyGray12 dark:text-futarchyGray3"
+                      ? "text-seer-text"
                       : isActive
-                        ? "text-futarchyGray12 dark:text-futarchyGray3"
-                        : "text-futarchyGray11 dark:text-futarchyGray3"
+                        ? "text-seer-text"
+                        : "text-seer-muted"
                       }`}
                   >
                     {substep.text}
@@ -965,16 +972,12 @@ const CollateralModal = ({
     }
   };
 
-
-
   const toggleStepExpansion = (step) => {
     setExpandedSteps((prev) => ({
       ...prev,
       [step]: !prev[step],
     }));
   };
-
-
 
   // Approval preference state
   const [useUnlimitedApproval, setUseUnlimitedApproval] = useState(false);
@@ -1158,7 +1161,7 @@ const CollateralModal = ({
   let buttonContent;
   let buttonAction = () => { };
   let buttonIsEnabled = false;
-  let buttonClasses = "w-full py-2 md:py-3 px-4 rounded-lg font-semibold transition-colors";
+  let buttonClasses = "w-full min-h-12 px-4 rounded-control text-[15px] font-semibold transition-colors";
 
   // Debug logging for button state
   console.log('[CollateralModal] Button state check:', {
@@ -1175,50 +1178,57 @@ const CollateralModal = ({
     );
     buttonAction = handleClose;
     buttonIsEnabled = true;
-    buttonClasses += "flex bg-black text-white dark:bg-white dark:text-black items-center justify-center gap-2";
+    buttonClasses += "flex bg-seer-purple hover:bg-seer-purple-hover text-white items-center justify-center gap-2";
   } else if (localProcessingStep && localProcessingStep !== "completed") {
     buttonContent = "Transaction in Progress...";
     // buttonAction remains () => {} or can be explicitly set if needed
     buttonIsEnabled = false; // Disabled while processing
-    buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+    buttonClasses += " bg-seer-surface-raised text-seer-muted/40 cursor-not-allowed";
   } else if (requiredChain.isWrongChain) {
     // Split/merge calls go to this market's contracts, which only exist on its chain
     buttonContent = requiredChain.isSwitching ? "Switching network..." : `Switch to ${requiredChain.requiredChainName}`;
     buttonAction = requiredChain.switchToRequiredChain;
     buttonIsEnabled = !requiredChain.isSwitching;
-    buttonClasses += " bg-black hover:bg-black/80 text-white dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
+    buttonClasses += " bg-seer-purple hover:bg-seer-purple-hover text-white ";
   } else { // Not processing, in input mode (localProcessingStep is null/undefined)
     buttonContent = action === "add" ? "Split Collateral" : "Merge Collateral";
     buttonAction = onHandleActionButtonClick;
     buttonIsEnabled = isAmountValid();
     if (buttonIsEnabled) {
-      buttonClasses += " bg-black hover:bg-black/80 text-white hover:bg-black/90 dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
+      buttonClasses += " bg-seer-purple hover:bg-seer-purple-hover text-white ";
     } else {
-      buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+      buttonClasses += " bg-seer-surface-raised text-seer-muted/40 cursor-not-allowed";
     }
   }
 
   return (
-    <div className="flex flex-col relative w-11/12 max-w-[393px] max-h-[80dvh] md:w-[480px] md:h-auto md:max-h-[min(638px,80dvh)] bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-lg gap-4 p-4 md:p-6 overflow-y-auto">
-      <div className="flex justify-between items-center">
-        <div className="text-lg md:text-xl text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="collateral-modal-title"
+      className={`${dialogPanelWide} sm:w-[480px] gap-4 p-5 overflow-y-auto overscroll-contain`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <h2 id="collateral-modal-title" className={dialogTitle}>
           {title}
-        </div>
-        <button
+        </h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon
+          aria-label="Close"
+          className="-mr-2"
           onClick={handleClose}
           disabled={isProcessing && processingStep !== "completed"}
-          className="text-futarchyGray11 hover:text-futarchyGray12 dark:text-futarchyGray112 dark:hover:text-futarchyGray3"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+          <XMarkIcon className="w-5 h-5" aria-hidden="true" />
+        </Button>
       </div>
 
       {configLoading ? (
-        <div className="flex items-center gap-2 md:gap-4 p-2 md:p-4 bg-white dark:bg-futarchyDarkGray4 border border-futarchyGray6 rounded-lg">
-          <div className="w-16 h-8 bg-futarchyGray4 dark:bg-futarchyGray7 animate-pulse rounded-md"></div>
-          <div className="w-16 h-8 bg-futarchyGray4 dark:bg-futarchyGray7 animate-pulse rounded-md"></div>
+        <div className="flex items-center gap-2 md:gap-4 p-2 md:p-4 bg-seer-surface border border-seer-border rounded-lg">
+          <div className="w-16 h-8 bg-seer-surface-raised animate-pulse rounded-md"></div>
+          <div className="w-16 h-8 bg-seer-surface-raised animate-pulse rounded-md"></div>
         </div>
       ) : (
         <TokenToggle
@@ -1251,12 +1261,12 @@ const CollateralModal = ({
                     value={amount}
                     onChange={handleAmountChange}
                     placeholder="0.0"
-                    className="w-full px-3 py-2 md:px-4 md:py-3 bg-white border dark:bg-futarchyDarkGray4 border-futarchyGray6 rounded-lg text-sm md:text-base text-futarchyGray12 dark:text-futarchyGray3 font-medium focus:outline-none focus:ring-2 focus:ring-futarchyGray7"
+                    className="seer-input pr-32 text-base font-semibold tabular-nums"
                   />
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                     <button
                       onClick={handleMaxClick}
-                      className="px-2 py-1 bg-futarchyGray4 dark:bg-transparent text-futarchyGray11 rounded text-xs md:text-sm font-medium hover:bg-futarchyGray5 transition-colors"
+                      className="seer-button seer-button-ghost seer-button-sm"
                     >
                       Max
                     </button>
@@ -1266,9 +1276,9 @@ const CollateralModal = ({
                 <div className="flex justify-between items-start">
                   {/* Left Column: Selected Token */}
                   <div className="flex flex-col gap-[2px]">
-                    <div className="text-futarchyGray11 text-xs md:text-sm font-normal">
+                    <div className="text-seer-muted text-xs md:text-sm font-normal">
                       {configLoading ? (
-                        <div className="w-12 h-4 bg-futarchyGray4 dark:bg-futarchyGray7 animate-pulse rounded"></div>
+                        <div className="w-12 h-4 bg-seer-surface-raised animate-pulse rounded"></div>
                       ) : (
                         <>
                           {selectedTokenType === "currency"
@@ -1278,9 +1288,9 @@ const CollateralModal = ({
                         </>
                       )}
                     </div>
-                    <div className="text-futarchyGray12 dark:text-futarchyGray3 text-sm md:text-base font-medium">
+                    <div className="text-seer-text text-sm md:text-base font-medium">
                       {configLoading ? (
-                        <div className="w-20 h-5 bg-futarchyGray4 dark:bg-futarchyGray7 animate-pulse rounded"></div>
+                        <div className="w-20 h-5 bg-seer-surface-raised animate-pulse rounded"></div>
                       ) : (
                         formatBalance(
                           getAvailableBalance().toString(),
@@ -1299,7 +1309,7 @@ const CollateralModal = ({
                         }
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs font-medium text-futarchyBlue11 dark:text-futarchyBlue9 hover:text-futarchyBlue9 dark:hover:text-futarchyBlue7 underline cursor-pointer"
+                        className="text-xs font-medium text-seer-accent-text hover:underline underline-offset-2 underline cursor-pointer"
                         title={
                           selectedTokenType === "company"
                             ? `BUY ${getCompanySymbol()}`
@@ -1315,10 +1325,10 @@ const CollateralModal = ({
 
                   {/* Right Column: Native Token Balance */}
                   <div className="flex flex-col gap-[2px] items-end">
-                    <div className="text-futarchyGray11 text-xs md:text-sm font-normal">
+                    <div className="text-seer-muted text-xs md:text-sm font-normal">
                       {getNativeTokenSymbol()} Balance
                     </div>
-                    <div className="text-futarchyGray12 dark:text-futarchyGray3 text-sm md:text-base font-medium">
+                    <div className="text-seer-text text-sm md:text-base font-medium">
                       {console.log(
                         "CollateralModal: Displaying native balance. Raw nativeBalance state (Wei):",
                         nativeBalance,
@@ -1333,7 +1343,7 @@ const CollateralModal = ({
                       )}
                     </div>
                     {/* Optional: Link for getting xDAI if needed in the future */}
-                    {/* <a href="#" className="text-xs font-medium text-futarchyBlue11 dark:text-futarchyBlue9 hover:text-futarchyBlue9 dark:hover:text-futarchyBlue7 underline cursor-pointer">Get xDAI</a> */}
+                    {/* <a href="#" className="text-xs font-medium text-seer-accent-text hover:underline underline-offset-2 underline cursor-pointer">Get xDAI</a> */}
                   </div>
                 </div>
                 {/* END Updated Balances Display */}
@@ -1347,13 +1357,13 @@ const CollateralModal = ({
                   type="checkbox"
                   checked={useUnlimitedApproval}
                   onChange={(e) => setUseUnlimitedApproval(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-futarchyBlue9 bg-futarchyGray3 border-futarchyGray7 rounded focus:ring-futarchyBlue9 focus:ring-2 dark:bg-futarchyDarkGray4 dark:border-futarchyGray112"
+                  className="mt-1 w-4 h-4 accent-seer-purple text-seer-purple bg-seer-surface-raised border-seer-border rounded focus:ring-seer-accent-text focus:ring-2"
                 />
                 <div className="flex-1">
-                  <span className="text-sm font-medium text-futarchyGray12 dark:text-futarchyGray3 group-hover:text-futarchyBlue11 dark:group-hover:text-futarchyBlue9 transition-colors">
+                  <span className="text-sm font-medium text-seer-text group-hover:text-seer-accent-text transition-colors">
                     Max Approval
                   </span>
-                  <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-1">
+                  <p className="text-xs text-seer-muted mt-1">
                     {useUnlimitedApproval
                       ? "Will request max allowance. Useful for saving gas on future requests."
                       : "Will request exact allowance for this transaction."
@@ -1364,18 +1374,18 @@ const CollateralModal = ({
             </div>
 
             {/* Alert Container */}
-            <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray4 dark:border dark:border-futarchyGray112/20 rounded-lg p-3 md:p-4" >
-              <h4 className="font-medium mb-1 text-black dark:text-futarchyGray112 text-xs">{alertContainerTitle}</h4>
-              <p className="text-xs text-black dark:text-futarchyGray112">{alertSupportText}</p>
+            <div className="bg-seer-surface-raised rounded-surface p-3 md:p-4" >
+              <h4 className="font-medium mb-1 text-seer-text text-xs">{alertContainerTitle}</h4>
+              <p className="text-xs text-seer-text">{alertSupportText}</p>
             </div>
 
             {/* Additional Collateral Section */}
             {
               false && (
-                <div className="bg-futarchyGray3 rounded-lg p-4 space-y-2">
+                <div className="bg-seer-surface-raised rounded-lg p-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-futarchyGray11">Already Have</span>
-                    <span className="text-futarchyGreen11 font-medium">
+                    <span className="text-seer-muted">Already Have</span>
+                    <span className="text-seer-positive font-medium">
                       {formatBalance(
                         existingBalance,
                         selectedTokenType === "currency" ? getCurrencySymbol() : getCompanySymbol()
@@ -1383,8 +1393,8 @@ const CollateralModal = ({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-futarchyGray11">Need to Add</span>
-                    <span className="text-futarchyBlue11 font-medium">
+                    <span className="text-seer-muted">Need to Add</span>
+                    <span className="text-pass-text font-medium">
                       {formatBalance(
                         additionalCollateralNeeded,
                         selectedTokenType === "currency" ? getCurrencySymbol() : getCompanySymbol()
@@ -1402,7 +1412,7 @@ const CollateralModal = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent dark:from-futarchyDarkGray3 dark:to-transparent pointer-events-none z-10" />
+            <div className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none z-10" />
             <div className="max-h-[240px] overflow-hidden pr-2 -mr-2">
               <AnimatePresence>
                 {Object.entries(getUpdatedSteps() || {})
@@ -1441,7 +1451,7 @@ const CollateralModal = ({
               >
                 <button
                   onClick={handleClose}
-                  className="w-full py-3 px-4 rounded-lg font-semibold bg-futarchyGreen text-white hover:bg-futarchyGreen/90 transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-3 px-4 rounded-lg font-semibold bg-seer-positive text-white hover:opacity-90 transition-colors flex items-center justify-center gap-2"
                 >
                   <CheckMark />
                   Transaction Completed - Click to Close
@@ -1454,7 +1464,7 @@ const CollateralModal = ({
       </AnimatePresence >
 
       {requiredChain.isWrongChain && !localProcessingStep && (
-        <div className="p-2 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+        <div className="p-2 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm">
           This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || "another network"}.
         </div>
       )}
@@ -1464,7 +1474,7 @@ const CollateralModal = ({
         <div
           ref={errorRef}
           role="alert"
-          className="p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm break-words max-h-32 overflow-y-auto"
+          className="p-2 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm break-words max-h-32 overflow-y-auto"
         >
           {error || localError}
         </div>
@@ -1483,29 +1493,29 @@ const CollateralModal = ({
 
       {/* Debug Info */}
       {DEBUG_MODE && debugInfo && (
-        <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
-          <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
+        <div className="mt-4 p-3 bg-seer-surface-raised rounded-lg text-xs font-mono border border-seer-border">
+          <div className="font-bold mb-2 text-seer-text border-b border-seer-border pb-1">
             Safe Transaction Tracker
           </div>
 
           <div className="space-y-1">
             <div className="flex justify-between">
-              <span className="font-semibold text-gray-500">Status:</span>
-              <span className="text-blue-600 dark:text-blue-400 font-bold">{debugInfo.status}</span>
+              <span className="font-semibold text-seer-muted">Status:</span>
+              <span className="text-seer-accent-text font-bold">{debugInfo.status}</span>
             </div>
 
-            <div className="text-gray-600 dark:text-gray-400">
+            <div className="text-seer-muted">
               {debugInfo.message}
             </div>
 
             {debugInfo.safeTxHash && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div className="font-semibold text-gray-500 mb-1">Safe Tx Hash:</div>
+              <div className="mt-2 pt-2 border-t border-seer-border">
+                <div className="font-semibold text-seer-muted mb-1">Safe Tx Hash:</div>
                 <a
                   href={`https://app.safe.global/transactions/tx?safe=gno:${connectedWalletAddress}&id=${debugInfo.safeTxHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline break-all block"
+                  className="text-seer-accent-text hover:underline break-all block"
                 >
                   {debugInfo.safeTxHash} ↗
                 </a>
@@ -1513,13 +1523,13 @@ const CollateralModal = ({
             )}
 
             {debugInfo.txHash && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div className="font-semibold text-gray-500 mb-1">On-Chain Tx Hash:</div>
+              <div className="mt-2 pt-2 border-t border-seer-border">
+                <div className="font-semibold text-seer-muted mb-1">On-Chain Tx Hash:</div>
                 <a
                   href={`https://gnosisscan.io/tx/${debugInfo.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-green-500 hover:underline break-all block"
+                  className="text-seer-positive hover:underline break-all block"
                 >
                   {debugInfo.txHash} ↗
                 </a>
@@ -1531,11 +1541,11 @@ const CollateralModal = ({
 
       {/* Config Debug Info */}
       {DEBUG_MODE && <>
-      <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
-        <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
+      <div className="mt-4 p-3 bg-seer-surface-raised rounded-lg text-xs font-mono border border-seer-border">
+        <div className="font-bold mb-2 text-seer-text border-b border-seer-border pb-1">
           Config Debug
         </div>
-        <div className="space-y-1 text-gray-600 dark:text-gray-400">
+        <div className="space-y-1 text-seer-muted">
           <div>Loading: {configLoading ? 'Yes' : 'No'}</div>
           <div>Config Present: {config ? 'Yes' : 'No'}</div>
           <div>Proposal ID: {proposalId}</div>

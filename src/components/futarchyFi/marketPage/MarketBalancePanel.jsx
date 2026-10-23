@@ -4,10 +4,12 @@ import { useContractConfig } from '../../../hooks/useContractConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { formatWith } from '../../../utils/precisionFormatter';
+import Button, { buttonClassName } from '../../ui/Button';
+import { Surface, SurfaceHeader } from '../../ui/Surface';
 
 const LoadingSpinner = ({ className = "h-4 w-4" }) => (
   <div className="flex items-center justify-center">
-    <div className={`animate-spin rounded-full border-b-2 border-futarchyGray12 dark:border-white ${className}`}></div>
+    <div className={`animate-spin rounded-full border-2 border-seer-border border-t-seer-purple ${className}`}></div>
   </div>
 );
 
@@ -98,8 +100,10 @@ const CollateralDropdown = ({ onSelect }) => {
     <div className="relative" ref={dropdownRef}>
       {/* Dropdown Button */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all duration-200 bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray11 dark:text-futarchyGray12 border border-futarchyGray6 dark:border-futarchyGray6"
+        aria-expanded={isOpen}
+        className={buttonClassName({ variant: 'outline', size: 'sm' })}
       >
         <span>Collateral</span>
         <ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -107,16 +111,18 @@ const CollateralDropdown = ({ onSelect }) => {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 w-36 bg-white dark:bg-futarchyDarkGray3 border border-futarchyGray6 dark:border-futarchyGray6 rounded-lg shadow-lg z-50">
+        <div className="absolute top-full right-0 mt-1 w-44 p-1 bg-seer-surface border border-seer-border rounded-surface shadow-lg z-50">
           <button
+            type="button"
             onClick={() => handleSelect('add')}
-            className="w-full px-3 py-2 text-left text-xs text-futarchyGray12 dark:text-futarchyGray3 hover:bg-futarchyGray3 dark:hover:bg-futarchyGray7 rounded-t-lg transition-colors"
+            className="w-full h-9 px-3 text-left text-sm text-seer-text hover:bg-seer-surface-raised rounded-control transition-colors"
           >
             Split Collateral
           </button>
           <button
+            type="button"
             onClick={() => handleSelect('remove')}
-            className="w-full px-3 py-2 text-left text-xs text-futarchyGray12 dark:text-futarchyGray3 hover:bg-futarchyGray3 dark:hover:bg-futarchyGray7 rounded-b-lg transition-colors"
+            className="w-full h-9 px-3 text-left text-sm text-seer-text hover:bg-seer-surface-raised rounded-control transition-colors"
           >
             Merge Collateral
           </button>
@@ -127,9 +133,9 @@ const CollateralDropdown = ({ onSelect }) => {
 };
 
 const WalletBalanceItem = ({ tokenName, walletBalance, isLoading, showBorder = false }) => (
-  <div className={`flex-1 flex flex-col items-center justify-center p-3 ${showBorder ? 'border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40' : ''}`}>
-    <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">{tokenName}</span>
-    <span className="text-sm font-semibold text-futarchyGray12 dark:text-white h-6 flex items-center">
+  <div className={`flex-1 flex flex-col items-center justify-center gap-0.5 p-3 ${showBorder ? 'border-r border-seer-border' : ''}`}>
+    <span className="text-[13px] text-seer-muted">{tokenName}</span>
+    <span className="text-sm font-semibold tabular-nums text-seer-text h-6 flex items-center">
       {isLoading ? <LoadingSpinner /> : `${formatWith(parseFloat(walletBalance || '0'), 'balance')} ${tokenName}`}
     </span>
   </div>
@@ -139,31 +145,31 @@ const WalletBalanceItem = ({ tokenName, walletBalance, isLoading, showBorder = f
 // the base token. Label it as such and show the YES/NO holdings, otherwise a
 // wallet holding only YES tokens reads as "0 GNO".
 const BalanceItem = ({ tokenName, positionBalance, yesBalance, noBalance, walletBalance, isLoading, showBorder = false, buyTokenUrl }) => (
-  <div className={`flex-1 min-w-0 flex flex-col items-center p-3 ${showBorder ? 'border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40' : ''}`}>
-    <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">{tokenName}</span>
+  <div className={`flex-1 min-w-0 flex flex-col items-center gap-0.5 p-3 ${showBorder ? 'border-r border-seer-border' : ''}`}>
+    <span className="text-[13px] text-seer-muted">{tokenName}</span>
     <span
-      className="text-sm font-semibold text-futarchyGray12 dark:text-white h-6 flex items-center gap-1"
+      className="text-sm font-semibold tabular-nums text-seer-text h-6 flex items-center gap-1"
       title={`Mergeable = min(YES_${tokenName}, NO_${tokenName}): the amount you can merge back into ${tokenName}`}
     >
       {isLoading ? <LoadingSpinner /> : (
         <>
           {`${formatWith(parseFloat(positionBalance || '0'), 'balance')} ${tokenName}`}
-          <span className="text-[10px] font-medium text-futarchyGray11 dark:text-white/60">mergeable</span>
+          <span className="text-[11px] font-normal text-seer-muted">mergeable</span>
         </>
       )}
     </span>
     {!isLoading && (
-      <span className="text-[10px] text-futarchyGray11 dark:text-white/60 whitespace-nowrap">
-        <span className="text-futarchyBlue11 dark:text-futarchyBlue9">YES {formatWith(parseFloat(yesBalance || '0'), 'balance')}</span>
+      <span className="text-[11px] tabular-nums text-seer-muted whitespace-nowrap">
+        <span className="text-pass-text">YES {formatWith(parseFloat(yesBalance || '0'), 'balance')}</span>
         {' · '}
-        <span className="text-futarchyGold11 dark:text-futarchyGold8">NO {formatWith(parseFloat(noBalance || '0'), 'balance')}</span>
+        <span className="text-fail-text">NO {formatWith(parseFloat(noBalance || '0'), 'balance')}</span>
       </span>
     )}
     <a
       href={buyTokenUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-xs text-futarchyGray11 dark:text-futarchyGray112 hover:text-futarchyGray12 dark:hover:text-white transition-colors cursor-pointer flex items-center gap-1 relative"
+      className="mt-1 text-xs text-seer-muted hover:text-seer-accent-text transition-colors cursor-pointer flex items-center gap-1 relative"
     >
       <span className="font-medium">
         Wallet:
@@ -171,51 +177,38 @@ const BalanceItem = ({ tokenName, positionBalance, yesBalance, noBalance, wallet
       <span className="font-semibold">
         {isLoading ? '...' : `${formatWith(parseFloat(walletBalance || '0'), 'balance')} ${tokenName}`}
       </span>
-      <PlusIcon className="w-3 h-3 ml-0.5 -mt-0.5 opacity-70 hover:opacity-100 transition-opacity" />
+      <PlusIcon className="w-3 h-3 ml-0.5" />
     </a>
   </div>
 );
 
 const ActionButton = ({ onClick, icon, text }) => (
-  <button
-    onClick={onClick}
-    className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors cursor-pointer xl:text-sm text-xs bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white flex items-center justify-center gap-2"
-  >
+  <Button variant="outline" block onClick={onClick}>
     {icon}
-    <span className="relative z-10">{text}</span>
-    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
-  </button>
+    {text}
+  </Button>
 );
 
 const LinkButton = ({ href, text }) => (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors cursor-pointer xl:text-sm text-xs bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white flex items-center justify-center gap-2 text-center"
-  >
-    <span className="relative z-10">{text}</span>
-    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
-  </a>
+  <Button as="a" variant="outline" block href={href} target="_blank" rel="noopener noreferrer">
+    {text}
+  </Button>
 );
 
 const ErrorState = ({ error, onRetry }) => (
   <div className="flex flex-col items-center justify-center p-6 space-y-4">
     <div className="text-center">
-      <p className="text-sm font-semibold text-futarchyGray12 dark:text-white mb-1">
+      <p className="text-sm font-semibold text-seer-text mb-1">
         Couldn&apos;t load balances
       </p>
-      <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+      <p className="text-[13px] text-seer-muted">
         {error || 'RPC connection failed'}
       </p>
     </div>
     {onRetry && (
-      <button
-        onClick={onRetry}
-        className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray12 dark:text-white border border-futarchyGray6 dark:border-futarchyGray6 transition-colors"
-      >
-        Try Again
-      </button>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
     )}
   </div>
 );
@@ -223,12 +216,13 @@ const ErrorState = ({ error, onRetry }) => (
 // Shown above balances we read earlier when the latest refresh failed, so the
 // user knows the numbers may be out of date instead of seeing them zeroed.
 const StaleBalancesNotice = ({ onRetry }) => (
-  <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg text-xs bg-futarchyGray4 dark:bg-futarchyDarkGray2 text-futarchyGray11 dark:text-futarchyGray112">
-    <span>Couldn&apos;t refresh balances — showing the last known values.</span>
+  <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-control text-xs bg-seer-warning/10 text-seer-warning">
+    <span>Couldn&apos;t refresh balances. Showing the last known values.</span>
     {onRetry && (
       <button
+        type="button"
         onClick={onRetry}
-        className="font-semibold text-futarchyGray12 dark:text-white hover:underline"
+        className="font-semibold hover:underline"
       >
         Retry
       </button>
@@ -240,16 +234,13 @@ const ConnectWalletState = () => {
   const { openConnectModal } = useConnectModal();
   return (
     <div className="flex flex-col items-center justify-center p-6 space-y-3">
-      <p className="text-sm text-futarchyGray11 dark:text-white/70 text-center">
+      <p className="text-sm text-seer-muted text-center">
         Connect a wallet to see balances
       </p>
       {openConnectModal && (
-        <button
-          onClick={openConnectModal}
-          className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray12 dark:text-white border border-futarchyGray6 dark:border-futarchyGray6 transition-colors"
-        >
+        <Button variant="secondary" size="sm" onClick={openConnectModal}>
           Connect Wallet
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -258,7 +249,7 @@ const ConnectWalletState = () => {
 const LoadingState = () => (
   <div className="flex flex-col items-center justify-center p-6 space-y-3">
     <LoadingSpinner className="h-8 w-8" />
-    <p className="text-sm text-futarchyGray11 dark:text-white/70">
+    <p className="text-sm text-seer-muted">
       Loading balances...
     </p>
   </div>
@@ -316,14 +307,13 @@ const MarketBalancePanel = ({
   ].filter(([amount]) => parseFloat(amount) > 0);
 
   return (
-    <div className="flex flex-col bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
+    <Surface className="flex flex-col">
       {/* Balance Header with Collateral Dropdown */}
-      <div className="flex h-16 py-3 px-4 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70 items-center justify-between">
-        <h3 className="text-futarchyGray12 dark:text-white text-sm font-semibold">Balance</h3>
-        {!devMode && (
-          <CollateralDropdown onSelect={handleOpenCollateralModal} />
-        )}
-      </div>
+      <SurfaceHeader
+        as="h3"
+        title="Balance"
+        action={!devMode && <CollateralDropdown onSelect={handleOpenCollateralModal} />}
+      />
       {/* Balance Content */}
       <div className="flex flex-col justify-between p-4">
         {address && balanceError && positions?.wxdai && (
@@ -340,7 +330,7 @@ const MarketBalancePanel = ({
         ) : devMode ? (
           <>
             {/* Unified Balance Card for devMode=true */}
-            <div className="flex rounded-2xl min-h-[90px] border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 overflow-hidden">
+            <div className="flex min-h-[90px] rounded-surface border border-seer-border overflow-hidden">
               <BalanceItem
                 tokenName={getCurrencySymbol()}
                 positionBalance={sdiPositionBalance}
@@ -363,15 +353,15 @@ const MarketBalancePanel = ({
             </div>
 
             {/* Action Buttons for devMode=true */}
-            <div className="flex flex-row gap-3 mt-4 h-[50px]">
+            <div className="flex flex-row gap-3 mt-4">
               <ActionButton
                 onClick={() => handleOpenCollateralModal('add')}
-                icon={<SplitIcon className="w-4 h-4 animate-pulse-strong" />}
+                icon={<SplitIcon className="w-4 h-4" />}
                 text="Split Collateral"
               />
               <ActionButton
                 onClick={() => handleOpenCollateralModal('remove')}
-                icon={<MergeIcon className="w-4 h-4 animate-pulse-strong" />}
+                icon={<MergeIcon className="w-4 h-4" />}
                 text="Merge Collateral"
               />
             </div>
@@ -379,7 +369,7 @@ const MarketBalancePanel = ({
         ) : (
           <>
             {/* Simplified Balance Card for devMode=false */}
-            <div className="flex rounded-2xl h-[90px] border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 overflow-hidden">
+            <div className="flex h-[90px] rounded-surface border border-seer-border overflow-hidden">
               <WalletBalanceItem
                 tokenName={getCurrencySymbol()}
                 walletBalance={positions?.wxdai}
@@ -394,7 +384,7 @@ const MarketBalancePanel = ({
             </div>
 
             {/* Buy Tokens Buttons */}
-            <div className="flex flex-row gap-3 mt-4 h-[50px]">
+            <div className="flex flex-row gap-3 mt-4">
               {finalGetMoreTokensConfig?.token1 && (
                 <LinkButton
                   href={finalGetMoreTokensConfig.token1.link}
@@ -411,13 +401,13 @@ const MarketBalancePanel = ({
           </>
         )}
         {address && unwrappedHoldings.length > 0 && (
-          <p className="mt-3 text-xs text-futarchyGray11 dark:text-white/70">
+          <p className="mt-3 text-xs text-seer-muted">
             Held unwrapped, not counted above and not tradable here:{' '}
             {unwrappedHoldings.map(([amount, label]) => `${formatBalance(amount, '')} ${label}`).join(', ')}
           </p>
         )}
       </div>
-    </div>
+    </Surface>
   );
 };
 

@@ -9,6 +9,7 @@ import { formatImpactPercent } from '../../utils/marketPageUtils.mjs';
 import { resolveMarketStatus } from '../../utils/proposalLifecycle';
 import { useSubgraphRefresh } from '../../contexts/SubgraphRefreshContext';
 import { SHOW_DATA_DEBUG } from '../../config/featureFlags';
+import { SeriesToggle } from '../futarchyFi/marketPage/tripleChart/chartParameters/ChartParameters';
 
 /**
  * SubgraphChart - A chart component that fetches data from The Graph subgraphs
@@ -18,17 +19,7 @@ import { SHOW_DATA_DEBUG } from '../../config/featureFlags';
  */
 
 const LoadingSpinner = () => (
-    <div className="w-4 h-4 border-2 border-futarchyGray11 dark:border-futarchyGray112 border-t-transparent rounded-full animate-spin" />
-);
-
-const ParameterCard = ({ label, value, valueClassName = '', isDisabled = false, onClick = null }) => (
-    <div
-        onClick={onClick}
-        className={`flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 last:border-r-0 first:rounded-tl-3xl last:rounded-tr-3xl px-1 ${isDisabled ? 'opacity-40' : ''} ${onClick ? 'cursor-pointer hover:bg-futarchyGray62/30 dark:hover:bg-futarchyGray112/20 transition-colors' : ''}`}
-    >
-        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">{label}</span>
-        <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${valueClassName}`}>{value}</span>
-    </div>
+    <span className="inline-block w-3.5 h-3.5 border-2 border-seer-border border-t-seer-purple rounded-full animate-spin" aria-label="Loading" />
 );
 
 const SubgraphChart = ({
@@ -544,7 +535,7 @@ const SubgraphChart = ({
     // between the two pools no longer measures anything (same as the header).
     const impactCloseTimestamp = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
     const isResolved = resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: impactCloseTimestamp }).state === 'resolved';
-    const impactColorClass = isResolved ? '' : (impact >= 0 ? '!text-futarchyTeal7' : '!text-futarchyCrimson7');
+    const impactColorClass = isResolved ? '' : (impact >= 0 ? 'text-seer-positive' : 'text-seer-negative');
 
     // A failed fetch leaves prices null: show a dash instead of spinning forever.
     const fetchFailed = !!error && !loading;
@@ -558,74 +549,66 @@ const SubgraphChart = ({
     const tradingPair = `${companySymbol}/${currency}`;
 
     return (
-        // Same container styling as TripleChart parent in MarketPageShowcase
-        <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden flex flex-col">
-
-            {/* Header - Same styling as ChartParameters container */}
-            <div className="h-16 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-                <div className="flex items-stretch justify-around font-oxanium h-full">
-                    {/* Trading Pair - with SUBGRAPH badge */}
-                    <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 first:rounded-tl-3xl px-1">
-                        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium flex items-center gap-1">
-                            Trading Pair
-                            {SHOW_DATA_DEBUG && <span className="text-[8px] bg-futarchyViolet9/20 dark:bg-futarchyViolet7/20 text-futarchyViolet9 dark:text-futarchyViolet7 px-1 rounded">SUBGRAPH</span>}
+        // Same surface and legend as the TripleChart section (ChartParameters)
+        <div className="bg-seer-surface rounded-surface border border-seer-border overflow-hidden flex flex-col">
+            <div className="border-b border-seer-border">
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-2 py-1.5">
+                    <div className="flex flex-col px-3 py-2 mr-auto">
+                        <span className="text-xs text-seer-muted flex items-center gap-1">
+                            Trading pair
+                            {SHOW_DATA_DEBUG && <span className="text-[10px] bg-seer-accent-soft text-seer-accent-text px-1 rounded-control">SUBGRAPH</span>}
                         </span>
-                        <span className="text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white">{tradingPair}</span>
+                        <span className="text-sm font-semibold text-seer-text">{tradingPair}</span>
                     </div>
 
-                    {/* Yes Price - SAME BLUE color as ChartParameters */}
-                    <ParameterCard
-                        label="Yes Price"
-                        value={yesPrice === null ? pendingValue() : `${formatWith(yesPrice, 'price', precisionConfig)} ${currency}`}
-                        valueClassName="!text-futarchyBlue9 dark:!text-futarchyBlue8"
-                        onClick={() => toggleLine('yes')}
-                        isDisabled={!lineVisibility.yes}
-                    />
-
-                    {/* No Price - SAME YELLOW color as ChartParameters */}
-                    <ParameterCard
-                        label="No Price"
-                        value={noPrice === null ? pendingValue() : `${formatWith(noPrice, 'price', precisionConfig)} ${currency}`}
-                        valueClassName="!text-yellow-500 dark:!text-yellow-400"
-                        onClick={() => toggleLine('no')}
-                        isDisabled={!lineVisibility.no}
-                    />
-
-                    {/* Spot/Status Logic */}
                     {(() => {
                         const ct = config?.closeTimestamp || config?.metadata?.closeTimestamp || config?.marketInfo?.closeTimestamp;
                         const marketStatus = resolveMarketStatus({ ...config?.marketInfo, closeTimestamp: ct });
 
                         return marketStatus.state !== 'active' ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 px-1 opacity-80">
-                                <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Status</span>
-                                <span className="text-[9px] md:text-[11px] font-bold text-futarchyGray12 dark:text-white mt-0.5">
-                                    {marketStatus.label}
-                                </span>
+                            <div className="flex flex-col px-3 py-2">
+                                <span className="text-xs text-seer-muted">Status</span>
+                                <span className="text-sm font-semibold text-seer-text">{marketStatus.label}</span>
                             </div>
                         ) : (
                             showSpot && (
-                                <ParameterCard
-                                    label="Spot Price"
+                                <SeriesToggle
+                                    label="Spot price"
                                     value={spotPrice === null ? <LoadingSpinner /> : `${formatWith(spotPrice, 'price', precisionConfig)} ${currency}`}
-                                    valueClassName="opacity-60"
+                                    dotClassName="bg-seer-muted"
+                                    pressed={!!lineVisibility.spot}
                                     onClick={() => toggleLine('spot')}
-                                    isDisabled={!lineVisibility.spot}
                                 />
                             )
                         );
                     })()}
 
-                    {/* Impact - SAME styling as ChartParameters */}
-                    <div className="flex-1 flex flex-col items-center justify-center text-center border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40 last:border-r-0 last:rounded-tr-3xl px-1">
-                        <span className="text-[9px] md:text-xs text-futarchyGray11 dark:text-white/70 font-medium">Impact (spot)</span>
-                        <span className={`text-[9px] md:text-sm font-bold text-futarchyGray12 dark:text-white ${impactColorClass}`}>
+                    <SeriesToggle
+                        label="If it passes (YES)"
+                        value={yesPrice === null ? pendingValue() : `${formatWith(yesPrice, 'price', precisionConfig)} ${currency}`}
+                        dotClassName="bg-pass"
+                        valueClassName="text-pass-text"
+                        pressed={!!lineVisibility.yes}
+                        onClick={() => toggleLine('yes')}
+                    />
+
+                    <SeriesToggle
+                        label="If it fails (NO)"
+                        value={noPrice === null ? pendingValue() : `${formatWith(noPrice, 'price', precisionConfig)} ${currency}`}
+                        dotClassName="bg-fail"
+                        valueClassName="text-fail-text"
+                        pressed={!!lineVisibility.no}
+                        onClick={() => toggleLine('no')}
+                    />
+
+                    <div className="flex flex-col px-3 py-2">
+                        <span className="text-xs text-seer-muted">Impact (spot)</span>
+                        <span className={`text-sm font-semibold tabular-nums ${impactColorClass || 'text-seer-text'}`}>
                             {isResolved ? '—' : (yesPrice === null || noPrice === null) ? pendingValue() : formatImpactPercent(impact)}
                         </span>
                     </div>
 
-                    {/* Resync Button with Countdown */}
-                    {SHOW_DATA_DEBUG && <div className="flex-1 flex flex-col items-center justify-center text-center px-2 last:rounded-tr-3xl">
+                    {SHOW_DATA_DEBUG && (
                         <button
                             onClick={() => {
                                 refetch(false); // Manual click shows loading
@@ -633,35 +616,23 @@ const SubgraphChart = ({
                                 setCountdown(autoResyncInterval);
                             }}
                             disabled={loading}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] md:text-xs font-medium rounded-lg transition-all
-                ${loading
-                                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                                    : 'bg-futarchyViolet9/10 dark:bg-futarchyViolet7/10 text-futarchyViolet9 dark:text-futarchyViolet7 hover:bg-futarchyViolet9/20 dark:hover:bg-futarchyViolet7/20'
-                                }`}
+                            className="seer-button seer-button-ghost seer-button-sm"
                         >
-                            <svg
-                                className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {loading ? 'Syncing...' : `Resync (${countdown}s)`}
+                            {loading ? 'Syncing…' : `Resync (${countdown}s)`}
                         </button>
-                    </div>}
+                    )}
                 </div>
             </div>
 
             {/* Chart Area - Same styling as TripleChart container */}
-            <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 flex-grow overflow-hidden" style={{ height: `${height}px` }}>
+            <div className="flex-grow overflow-hidden" style={{ height: `${height}px` }}>
                 <div className="w-full h-full flex flex-col relative">
                     {/* Loading overlay */}
                     {loading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 z-10">
+                        <div className="absolute inset-0 flex items-center justify-center bg-seer-surface/60 z-10">
                             <div className="flex items-center gap-2">
-                                <div className="w-5 h-5 border-2 border-futarchyViolet9 dark:border-futarchyViolet7 border-t-transparent rounded-full animate-spin" />
-                                <span className="text-sm text-gray-600 dark:text-gray-400 font-oxanium">{SHOW_DATA_DEBUG ? 'Loading from subgraph...' : 'Loading chart...'}</span>
+                                <div className="w-5 h-5 border-2 border-seer-border border-t-seer-purple rounded-full animate-spin" aria-hidden="true" />
+                                <span className="text-sm text-seer-muted">{SHOW_DATA_DEBUG ? 'Loading from subgraph...' : 'Loading chart...'}</span>
                             </div>
                         </div>
                     )}
@@ -670,11 +641,11 @@ const SubgraphChart = ({
                     {error && !loading && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4">
-                                <div className="text-red-500 dark:text-red-400 text-sm mb-2 font-oxanium">Error loading data</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">{error}</div>
+                                <div className="text-seer-negative text-sm font-semibold mb-2">Error loading data</div>
+                                <div className="text-xs text-seer-muted mb-3">{error}</div>
                                 <button
                                     onClick={refetch}
-                                    className="text-xs px-3 py-1.5 bg-futarchyViolet9/10 text-futarchyViolet9 dark:text-futarchyViolet7 rounded-lg hover:bg-futarchyViolet9/20 font-oxanium"
+                                    className="seer-button seer-button-secondary seer-button-sm"
                                 >
                                     Try Again
                                 </button>
@@ -686,8 +657,8 @@ const SubgraphChart = ({
                     {!loading && !error && !hasData && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4">
-                                <div className="text-gray-500 dark:text-gray-400 text-sm mb-2 font-oxanium">No candle data available</div>
-                                <div className="text-xs text-gray-400 dark:text-gray-500">
+                                <div className="text-seer-text text-sm font-semibold mb-1">No candle data available</div>
+                                <div className="text-xs text-seer-muted">
                                     Candles are created when swaps occur in the pool
                                 </div>
                             </div>
@@ -704,8 +675,8 @@ const SubgraphChart = ({
             </div>
 
             {/* Footer with pool info and data stats */}
-            {SHOW_DATA_DEBUG && <div className="px-4 py-2 border-t border-futarchyGray62 dark:border-futarchyGray11/70 bg-futarchyGray2/50 dark:bg-futarchyDarkGray2/50">
-                <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 font-oxanium">
+            {SHOW_DATA_DEBUG && <div className="px-4 py-2 border-t border-seer-border bg-seer-surface-raised">
+                <div className="flex items-center justify-between text-[10px] text-seer-muted">
                     <span className="flex items-center gap-4">
                         {yesPool && <span>YES: {yesPool.name}</span>}
                         {noPool && <span>NO: {noPool.name}</span>}

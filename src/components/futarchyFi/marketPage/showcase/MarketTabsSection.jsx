@@ -2,6 +2,26 @@ import RedeemTokens from '../redeemTokens/RedeemTokens';
 import PositionsTable from '../PositionsTable';
 import SubgraphTradesDataLayer from '../SubgraphTradesDataLayer';
 import { TradeHistoryTable } from './TradeHistoryTable';
+import { Surface } from '../../../ui/Surface';
+
+const tabClassName = (selected) =>
+  `-mb-px h-11 px-1 text-sm font-semibold border-b-2 transition-colors duration-150 ${selected
+    ? 'text-seer-text border-seer-purple'
+    : 'text-seer-muted border-transparent hover:text-seer-text'
+  }`;
+
+const TradesLimitSelect = ({ tradesLimit, setTradesLimit }) => (
+  <select
+    value={tradesLimit}
+    onChange={(e) => setTradesLimit(Number(e.target.value))}
+    aria-label="Trades to show"
+    className="seer-input !min-h-0 !w-auto h-8 !py-0 !pl-3 text-[13px]"
+  >
+    <option value={30}>Last 30 trades</option>
+    <option value={60}>Last 60 trades</option>
+    <option value={90}>Last 90 trades</option>
+  </select>
+);
 
 const MarketTabsSection = ({
   tabs,
@@ -17,91 +37,43 @@ const MarketTabsSection = ({
   const { positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const { sdaiRate, isLoadingRate, rateError } = rate;
 
+  // Before close the market's activity and the reader's own trades and position; after close,
+  // redemption replaces them.
+  const tabList = marketHasClosed
+    ? [{ id: 'redeem-tokens', label: 'Redeem Tokens' }]
+    : [
+      { id: 'recent-trades-sdk', label: 'Recent Activity' },
+      { id: 'my-trades-sdk', label: 'My Trades' },
+      { id: 'position', label: 'Position' },
+    ];
+  const showsTrades = activeTab === 'recent-trades-sdk' || activeTab === 'my-trades-sdk';
+
   return (
-    <div className="mt-8">
-      {/* Tab Headers */}
-      {/* NEW: Conditionally render the first button */}
-      <div className="flex flex-row gap-4">
-        {marketHasClosed ? (
-          <button
-            onClick={() => setActiveTab('redeem-tokens')}
-            className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'redeem-tokens'
-              ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
-              : 'text-futarchyGray11 dark:text-white/70 hover:text-futarchyGray12 dark:hover:text-white border-b-2 border-transparent'
-              }`}
-          >
-            Redeem Tokens
-          </button>
-        ) : (
-          <>
-            {/* Recent Activity button - first */}
+    <div className="mt-10">
+      <div className="flex flex-wrap-reverse items-end justify-between gap-x-4 gap-y-2 border-b border-seer-border">
+        <div role="tablist" aria-label="Market activity" className="flex gap-6 overflow-x-auto no-scrollbar">
+          {tabList.map((tab) => (
             <button
-              onClick={() => setActiveTab('recent-trades-sdk')}
-              className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'recent-trades-sdk'
-                ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
-                : 'text-futarchyGray11 dark:text-white/70 hover:text-futarchyGray12 dark:hover:text-white border-b-2 border-transparent'
-                }`}
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={tabClassName(activeTab === tab.id)}
             >
-              Recent Activity
+              {tab.label}
             </button>
-
-            {/* My Trades button - second */}
-            <button
-              onClick={() => setActiveTab('my-trades-sdk')}
-              className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'my-trades-sdk'
-                ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
-                : 'text-futarchyGray11 dark:text-white/70 hover:text-futarchyGray12 dark:hover:text-white border-b-2 border-transparent'
-                }`}
-            >
-              My Trades
-            </button>
-
-            {/* Position button - third */}
-            <button
-              onClick={() => setActiveTab('position')}
-              className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'position'
-                ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
-                : 'text-futarchyGray11 dark:text-white/70 hover:text-futarchyGray12 dark:hover:text-white border-b-2 border-transparent'
-                }`}
-            >
-              Position
-            </button>
-          </>
+          ))}
+        </div>
+        {showsTrades && (
+          <div className="pb-1.5">
+            <TradesLimitSelect tradesLimit={tradesLimit} setTradesLimit={setTradesLimit} />
+          </div>
         )}
       </div>
 
-      {/* Filter controls for Recent Activity - only show dropdown */}
-      {activeTab === 'recent-trades-sdk' && (
-        <div className="flex items-center justify-end mt-6 mb-4">
-          <select
-            value={tradesLimit}
-            onChange={(e) => setTradesLimit(Number(e.target.value))}
-            className="text-xs text-futarchyGray11 dark:text-futarchyGray112 bg-futarchyGray2 dark:bg-futarchyDarkGray3 border border-futarchyGray62 dark:border-futarchyDarkGray42 rounded-lg px-3 py-1.5 cursor-pointer hover:text-futarchyGray12 dark:hover:text-white hover:border-futarchyGray7 dark:hover:border-futarchyDarkGray5 transition-colors"
-          >
-            <option value={30}>Last 30 trades</option>
-            <option value={60}>Last 60 trades</option>
-            <option value={90}>Last 90 trades</option>
-          </select>
-        </div>
-      )}
-
-      {/* Filter controls for My Trades tab - only show dropdown */}
-      {activeTab === 'my-trades-sdk' && (
-        <div className="flex items-center justify-end mt-6 mb-4">
-          <select
-            value={tradesLimit}
-            onChange={(e) => setTradesLimit(Number(e.target.value))}
-            className="text-xs text-futarchyGray11 dark:text-futarchyGray112 bg-futarchyGray2 dark:bg-futarchyDarkGray3 border border-futarchyGray62 dark:border-futarchyDarkGray42 rounded-lg px-3 py-1.5 cursor-pointer hover:text-futarchyGray12 dark:hover:text-white hover:border-futarchyGray7 dark:hover:border-futarchyDarkGray5 transition-colors"
-          >
-            <option value={30}>Last 30 trades</option>
-            <option value={60}>Last 60 trades</option>
-            <option value={90}>Last 90 trades</option>
-          </select>
-        </div>
-      )}
-
       {/* Tab Content */}
-      <div className={activeTab === 'recent-trades-sdk' || activeTab === 'my-trades-sdk' ? 'mt-2' : 'mt-7'}>
+      <div role="tabpanel" className="mt-4">
         {activeTab === 'position' && (
           <PositionsTable
             positions={positions}
@@ -118,29 +90,29 @@ const MarketTabsSection = ({
           />
         )}
         {activeTab === 'trade-history' && (
-          <div className="rounded-2xl border border-futarchyGray62 dark:border-futarchyDarkGray42 bg-futarchyGray2 dark:bg-futarchyDarkGray3">
+          <Surface as="div" className="overflow-hidden">
             <TradeHistoryTable tokenImages={tokenImages} config={config} />
-          </div>
+          </Surface>
         )}
         {activeTab === 'recent-trades-sdk' && (
-          <div className="rounded-2xl border border-futarchyGray62 dark:border-futarchyDarkGray42 bg-futarchyGray2 dark:bg-futarchyDarkGray3">
+          <Surface as="div" className="overflow-hidden">
             <SubgraphTradesDataLayer
               tokenImages={tokenImages}
               config={config}
               showMyTrades={false}
               limit={tradesLimit}
             />
-          </div>
+          </Surface>
         )}
         {activeTab === 'my-trades-sdk' && (
-          <div className="rounded-2xl border border-futarchyGray62 dark:border-futarchyDarkGray42 bg-futarchyGray2 dark:bg-futarchyDarkGray3">
+          <Surface as="div" className="overflow-hidden">
             <SubgraphTradesDataLayer
               tokenImages={tokenImages}
               config={config}
               showMyTrades={true}
               limit={tradesLimit}
             />
-          </div>
+          </Surface>
         )}
         {activeTab === 'redeem-tokens' && (
           <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} onBalancesChanged={refetchBalances} balanceError={balanceError} onRetryBalances={refetchBalances} />

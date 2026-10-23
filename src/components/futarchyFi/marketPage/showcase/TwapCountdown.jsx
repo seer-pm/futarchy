@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { computeImpactPercent, formatImpactPercent } from '../../../../utils/marketPageUtils.mjs';
 import { getRpcProvider } from '../../../../utils/getBestRpc';
+import Badge from '../../../ui/Badge';
 
 const ALGEBRA_TWAP_ABI = [
   "function getTimepoints(uint32[] secondsAgos) external view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulatives, uint112[] volatilityCumulatives, uint256[] volumePerAvgLiquiditys)",
@@ -34,15 +35,14 @@ const TwapCountdown = ({
   invertTwapPoolYes = false,
   invertTwapPoolNo = false,
   yesCompanyTokenAddress = null,
-  noCompanyTokenAddress = null
+  noCompanyTokenAddress = null,
+  chainId = 100
 }) => {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [timeUntilStart, setTimeUntilStart] = useState(null);
   const [isActive, setIsActive] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
   const [isWaitingToStart, setIsWaitingToStart] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [twapResults, setTwapResults] = useState({ yes: null, no: null, spread: null });
   const [twapLoading, setTwapLoading] = useState(false);
   const [twapError, setTwapError] = useState(null);
@@ -55,10 +55,10 @@ const TwapCountdown = ({
   const ensureProvider = useCallback(() => {
     if (!providerRef.current) {
       // Shared across the app — see utils/getBestRpc.js.
-      providerRef.current = getRpcProvider(100);
+      providerRef.current = getRpcProvider(chainId);
     }
     return providerRef.current;
-  }, []);
+  }, [chainId]);
 
   const fetchPoolTwap = useCallback(async (poolConfig, secondsAgoStart, shouldInvert = null, secondsAgoEnd = 0, companyTokenAddress = null) => {
     if (!poolConfig?.address) {
@@ -209,7 +209,8 @@ const TwapCountdown = ({
       } catch (err) {
         if (!cancelled) {
           console.error('[TWAP] Calculation failed:', err);
-          setTwapError(err?.message || 'Unable to calculate TWAP');
+          // The raw RPC error means nothing to a reader; the console keeps it.
+          setTwapError('The TWAP could not be read from the pools right now. The rule and window above still apply.');
         }
       } finally {
         if (!cancelled) {
@@ -260,178 +261,82 @@ const TwapCountdown = ({
     }
   }, [twapResults]);
 
-  // Determine colors based on state and leader
-  const getThemeClasses = () => {
-    if (isActive || hasEnded) {
-      if (leaderTheme === 'blue') {
-        return {
-          container: 'bg-blue-500/10 border-blue-500/30 dark:bg-blue-400/10 dark:border-blue-400/30',
-          pulse: 'bg-blue-500 animate-pulse',
-          text: 'text-blue-600 dark:text-blue-400',
-          subText: 'text-blue-700 dark:text-blue-300',
-          desc: 'text-blue-600/70 dark:text-blue-400/70'
-        };
-      } else if (leaderTheme === 'yellow') {
-        return {
-          container: 'bg-yellow-500/10 border-yellow-500/30 dark:bg-yellow-400/10 dark:border-yellow-400/30',
-          pulse: 'bg-yellow-500 animate-pulse',
-          text: 'text-yellow-600 dark:text-yellow-400',
-          subText: 'text-yellow-700 dark:text-yellow-300',
-          desc: 'text-yellow-600/70 dark:text-yellow-400/70'
-        };
-      } else {
-        // Neutral/Green for tie or complete
-        return {
-          container: 'bg-green-500/10 border-green-500/30 dark:bg-green-400/10 dark:border-green-400/30',
-          pulse: 'bg-green-500 animate-pulse',
-          text: 'text-green-600 dark:text-green-400',
-          subText: 'text-green-700 dark:text-green-300',
-          desc: 'text-green-600/70 dark:text-green-400/70'
-        };
-      }
-    }
-
-    if (isWaitingToStart) {
-      return {
-        container: 'bg-yellow-500/10 border-yellow-500/30 dark:bg-yellow-400/10 dark:border-yellow-400/30',
-        pulse: 'bg-yellow-500 animate-pulse',
-        text: 'text-yellow-600 dark:text-yellow-400',
-        subText: 'text-yellow-700 dark:text-yellow-300',
-        desc: 'text-yellow-600/70 dark:text-yellow-400/70'
-      };
-    }
-
-    // Fallback
-    return {
-      container: 'bg-green-500/10 border-green-500/30 dark:bg-green-400/10 dark:border-green-400/30',
-      pulse: 'bg-green-500',
-      text: 'text-green-600 dark:text-green-400',
-      subText: 'text-green-700 dark:text-green-300',
-      desc: 'text-green-600/70 dark:text-green-400/70'
-    };
-  };
-
-  const theme = getThemeClasses();
-
-  const renderDescription = (colorClass) => (
-    !isScrolled && twapDescription && showDetails && (
-      <p className={`text-xs ${colorClass} mt-2`}>
-        {twapDescription}
-      </p>
-    )
-  );
-
-  // Collapsed header label and timer value
-  const headerLabel = isWaitingToStart ? 'TWAP Starts In'
-    : isActive ? 'TWAP Active'
-    : hasEnded ? 'TWAP Complete'
-    : 'TWAP';
+  // The state of the test window, as one badge: waiting, live, or closed.
+  const stateLabel = isWaitingToStart ? 'Window opens in'
+    : isActive ? 'Window open'
+    : hasEnded ? 'Window closed'
+    : 'Window not scheduled';
+  const stateTone = isActive ? 'accent' : isWaitingToStart ? 'warning' : 'neutral';
 
   const headerTimer = isWaitingToStart && timeUntilStart
     ? `${timeUntilStart.days > 0 ? `${timeUntilStart.days}d ` : ''}${String(timeUntilStart.hours).padStart(2, '0')}h ${String(timeUntilStart.minutes).padStart(2, '0')}m ${String(timeUntilStart.seconds).padStart(2, '0')}s`
     : isActive && timeRemaining
-    ? `${String(timeRemaining.hours).padStart(2, '0')}h ${String(timeRemaining.minutes).padStart(2, '0')}m ${String(timeRemaining.seconds).padStart(2, '0')}s`
+    ? `${String(timeRemaining.hours).padStart(2, '0')}h ${String(timeRemaining.minutes).padStart(2, '0')}m ${String(timeRemaining.seconds).padStart(2, '0')}s left`
     : null;
 
+  const leaderClass = leaderTheme === 'blue' ? 'text-pass-text' : leaderTheme === 'yellow' ? 'text-fail-text' : 'text-seer-text';
+  const showValues = (isActive || hasEnded) && yesPoolConfig?.address && noPoolConfig?.address;
+
   return (
-    <div className={`${isScrolled ? 'mt-0' : 'mt-4'} rounded-lg border transition-all duration-300 ${theme.container}`}>
-      {/* Collapsed header — always visible, click to expand */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-2 lg:p-3 flex items-center gap-2 cursor-pointer text-left"
-      >
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${theme.pulse}`} />
-        <div className="flex-1 flex items-center justify-between min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${theme.text}`}>
-              {headerLabel}
-            </span>
-            {percentDiff && (isActive || hasEnded) && (
-              <span className={`text-xs font-bold ${theme.text}`}>
-                (TWAP impact {percentDiff})
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {headerTimer && (
-              <span className={`text-xs font-mono ${theme.subText}`}>
-                {headerTimer}
-              </span>
-            )}
-            <svg
-              className={`w-3.5 h-3.5 ${theme.text} transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </div>
-        </div>
-      </button>
-
-      {/* Expandable body */}
-      <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-        <div className="overflow-hidden">
-          <div className="px-2 lg:px-3 pb-2 lg:pb-3 space-y-2">
-            {/* Description */}
-            {!isScrolled && twapDescription && (
-              <p className={`text-xs ${theme.desc}`}>
-                {twapDescription}
-              </p>
-            )}
-
-            {/* TWAP values grid */}
-            {(isActive || hasEnded) && yesPoolConfig?.address && noPoolConfig?.address && (
-              <div className="rounded-md bg-white/5 dark:bg-white/10 p-2">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/70 dark:text-white/60">
-                  <span>{hasEnded ? 'Final TWAP Window' : 'Live TWAP Window'}</span>
-                  {lastTwapUpdate && (
-                    <span className="text-white/50 dark:text-white/40">
-                      Updated {lastTwapUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </span>
-                  )}
-                </div>
-
-                {twapError ? (
-                  <p className="mt-2 text-xs text-red-400 dark:text-red-300">{twapError}</p>
-                ) : (
-                  <>
-                    {twapLoading && (
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-white/70 dark:text-white/60">
-                        <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin" />
-                        Calculating TWAP…
-                      </div>
-                    )}
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-md bg-black/10 dark:bg-white/5 p-2">
-                        <p className="text-white/60 dark:text-white/70">YES TWAP</p>
-                        <p className="font-mono text-sm text-white dark:text-white">
-                          {formatTwapValue(twapResults.yes)}
-                        </p>
-                      </div>
-                      <div className="rounded-md bg-black/10 dark:bg-white/5 p-2">
-                        <p className="text-white/60 dark:text-white/70">NO TWAP</p>
-                        <p className="font-mono text-sm text-white dark:text-white">
-                          {formatTwapValue(twapResults.no)}
-                        </p>
-                      </div>
-                    </div>
-                    {leaderboardText && (
-                      <p className="mt-2 text-[11px] text-white/80 dark:text-white/70">
-                        {leaderboardText}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+    <div className={`${isScrolled ? 'mt-0' : ''} space-y-4`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Badge tone={stateTone}>
+          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" aria-hidden="true" />}
+          {stateLabel}
+        </Badge>
+        <span className="text-sm text-seer-muted">{twapDurationHours}h time-weighted average</span>
+        {headerTimer && <span className="text-sm font-semibold tabular-nums text-seer-text">{headerTimer}</span>}
       </div>
+
+      {showValues && (
+        <div>
+          <div className="grid grid-cols-2 border border-seer-border rounded-surface divide-x divide-seer-border">
+            <div className="p-4">
+              <p className="flex items-center gap-2 text-[13px] text-seer-muted">
+                <span className="w-2 h-2 rounded-full bg-pass" aria-hidden="true" />
+                If it passes (YES TWAP)
+              </p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-pass-text">{formatTwapValue(twapResults.yes)}</p>
+            </div>
+            <div className="p-4">
+              <p className="flex items-center gap-2 text-[13px] text-seer-muted">
+                <span className="w-2 h-2 rounded-full bg-fail" aria-hidden="true" />
+                If it fails (NO TWAP)
+              </p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-fail-text">{formatTwapValue(twapResults.no)}</p>
+            </div>
+          </div>
+
+          {twapError ? (
+            <p className="mt-3 text-sm text-seer-negative">{twapError}</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+              {twapLoading && !leaderboardText ? (
+                <span className="inline-flex items-center gap-2 text-seer-muted">
+                  <span className="h-3 w-3 rounded-full border-2 border-seer-border border-t-seer-purple animate-spin" aria-hidden="true" />
+                  Calculating TWAP
+                </span>
+              ) : leaderboardText ? (
+                <span className="text-seer-text">
+                  <span className={`font-semibold ${leaderClass}`}>{leaderboardText}</span>
+                  {percentDiff && <> TWAP impact <span className="font-semibold tabular-nums">{percentDiff}</span>.</>}
+                </span>
+              ) : <span />}
+              {lastTwapUpdate && (
+                <span className="text-[13px] text-seer-muted tabular-nums">
+                  {hasEnded ? 'Final window' : 'Updated'} {lastTwapUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {twapDescription && (
+        <p className="text-sm leading-relaxed text-seer-muted max-w-prose">
+          {twapDescription}
+        </p>
+      )}
     </div>
   );
 };

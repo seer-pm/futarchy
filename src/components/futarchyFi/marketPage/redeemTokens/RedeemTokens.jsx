@@ -9,14 +9,14 @@ import { useRequiredChain } from '../../../../hooks/useChainValidation';
 import { useSafeConnection } from '../../../../hooks/useSafeConnection';
 
 const RedeemButton = ({ onClick, disabled = false, isConnected = false, isWinningOutcomeYes = true }) => {
-  const baseClasses = "font-semibold py-2 px-4 rounded text-sm border-2 transition-colors";
+  const baseClasses = "min-h-10 px-4 rounded-control text-sm font-semibold border transition-colors";
   const colorClasses = !isConnected
-    ? "bg-futarchyGray4 text-futarchyGray8 border-futarchyGray6 cursor-not-allowed"
+    ? "bg-seer-surface-raised text-seer-muted border-seer-border cursor-not-allowed"
     : disabled
-      ? "bg-futarchyGray4 text-futarchyGray8 border-futarchyGray6 cursor-not-allowed"
+      ? "bg-seer-surface-raised text-seer-muted border-seer-border cursor-not-allowed"
       : isWinningOutcomeYes
-        ? "bg-futarchyBlue3 dark:bg-futarchyBlue6/20 text-futarchyBlue11 dark:text-futarchyBlue6 border-futarchyBlue7 hover:bg-futarchyBlue4 dark:hover:bg-futarchyBlue6/50"
-        : "bg-futarchyGold3 dark:bg-futarchyGold6/20 text-futarchyGold11 dark:text-futarchyGold6 border-futarchyGold9 hover:bg-futarchyGold4 dark:hover:bg-futarchyGold6/40";
+        ? "bg-pass-soft text-pass-text border-pass hover:bg-pass-soft "
+        : "bg-fail-soft text-fail-text border-fail hover:bg-fail-soft ";
 
   return (
     <button
@@ -157,11 +157,11 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   // If market is not resolved, show message
   if (!config?.marketInfo?.resolved) {
     return (
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border">
           Market Status
         </h3>
-        <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
+        <div className="text-center py-8 text-seer-muted ">
           Market has not been resolved yet. Redemption will be available once the market is resolved.
         </div>
       </div>
@@ -171,13 +171,13 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   // Show loading state while positions are loading
   if (isLoadingPositions) {
     return (
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border">
           Redeem Tokens
         </h3>
-        <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
+        <div className="text-center py-8 text-seer-muted ">
           <div className="flex items-center justify-center space-x-2">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-futarchyGray11"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-seer-border border-t-seer-purple"></div>
             <span>Loading positions...</span>
           </div>
         </div>
@@ -189,17 +189,17 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   // "nothing to redeem", so say so instead.
   if (balanceError) {
     return (
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border">
           Redeem Tokens
         </h3>
-        <div className="flex flex-col items-center gap-3 text-center py-8 text-futarchyGray11 dark:text-white/70">
+        <div className="flex flex-col items-center gap-3 text-center py-8 text-seer-muted ">
           <span>Your balances couldn&apos;t be loaded, so redeemable tokens can&apos;t be shown.</span>
           {onRetryBalances && (
             <button
               type="button"
               onClick={onRetryBalances}
-              className="px-3 py-1.5 text-xs rounded-lg border border-futarchyGray62 dark:border-futarchyGray11/70 hover:text-futarchyGray12 dark:hover:text-white transition-colors"
+              className="px-3 py-1.5 text-xs rounded-lg border border-seer-border hover:text-seer-text transition-colors"
             >
               Retry
             </button>
@@ -212,11 +212,11 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   // If no winning outcome determined, show message
   if (!winningOutcome) {
     return (
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border">
           Market Resolved
         </h3>
-        <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
+        <div className="text-center py-8 text-seer-muted ">
           Market outcome could not be determined. Please check the market details.
         </div>
       </div>
@@ -226,13 +226,13 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   // Resolved to something other than Yes/No (e.g. Invalid): neither side is the winner
   if (!redeemSide) {
     return (
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border">
           Market Resolved: {winningOutcome}
         </h3>
-        <div className="text-center py-8 px-4 text-futarchyGray11 dark:text-white/70">
+        <div className="text-center py-8 px-4 text-seer-muted ">
           <p className="mb-2">This market has no single winning side, so YES or NO tokens can&apos;t be redeemed here.</p>
-          <p className="text-xs text-futarchyGray9">
+          <p className="text-xs text-seer-muted">
             If you hold matching YES and NO tokens, you can merge them back into the underlying collateral.
           </p>
         </div>
@@ -245,7 +245,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
   const unwrappedDecimals = (position) => config?.BASE_TOKENS_CONFIG?.[position.role]?.decimals ?? 18;
 
   const unwrappedNotice = (hasUnwrappedTokens || unwrappedMessage) && (
-    <div className="mt-4 flex flex-col items-center gap-2 text-xs text-futarchyGray9 text-center">
+    <div className="mt-4 flex flex-col items-center gap-2 text-xs text-seer-muted text-center">
       {hasUnwrappedTokens && (
         <>
           <p>
@@ -259,7 +259,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
               type="button"
               onClick={handleRedeemUnwrapped}
               disabled={isRedeemingUnwrapped || !walletClient}
-              className="px-3 py-1.5 rounded-lg border border-futarchyGray62 dark:border-futarchyGray11/70 hover:text-futarchyGray12 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-lg border border-seer-border hover:text-seer-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isRedeemingUnwrapped ? 'Redeeming...' : 'Redeem unwrapped'}
             </button>
@@ -274,15 +274,15 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
 
   return (
     <>
-      <div className="h-full overflow-y-auto bg-white dark:bg-futarchyDarkGray2 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-        <h3 className="h-[52px] text-base font-semibold text-futarchyGray11 dark:text-futarchyGray3 uppercase px-4 py-3 border-b border-futarchyGray62 dark:border-futarchyGray11/70 flex items-center justify-between">
+      <div className="h-full overflow-y-auto bg-seer-surface rounded-xl border border-seer-border">
+        <h3 className="h-[52px] text-base font-semibold text-seer-muted uppercase px-4 py-3 border-b border-seer-border flex items-center justify-between">
           <span>
-            Winning Outcome: <span className={isWinningOutcomeYes ? "text-futarchyBlue9" : "text-futarchyGold11"}>{winningOutcome}</span>
+            Winning Outcome: <span className={isWinningOutcomeYes ? "text-pass-text" : "text-fail-text"}>{winningOutcome}</span>
           </span>
         </h3>
 
         {!isConnected ? (
-          <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
+          <div className="text-center py-8 text-seer-muted ">
             <p className="mb-4">Connect your wallet to view redeemable tokens</p>
             <RedeemButton isConnected={false} isWinningOutcomeYes={isWinningOutcomeYes} />
           </div>
@@ -290,35 +290,35 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
           <div className="p-4">
             <table className="min-w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b border-futarchyGray62 dark:border-futarchyGray11/70">
-                  <th className="text-left py-2 text-futarchyGray11 dark:text-futarchyGray112 font-medium">Token</th>
-                  <th className="text-right py-2 text-futarchyGray11 dark:text-futarchyGray112 font-medium">Amount</th>
+                <tr className="border-b border-seer-border">
+                  <th className="text-left py-2 text-seer-muted font-medium">Token</th>
+                  <th className="text-right py-2 text-seer-muted font-medium">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {isPositiveAmount(winningTokens.currencyAmount) && (
-                  <tr className="hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGrayBG">
+                  <tr className="hover:bg-seer-surface-raised hover:bg-seer-surface">
                     <td className="py-3">
-                      <span className="font-semibold text-futarchyGray12 dark:text-white">
+                      <span className="font-semibold text-seer-text ">
                         {winningTokens.currencySymbol}
                       </span>
                     </td>
                     <td className="text-right py-3">
-                      <span className="font-semibold text-futarchyGray12 dark:text-white">
+                      <span className="font-semibold text-seer-text ">
                         {formatBalance(winningTokens.currencyAmount, '')}
                       </span>
                     </td>
                   </tr>
                 )}
                 {isPositiveAmount(winningTokens.companyAmount) && (
-                  <tr className="hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGrayBG">
+                  <tr className="hover:bg-seer-surface-raised hover:bg-seer-surface">
                     <td className="py-3">
-                      <span className="font-semibold text-futarchyGray12 dark:text-white">
+                      <span className="font-semibold text-seer-text ">
                         {winningTokens.companySymbol}
                       </span>
                     </td>
                     <td className="text-right py-3">
-                      <span className="font-semibold text-futarchyGray12 dark:text-white">
+                      <span className="font-semibold text-seer-text ">
                         {formatBalance(winningTokens.companyAmount, '')}
                       </span>
                     </td>
@@ -338,11 +338,11 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
             {unwrappedNotice}
           </div>
         ) : (
-          <div className="text-center py-8 text-futarchyGray11 dark:text-white/70">
+          <div className="text-center py-8 text-seer-muted ">
             {!hasUnwrappedTokens && (
               <>
                 <p className="mb-2">No redeemable tokens found</p>
-                <p className="text-xs text-futarchyGray9">
+                <p className="text-xs text-seer-muted">
                   You don&apos;t have any {winningOutcome.toUpperCase()} outcome tokens to redeem.
                 </p>
               </>
@@ -353,7 +353,8 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
       </div>
 
       {isModalOpen && winningTokens && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <>
+          {/* RedemptionModal draws its own backdrop and panel */}
           <RedemptionModal
             title="Redeem Winning Tokens"
             handleClose={handleCloseModal}
@@ -362,7 +363,7 @@ export const RedeemTokens = ({ config, positions = {}, isLoadingPositions = fals
             winningTokens={winningTokens}
             useBlockExplorer={true}
           />
-        </div>
+        </>
       )}
     </>
   );

@@ -1,13 +1,13 @@
 import React from 'react';
 import MarketBadge from './MarketBadge';
 
-const MarketBadgeList = ({ badges = [] }) => {
+const MarketBadgeList = ({ badges = [], className = '' }) => {
   if (!badges || badges.length === 0) {
     return null;
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {badges.map((badge, index) => (
         <MarketBadge
           key={index}
@@ -21,4 +21,4 @@ const MarketBadgeList = ({ badges = [] }) => {
   );
 };
 
-export default MarketBadgeList; 
+export default MarketBadgeList;

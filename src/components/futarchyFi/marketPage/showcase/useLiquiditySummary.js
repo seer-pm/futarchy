@@ -83,27 +83,27 @@ const useLiquiditySummary = ({ config, poolData, newYesPrice, newNoPrice, latest
       tooltipBreakdown.push({
         label: 'YES Total',
         value: yesData.total,
-        className: 'text-futarchyBlue9 font-semibold'
+        className: 'text-pass-text font-semibold'
       });
       if (hasYesCash && (hasYesCompany || hasYesOther)) {
         tooltipBreakdown.push({
           label: 'YES Cash',
           value: yesData.cashValue,
-          className: 'text-futarchyBlue9'
+          className: 'text-pass-text'
         });
       }
       if (hasYesCompany) {
         tooltipBreakdown.push({
           label: yesData.priceUsed ? 'YES Company' : 'YES Company (raw)',
           value: yesData.companyValue,
-          className: 'text-futarchyBlue9'
+          className: 'text-pass-text'
         });
       }
       if (hasYesOther) {
         tooltipBreakdown.push({
           label: 'YES Other',
           value: yesData.otherValue,
-          className: 'text-white/80'
+          className: 'text-seer-muted'
         });
       }
     }
@@ -116,27 +116,27 @@ const useLiquiditySummary = ({ config, poolData, newYesPrice, newNoPrice, latest
       tooltipBreakdown.push({
         label: 'NO Total',
         value: noData.total,
-        className: 'text-futarchyGold8 font-semibold'
+        className: 'text-fail-text font-semibold'
       });
       if (hasNoCash && (hasNoCompany || hasNoOther)) {
         tooltipBreakdown.push({
           label: 'NO Cash',
           value: noData.cashValue,
-          className: 'text-futarchyGold8'
+          className: 'text-fail-text'
         });
       }
       if (hasNoCompany) {
         tooltipBreakdown.push({
           label: noData.priceUsed ? 'NO Company' : 'NO Company (raw)',
           value: noData.companyValue,
-          className: 'text-futarchyGold8'
+          className: 'text-fail-text'
         });
       }
       if (hasNoOther) {
         tooltipBreakdown.push({
           label: 'NO Other',
           value: noData.otherValue,
-          className: 'text-white/80'
+          className: 'text-seer-muted'
         });
       }
     }

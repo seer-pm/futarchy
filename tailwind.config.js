@@ -118,7 +118,12 @@ module.exports = {
       backdropBlur: {
         xs: '2px',
       },
-      colors: legacyPalette,
+      colors: {
+        ...legacyPalette,
+        // Pass and fail, theme-aware (globals.css). New code uses these for the two outcomes.
+        pass: { DEFAULT: "var(--futarchy-pass)", text: "var(--futarchy-pass-text)", soft: "var(--futarchy-pass-soft)" },
+        fail: { DEFAULT: "var(--futarchy-fail)", text: "var(--futarchy-fail-text)", soft: "var(--futarchy-fail-soft)" },
+      },
 
       // The kit's scale: sm for compact controls and badges, md for surfaces, inputs and rows.
       // Tailwind's own sizes resolve to the same two values, so existing classes take the brand

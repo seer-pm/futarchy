@@ -39,6 +39,9 @@ import { executionPriceFor, exceedsAvailable } from '../../../utils/swapQuoteMat
 import { quoteSeerSwap } from '../../../utils/seerSwap';
 import { formatUnits } from 'viem';
 import { resolveMarketStatus } from '../../../utils/proposalLifecycle';
+import Button from '../../ui/Button';
+import { Field, Input, InputGroup } from '../../ui/Field';
+import { Surface } from '../../ui/Surface';
 
 // Opens only from the native-swap action — load it on demand.
 
@@ -934,133 +937,122 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
   return (
     <>
-      <div className="relative flex flex-col bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
-        {marketHasClosed && (
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm z-10 flex items-center justify-center">
-            <span className="text-white text-2xl font-bold bg-black/50 px-6 py-3 rounded-lg">
-              {resolveMarketStatus(config?.marketInfo).labelWithOutcome}
-            </span>
-          </div>
-        )}
-        {/* Add connection status display */}
+      <Surface as="div" className="relative flex flex-col overflow-hidden">
+        {/* Connection and transaction notices */}
         {connectionError && (
-          <div className="p-4 bg-red-100 text-red-700 text-sm">
+          <div role="alert" className="m-4 mb-0 px-3 py-2 rounded-control bg-seer-negative/10 text-seer-negative text-sm">
             {connectionError}
           </div>
         )}
 
         {isConnecting && (
-          <div className="p-4 bg-blue-100 text-blue-700 text-sm">
+          <div role="status" className="m-4 mb-0 px-3 py-2 rounded-control bg-seer-accent-soft text-seer-accent-text text-sm">
             Connecting to MetaMask...
           </div>
         )}
 
-        {/* Add error display */}
         {error && (
-          <div className="p-4 bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-300 text-sm">
+          <div role="alert" className="m-4 mb-0 px-3 py-2 rounded-control bg-seer-negative/10 text-seer-negative text-sm">
             {error}
           </div>
         )}
 
-        {/* Yes/No Selector as Tabs */}
-        <div className="h-16 px-4 pt-4 border-b-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2">
-          <div className="grid grid-cols-2 gap-3 -mb-px">
+        {/* A closed market has nothing to trade: the ticket states the outcome and where the
+            winning tokens are redeemed, instead of a disabled form behind a veil. */}
+        {marketHasClosed ? (
+          <div className="p-5 space-y-2">
+            <p className="text-[13px] text-seer-muted">Trading has ended</p>
+            <p className="text-lg font-semibold text-seer-text">
+              {resolveMarketStatus(config?.marketInfo).labelWithOutcome}
+            </p>
+            <p className="text-sm leading-relaxed text-seer-muted">
+              {resolveMarketStatus(config?.marketInfo).state === 'resolved'
+                ? 'If you hold tokens of the winning outcome, redeem them in the Redeem Tokens tab.'
+                : 'Tokens of the winning outcome can be redeemed in the Redeem Tokens tab once the market resolves.'}
+            </p>
+          </div>
+        ) : (
+        <div className="p-4 space-y-4">
+          {/* Which conditional world to trade in */}
+          <div role="group" aria-label="Outcome" className="grid grid-cols-2 gap-1 p-1 rounded-control border border-seer-border">
             <button
+              type="button"
               onClick={() => handleOutcomeSelect('approved')}
-              className={`group relative overflow-hidden flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold transition-colors duration-200 ease-in-out rounded-t-2xl ${selectedOutcome === 'approved'
-                ? 'bg-futarchyBlue3 dark:bg-futarchyBlue6/40 text-futarchyBlue11 dark:text-futarchyBlue6 border-2 border-b-0 border-futarchyBlue7'
-                : 'bg-transparent text-futarchyGray11 border-2 border-transparent'
+              aria-pressed={selectedOutcome === 'approved'}
+              className={`h-9 inline-flex items-center justify-center gap-2 rounded-control text-sm font-semibold transition-colors ${selectedOutcome === 'approved'
+                ? 'bg-pass-soft text-pass-text'
+                : 'text-seer-muted hover:text-seer-text'
                 }`}
             >
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <span className="w-2 h-2 rounded-full bg-pass" aria-hidden="true" />
               <span>If Yes</span>
-              <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent ${selectedOutcome === 'approved' ? 'via-white/20' : 'via-black/10'} dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none`}></div>
             </button>
 
             <button
+              type="button"
               onClick={() => handleOutcomeSelect('reproved')}
-              className={`group relative overflow-hidden flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold transition-colors duration-200 ease-in-out rounded-t-2xl ${selectedOutcome === 'reproved'
-                ? 'bg-futarchyGold3 dark:bg-futarchyGold6/30 text-futarchyGold11 dark:text-futarchyGold6 border-2 border-b-0 border-futarchyGold9'
-                : 'bg-transparent text-futarchyGray11 border-2 border-transparent'
+              aria-pressed={selectedOutcome === 'reproved'}
+              className={`h-9 inline-flex items-center justify-center gap-2 rounded-control text-sm font-semibold transition-colors ${selectedOutcome === 'reproved'
+                ? 'bg-fail-soft text-fail-text'
+                : 'text-seer-muted hover:text-seer-text'
                 }`}
             >
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <span className="w-2 h-2 rounded-full bg-fail" aria-hidden="true" />
               <span>If No</span>
-              <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent ${selectedOutcome === 'reproved' ? 'via-white/20' : 'via-black/10'} dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none`}></div>
             </button>
           </div>
-        </div>
 
-        <div className="p-4 space-y-3">
-          {/* Buy/Sell Buttons */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Buy or sell in that world */}
+          <div role="group" aria-label="Side" className="grid grid-cols-2 gap-1 p-1 rounded-control border border-seer-border">
             <button
+              type="button"
               onClick={() => handleActionSelect('Buy')}
-              className={`group relative overflow-hidden py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 ease-in-out border-2 ${selectedAction === 'Buy'
-                ? 'bg-futarchyTeal4 text-futarchyTeal11 border-futarchyTeal7 dark:bg-futarchyTeal6/50 dark:text-futarchyTeal4 dark:border-futarchyTeal6'
-                : 'bg-futarchyGray2 text-futarchyGray11 border-futarchyGray62 dark:bg-futarchyDarkGray2 dark:text-futarchyGray112 dark:border-futarchyGray112/40'
+              aria-pressed={selectedAction === 'Buy'}
+              className={`h-9 rounded-control text-sm font-semibold transition-colors ${selectedAction === 'Buy'
+                ? 'bg-seer-surface-raised text-seer-positive'
+                : 'text-seer-muted hover:text-seer-text'
                 }`}
             >
               Buy
-              <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent ${selectedAction === 'Buy' ? 'via-white/20' : 'via-black/10'} dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none`}></div>
             </button>
             <button
+              type="button"
               onClick={() => handleActionSelect('Sell')}
-              className={`group relative overflow-hidden py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 ease-in-out border-2 ${selectedAction === 'Sell'
-                ? 'bg-futarchyCrimson4 text-futarchyCrimson11 border-futarchyCrimson9 dark:bg-futarchyCrimson9/60 dark:text-futarchyCrimson7 dark:border-futarchyCrimson9'
-                : 'bg-futarchyGray2 text-futarchyGray11 border-futarchyGray62 dark:bg-futarchyDarkGray2 dark:text-futarchyGray112 dark:border-futarchyGray112/40'
+              aria-pressed={selectedAction === 'Sell'}
+              className={`h-9 rounded-control text-sm font-semibold transition-colors ${selectedAction === 'Sell'
+                ? 'bg-seer-surface-raised text-seer-negative'
+                : 'text-seer-muted hover:text-seer-text'
                 }`}
             >
               Sell
-              <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent ${selectedAction === 'Sell' ? 'via-white/20' : 'via-black/10'} dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none`}></div>
             </button>
           </div>
 
           {/* Amount Input */}
-          <div>
-            <label className="text-futarchyGray12 dark:text-futarchyGray3 text-xs font-semibold mb-1 block">
-              Amount ({selectedAction === 'Buy' ? getCurrencySymbol() : getCompanySymbol()})
-            </label>
-            <div className="relative">
-              <div className="flex items-center border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 rounded-xl h-12">
-                <input
-                  type="text"
-                  value={amount}
-                  onChange={handleAmountChange}
-                  className="flex-1 h-full px-4 bg-transparent text-futarchyGray12 dark:text-futarchyGray3 focus:outline-none rounded-xl"
-                  placeholder="0.00"
-                />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
-                  <button
-                    onClick={account ? handleMaxClick : undefined}
-                    className={`px-2 py-1 bg-futarchyGray4 dark:bg-transparent text-futarchyGray11 rounded text-xs font-medium hover:bg-futarchyGray5 transition-colors ${!account ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    Max
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Field label="Amount">
+            <InputGroup
+              affix={selectedAction === 'Buy' ? getCurrencySymbol() : getCompanySymbol()}
+              actions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={account ? handleMaxClick : undefined}
+                  disabled={!account}
+                >
+                  Max
+                </Button>
+              }
+            >
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={handleAmountChange}
+                invalid={insufficientBalance}
+                placeholder="0.00"
+              />
+            </InputGroup>
+          </Field>
 
           {/* Balance Section */}
           {(() => {
@@ -1110,19 +1102,19 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
             }
 
             return (
-              <div className="mt-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-futarchyGray11 dark:text-futarchyGray112">Available</span>
+              <div className="-mt-2">
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-seer-muted">Available</span>
                   <span
                     onClick={account ? handleMaxClick : undefined}
                     title={breakdownText ? `Wallet ${symbol} + ${outcomeSymbol} you already hold: ${breakdownText}` : undefined}
-                    className={`text-futarchyGray12 dark:text-futarchyGray112 font-medium ${account ? 'cursor-pointer hover:text-futarchyGray11 transition-colors' : ''}`}
+                    className={`text-seer-text font-semibold tabular-nums ${account ? 'cursor-pointer hover:text-seer-accent-text transition-colors' : ''}`}
                   >
                     {availableBalance.display}
                   </span>
                 </div>
                 {breakdownText && (
-                  <div className="flex justify-end text-[10px] text-futarchyGray11 dark:text-futarchyGray112">
+                  <div className="flex justify-end text-[11px] tabular-nums text-seer-muted">
                     {breakdownText}
                   </div>
                 )}
@@ -1137,7 +1129,7 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                 href={`https://swap.cow.fi/#/${config?.chainId || 100}/swap/_/${config?.BASE_TOKENS_CONFIG?.currency?.address}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-medium text-futarchyBlue11 dark:text-futarchyBlue9 hover:text-futarchyBlue9 dark:hover:text-futarchyBlue7 underline cursor-pointer"
+                className="text-[13px] font-semibold text-seer-accent-text underline underline-offset-2 cursor-pointer"
                 title={`Get ${getCurrencySymbol()}`}
               >
                 Get {getCurrencySymbol()}
@@ -1147,15 +1139,17 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
           {/* Outcomes Section */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-futarchyGray12 dark:text-futarchyGray3 text-xs font-semibold">
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className="text-seer-text text-[13px] font-semibold">
                 Outcomes
               </h3>
               {/* Show toggle on Ethereum mainnet and Gnosis Chain when quote data is available */}
               {(chainId === 1 || chainId === 100) && quoterPreview.currentPrice && (
                 <button
+                  type="button"
                   onClick={() => setShowPriceInfo(!showPriceInfo)}
-                  className="flex items-center gap-1 text-[10px] text-futarchyGray11 dark:text-futarchyGray8 hover:text-futarchyGray12 dark:hover:text-futarchyGray3 transition-colors"
+                  aria-expanded={showPriceInfo}
+                  className="flex items-center gap-1 text-xs text-seer-muted hover:text-seer-text transition-colors"
                   title={showPriceInfo ? "Hide price details" : "Show price details"}
                 >
                   <span>More info</span>
@@ -1170,15 +1164,15 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                 </button>
               )}
             </div>
-            <div className="flex rounded-2xl border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 overflow-hidden">
+            <div className="flex rounded-surface border border-seer-border overflow-hidden">
               {selectedOutcome === 'reproved' ? (
                 <>
-                  <div className="flex-1 flex flex-col items-center p-3 border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40">
+                  <div className="flex-1 min-w-0 flex flex-col items-center gap-0.5 p-3 text-center border-r border-seer-border">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-futarchyGold7 animate-pulse"></div>
-                      <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">If No</span>
+                      <span className="w-2 h-2 rounded-full bg-fail" aria-hidden="true"></span>
+                      <span className="text-[13px] text-seer-muted">If No</span>
                     </div>
-                    <span className="text-sm font-semibold h-6 flex items-center text-futarchyGold9">
+                    <span className="text-sm font-semibold tabular-nums min-h-6 flex items-center text-fail-text">
                       {(() => {
                         // Show quoter preview on Ethereum and Gnosis Chain
                         if ((chainId === 1 || chainId === 100) && quoterPreview.isLoading) {
@@ -1195,12 +1189,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                          return <span className="text-seer-warning text-xs" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
                         }
 
                         // Any other quote failure: show its reason, not a spot-price estimate
                         if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
+                          return <span className="text-seer-warning text-xs leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1220,37 +1214,37 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                         return `${formatTokenAmount(value)} ${symbol} (estimate)`;
                       })()}
                     </span>
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+                    <span className="text-xs text-seer-muted">
                       {chainId === 1 && quoterPreview.amountOut ? 'Receive' : 'Receive'}
                     </span>
                     {/* Price info - on Ethereum mainnet and Gnosis Chain when we have quote data */}
                     {(chainId === 1 || chainId === 100) && quoterPreview.currentPrice && showPriceInfo && (
-                      <div className="mt-2 pt-2 border-t border-futarchyGold6 dark:border-futarchyGold6/30 w-full space-y-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-futarchyGray11 dark:text-white/50">Price Now</span>
-                          <span className="text-futarchyGold11 dark:text-futarchyGold9 font-mono">{parseFloat(quoterPreview.currentPrice).toFixed(4)}</span>
+                      <div className="mt-2 pt-2 border-t border-seer-border w-full space-y-1">
+                        <div className="flex justify-between items-center gap-2 text-[11px]">
+                          <span className="text-seer-muted">Price now</span>
+                          <span className="text-fail-text tabular-nums">{parseFloat(quoterPreview.currentPrice).toFixed(4)}</span>
                         </div>
                         {(() => {
                           const afterPrice = quoterPreview.priceAfter || quoterPreview.executionPrice;
                           const val = Number(quoterPreview.priceImpactPct);
                           if (!afterPrice || !Number.isFinite(val)) {
                             return (
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[9px]">Insufficient liquidity</span>
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-warning">Insufficient liquidity</span>
                               </div>
                             );
                           }
                           return (
                             <>
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyGray11 dark:text-white/50">After Swap</span>
-                                <span className="text-futarchyGold11 dark:text-futarchyGold9 font-mono">{parseFloat(afterPrice).toFixed(4)}</span>
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-muted">After swap</span>
+                                <span className="text-fail-text tabular-nums">{parseFloat(afterPrice).toFixed(4)}</span>
                               </div>
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyGray11 dark:text-white/50">
-                                  Price Impact
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-muted">
+                                  Price impact
                                 </span>
-                                <span className={`font-medium ${val > 1 ? 'text-futarchyCrimson9' : 'text-futarchyGreen9'}`}>
+                                <span className={`font-semibold tabular-nums ${val > 1 ? 'text-seer-negative' : 'text-seer-positive'}`}>
                                   {val < 0.01 ? val.toFixed(4) : val.toFixed(2)}%
                                 </span>
                               </div>
@@ -1260,29 +1254,29 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 flex flex-col items-center p-3">
+                  <div className="flex-1 min-w-0 flex flex-col items-center gap-0.5 p-3 text-center">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-futarchyBlue9 animate-pulse"></div>
-                      <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">If Yes</span>
+                      <span className="w-2 h-2 rounded-full bg-pass" aria-hidden="true"></span>
+                      <span className="text-[13px] text-seer-muted">If Yes</span>
                     </div>
-                    <span className="text-sm font-semibold h-6 flex items-center text-futarchyBlue9">
+                    <span className="text-sm font-semibold tabular-nums min-h-6 flex items-center text-pass-text">
                       {(() => {
                         const value = parseFloat(amount) || 0;
                         const symbol = selectedAction === 'Buy' ? getCurrencySymbol() : getCompanySymbol();
                         return `${formatTokenAmount(value)} ${symbol} (estimate)`;
                       })()}
                     </span>
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">Recover</span>
+                    <span className="text-xs text-seer-muted">Recover</span>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="flex-1 flex flex-col items-center p-3 border-r-2 border-futarchyGray62 dark:border-futarchyGray112/40">
+                  <div className="flex-1 min-w-0 flex flex-col items-center gap-0.5 p-3 text-center border-r border-seer-border">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-futarchyBlue9 animate-pulse"></div>
-                      <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">If Yes</span>
+                      <span className="w-2 h-2 rounded-full bg-pass" aria-hidden="true"></span>
+                      <span className="text-[13px] text-seer-muted">If Yes</span>
                     </div>
-                    <span className="text-sm font-semibold h-6 flex items-center text-futarchyBlue9">
+                    <span className="text-sm font-semibold tabular-nums min-h-6 flex items-center text-pass-text">
                       {(() => {
                         // Show quoter preview on Ethereum and Gnosis Chain
                         if ((chainId === 1 || chainId === 100) && quoterPreview.isLoading) {
@@ -1299,12 +1293,12 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
                         // Insufficient liquidity check — covers both quoter success (extreme impact) and failure (no liquidity)
                         if ((chainId === 1 || chainId === 100) && quoterPreview.insufficientLiquidity) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px]" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
+                          return <span className="text-seer-warning text-xs" title={quoterPreview.error || undefined}>Insufficient liquidity</span>;
                         }
 
                         // Any other quote failure: show its reason, not a spot-price estimate
                         if ((chainId === 1 || chainId === 100) && quoterPreview.error) {
-                          return <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[10px] leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
+                          return <span className="text-seer-warning text-xs leading-tight text-center" title={quoterPreview.error}>{quoterPreview.error}</span>;
                         }
 
                         if ((chainId === 1 || chainId === 100) && quoterPreview.amountOut) {
@@ -1324,37 +1318,37 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                         return `${formatTokenAmount(value)} ${symbol}`;
                       })()}
                     </span>
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+                    <span className="text-xs text-seer-muted">
                       {chainId === 1 && quoterPreview.amountOut ? 'Receive' : 'Receive'}
                     </span>
                     {/* Price info - on Ethereum mainnet and Gnosis Chain when we have quote data */}
                     {(chainId === 1 || chainId === 100) && quoterPreview.currentPrice && showPriceInfo && (
-                      <div className="mt-2 pt-2 border-t border-futarchyBlue6 dark:border-futarchyBlue6/30 w-full space-y-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-futarchyGray11 dark:text-white/50">Price Now</span>
-                          <span className="text-futarchyBlue11 dark:text-futarchyBlue9 font-mono">{parseFloat(quoterPreview.currentPrice).toFixed(4)}</span>
+                      <div className="mt-2 pt-2 border-t border-seer-border w-full space-y-1">
+                        <div className="flex justify-between items-center gap-2 text-[11px]">
+                          <span className="text-seer-muted">Price now</span>
+                          <span className="text-pass-text tabular-nums">{parseFloat(quoterPreview.currentPrice).toFixed(4)}</span>
                         </div>
                         {(() => {
                           const afterPrice = quoterPreview.priceAfter || quoterPreview.executionPrice;
                           const val = Number(quoterPreview.priceImpactPct);
                           if (!afterPrice || !Number.isFinite(val)) {
                             return (
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyOrange11 dark:text-futarchyOrangeDark11 text-[9px]">Insufficient liquidity</span>
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-warning">Insufficient liquidity</span>
                               </div>
                             );
                           }
                           return (
                             <>
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyGray11 dark:text-white/50">After Swap</span>
-                                <span className="text-futarchyBlue11 dark:text-futarchyBlue9 font-mono">{parseFloat(afterPrice).toFixed(4)}</span>
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-muted">After swap</span>
+                                <span className="text-pass-text tabular-nums">{parseFloat(afterPrice).toFixed(4)}</span>
                               </div>
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-futarchyGray11 dark:text-white/50">
-                                  Price Impact
+                              <div className="flex justify-between items-center gap-2 text-[11px]">
+                                <span className="text-seer-muted">
+                                  Price impact
                                 </span>
-                                <span className={`font-medium ${val > 1 ? 'text-futarchyCrimson9' : 'text-futarchyGreen9'}`}>
+                                <span className={`font-semibold tabular-nums ${val > 1 ? 'text-seer-negative' : 'text-seer-positive'}`}>
                                   {val < 0.01 ? val.toFixed(4) : val.toFixed(2)}%
                                 </span>
                               </div>
@@ -1364,38 +1358,38 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 flex flex-col items-center p-3">
+                  <div className="flex-1 min-w-0 flex flex-col items-center gap-0.5 p-3 text-center">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-futarchyGold7 animate-pulse"></div>
-                      <span className="text-sm text-futarchyGray11 dark:text-white/70 font-medium">If No</span>
+                      <span className="w-2 h-2 rounded-full bg-fail" aria-hidden="true"></span>
+                      <span className="text-[13px] text-seer-muted">If No</span>
                     </div>
-                    <span className="text-sm font-semibold h-6 flex items-center text-futarchyGold9">
+                    <span className="text-sm font-semibold tabular-nums min-h-6 flex items-center text-fail-text">
                       {(() => {
                         const value = parseFloat(amount) || 0;
                         const symbol = selectedAction === 'Buy' ? getCurrencySymbol() : getCompanySymbol();
                         return `${formatTokenAmount(value)} ${symbol}`;
                       })()}
                     </span>
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">Recover</span>
+                    <span className="text-xs text-seer-muted">Recover</span>
                   </div>
                 </>
               )}
             </div>
             {quoterPreview.amountOut && hasPriceImpact && displayedPriceImpact > 1 && (
-              <div className={`mt-2 text-xs ${priceImpactTooHigh ? 'text-futarchyCrimson11' : 'text-futarchyOrange11'}`}>
+              <div className={`mt-2 text-xs font-semibold ${priceImpactTooHigh ? 'text-seer-negative' : 'text-seer-warning'}`}>
                 Price impact {displayedPriceImpact.toFixed(2)}%
               </div>
             )}
             {priceImpactTooHigh && (
-              <label className="mt-2 flex items-start gap-2 text-xs text-futarchyCrimson11 cursor-pointer">
+              <label className="mt-2 flex items-start gap-2 text-xs text-seer-negative cursor-pointer">
                 <input
                   type="checkbox"
                   checked={tradeAnywayAcknowledged}
                   onChange={(event) => setTradeAnywayAcknowledged(event.target.checked)}
-                  className="mt-0.5"
+                  className="mt-0.5 accent-seer-negative"
                 />
                 <span>
-                  Price impact too high — pool depth insufficient for this size. Trade anyway.
+                  Price impact too high: the pool is not deep enough for this size. Trade anyway.
                 </span>
               </label>
             )}
@@ -1403,27 +1397,23 @@ const ShowcaseSwapComponent = ({ positions, prices, walletBalances, isLoadingBal
 
           {/* Confirm Transaction Button */}
           {account ? (
-            <button
+            <Button
+              block
+              size="lg"
               onClick={handleConfirmClick}
-              className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors text-sm bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              busy={quoterPreview.isLoading}
               disabled={!amount || parseFloat(amount) <= 0 || marketHasClosed || insufficientBalance || quoterPreview.isLoading || quoteUnavailable || quoterPreview.insufficientLiquidity || (priceImpactTooHigh && !tradeAnywayAcknowledged)}
             >
-              <span className="relative z-10">{insufficientBalance ? 'Insufficient balance' : quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}</span>
-              {(amount && parseFloat(amount) > 0 && !marketHasClosed) && (
-                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
-              )}
-            </button>
+              {insufficientBalance ? 'Insufficient balance' : quoterPreview.isLoading ? 'Calculating...' : quoterPreview.insufficientLiquidity || quoteUnavailable ? 'Quote Unavailable' : priceImpactTooHigh && !tradeAnywayAcknowledged ? 'Acknowledge High Impact' : 'Confirm Swap'}
+            </Button>
           ) : (
-            <button
-              onClick={onConnectWallet}
-              className="group relative overflow-hidden w-full py-3 px-4 rounded-xl font-semibold transition-colors text-sm bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-2 border-futarchyGray62 dark:border-futarchyGray112/40 text-black dark:text-white"
-            >
-              <span className="relative z-10">Connect Wallet</span>
-              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 dark:via-white/20 to-transparent transform -translate-x-full -skew-x-12 group-hover:translate-x-full transition-transform duration-500 ease-in-out pointer-events-none"></div>
-            </button>
+            <Button block size="lg" onClick={onConnectWallet}>
+              Connect Wallet
+            </Button>
           )}
         </div>
-      </div>
+        )}
+      </Surface>
 
       {isConfirmModalOpen && (
         <ConfirmSwapModal

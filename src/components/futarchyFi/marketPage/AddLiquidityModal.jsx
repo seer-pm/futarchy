@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, usePublicClient } from 'wagmi';
 import { ethers } from 'ethers';
 import { getUserPositions } from '../../../utils/uniswapV3Helper';
 import { getEthersProvider } from '../../../utils/ethersAdapters';
+import { Dialog } from '@seer-pm/ui-kit/react';
 
 const AddLiquidityModal = ({ isOpen, onClose, config }) => {
     const { address, isConnected } = useAccount();
@@ -133,16 +133,6 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
         return `https://v3.swapr.eth.limo/#/add/${tokenA}/${tokenB}/select-pair`;
     };
 
-    const backdropVariants = {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1 }
-    };
-
-    const modalVariants = {
-        hidden: { opacity: 0, scale: 0.8 },
-        visible: { opacity: 1, scale: 1 }
-    };
-
     const getPositionsForSection = (sectionPools) => {
         if (!positions || positions.length === 0) return [];
         return positions.filter(pos =>
@@ -161,7 +151,7 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
 
         return (
             <div className="mb-6">
-                <h3 className="text-lg font-semibold text-futarchyGray12 dark:text-futarchyGray3 mb-3">{title}</h3>
+                <h3 className="text-sm font-semibold text-seer-text mb-3">{title}</h3>
 
                 {/* Add Liquidity Links */}
                 {pools.length > 0 && (
@@ -172,11 +162,11 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                                 href={createLiquidityUrl(pool.tokenA, pool.tokenB)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray5 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 transition-colors"
+                                className="block p-3 rounded-surface border border-seer-border hover:border-seer-accent-text transition-colors"
                             >
                                 <div className="flex items-center justify-between">
-                                    <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">{pool.name}</span>
-                                    <svg className="w-4 h-4 text-futarchyGray11 dark:text-futarchyGray112" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span className="text-seer-text font-medium">{pool.name}</span>
+                                    <svg className="w-4 h-4 text-seer-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                     </svg>
                                 </div>
@@ -187,8 +177,8 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
 
                 {/* Manage Positions Links - Categorized */}
                 {sectionPositions.length > 0 && (
-                    <div className="mt-2 pl-2 border-l-2 border-futarchyBlue/30">
-                        <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mb-2 font-medium">Your Positions ({sectionPositions.length})</p>
+                    <div className="mt-2 pl-2 border-l border-seer-accent-text/30">
+                        <p className="text-xs text-seer-muted mb-2 font-medium">Your Positions ({sectionPositions.length})</p>
                         <div className="flex gap-3 overflow-x-auto pb-4 -mx-2 px-2 snap-x no-scrollbar">
                             {sectionPositions.map((pos, index) => (
                                 <a
@@ -196,14 +186,14 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                                     href={pos.link}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="min-w-[260px] snap-center flex-shrink-0 p-3 bg-futarchyBlue/10 hover:bg-futarchyBlue/20 rounded-lg border border-futarchyBlue/30 transition-colors"
+                                    className="min-w-[260px] snap-center flex-shrink-0 p-3 bg-seer-accent-soft hover:bg-seer-accent-soft rounded-lg border border-seer-accent-text/30 transition-colors"
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium text-sm">Position #{pos.tokenId}</span>
-                                            <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">Liquidity: {pos.liquidityFormatted || parseFloat(ethers.utils.formatUnits(pos.liquidity, 18)).toFixed(4)}</span>
+                                            <span className="text-seer-text font-medium text-sm">Position #{pos.tokenId}</span>
+                                            <span className="text-xs text-seer-muted">Liquidity: {pos.liquidityFormatted || parseFloat(ethers.utils.formatUnits(pos.liquidity, 18)).toFixed(4)}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-futarchyBlue">
+                                        <div className="flex items-center gap-2 text-seer-accent-text">
                                             <span className="text-xs font-medium">Manage</span>
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -220,37 +210,9 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
     };
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                    onClick={onClose}
-                    variants={backdropVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="hidden"
-                >
-                    <motion.div
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80dvh] overflow-y-auto shadow-lg"
-                        onClick={(e) => e.stopPropagation()}
-                        variants={modalVariants}
-                        initial="hidden"
-                        animate="visible"
-                        exit="hidden"
-                    >
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-futarchyGray12 dark:text-futarchyGray3">Add Liquidity</h2>
-                            <button
-                                onClick={onClose}
-                                className="text-futarchyGray11 hover:text-futarchyGray12 dark:text-futarchyGray112 dark:hover:text-futarchyGray3 transition-colors"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
+        <Dialog open={isOpen} onClose={onClose} title="Add Liquidity">
 
-                        <div className="text-sm text-futarchyGray11 dark:text-futarchyGray112 mb-6">
+                        <div className="text-sm text-seer-muted mb-6">
                             Add liquidity to earn fees from trades.
                             {config?.chainId === 1
                                 ? " Click on any pool to open Uniswap V3 and add liquidity."
@@ -259,30 +221,25 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                         </div>
 
                         {config?.chainId === 1 && isLoadingPositions && (
-                            <div className="text-center py-2 text-xs text-futarchyGray11 animate-pulse">Scanning for your positions...</div>
+                            <div className="text-center py-2 text-xs text-seer-muted animate-pulse">Scanning for your positions...</div>
                         )}
-
-
 
                         {renderPoolSection("Conditional Pools", conditionalPools)}
                         {renderPoolSection("Prediction Pools", predictionPools)}
                         {renderPoolSection("Company Token Pools", tokenPools)}
 
                         {fetchError === "TOO_MANY_POSITIONS" ? (
-                            <div className="text-center text-futarchyYellow text-sm py-8 px-4">
+                            <div className="text-center text-seer-warning text-sm py-8 px-4">
                                 <span className="block font-bold mb-1">Found too many positions ({'>'}50)</span>
                                 Automatic scanning is disabled to prevent timeouts.
                                 <br />Please ensure you are connected to the correct wallet.
                             </div>
                         ) : conditionalPools.length === 0 && predictionPools.length === 0 && tokenPools.length === 0 ? (
-                            <div className="text-center text-futarchyGray11 dark:text-futarchyGray112 py-8">
+                            <div className="text-center text-seer-muted py-8">
                                 No liquidity pools available for this market.
                             </div>
                         ) : null}
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+        </Dialog>
     );
 };
 

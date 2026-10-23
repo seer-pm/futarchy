@@ -158,3 +158,23 @@ html {
 @media (min-width: 900px) { .seer-footer { --seer-footer-max-width: 900px; } }
 @media (min-width: 1024px) { .seer-footer { --seer-footer-max-width: 1024px; } }
 @media (min-width: 1280px) { .seer-footer { --seer-footer-max-width: 1280px; } }
+
+/* The two conditional worlds. Marks (lines, dots, fills) take --futarchy-pass / --futarchy-fail;
+   text takes the -text steps, which hold 4.5:1 on page and surface; tinted grounds take -soft.
+   Values match config/chartColors.js, which the canvas charts read instead. */
+:root {
+  --futarchy-pass: #7d33ff;
+  --futarchy-pass-text: #6c2bd9;
+  --futarchy-pass-soft: #efe9fc;
+  --futarchy-fail: #b8860b;
+  --futarchy-fail-text: #8a6408;
+  --futarchy-fail-soft: #faf3df;
+}
+.dark {
+  --futarchy-pass: #8f55f7;
+  --futarchy-pass-text: #b18aff;
+  --futarchy-pass-soft: #241e33;
+  --futarchy-fail: #b5850f;
+  --futarchy-fail-text: #d9ad3c;
+  --futarchy-fail-soft: #2a2412;
+}
