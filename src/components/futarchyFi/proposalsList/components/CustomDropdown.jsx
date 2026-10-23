@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { DownVectorIcon } from "../cards/Resources";
 
+// A filter menu on the kit's field look: the trigger matches .seer-input, and the open list is a
+// raised menu (the one place a shadow is allowed) with the selected option on the accent tint.
 const CustomDropdown = ({ options, value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -21,39 +23,48 @@ const CustomDropdown = ({ options, value, onChange }) => {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full md:w-[224px] h-12 px-4 rounded-xl border border-futarchyGray4 dark:border-futarchyDarkGray42 bg-white dark:bg-futarchyDarkGray3 flex items-center justify-between"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        className="seer-input w-full md:!w-[240px] flex items-center justify-between gap-3 text-left cursor-pointer"
       >
-        <div className="flex items-center gap-2">
+        <span className="flex items-center gap-2 min-w-0">
           {selectedOption.icon && (
-            <selectedOption.icon className="w-5 h-5 text-futarchyGray11 dark:text-futarchyGray112" />
+            <selectedOption.icon className="w-4 h-4 shrink-0 text-seer-muted" />
           )}
-          <span className="text-futarchyGray12 dark:text-white font-medium">
+          <span className="truncate text-sm font-semibold text-seer-text">
             {selectedOption.label}
           </span>
-        </div>
-        <DownVectorIcon className={`w-5 h-5 text-futarchyGray11 dark:text-futarchyGray112 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </span>
+        <DownVectorIcon className={`w-3 h-3 shrink-0 text-seer-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 rounded-xl border border-futarchyGray4 dark:border-futarchyDarkGray42 bg-white dark:bg-futarchyDarkGray3 shadow-lg z-10">
+        <div
+          role="listbox"
+          className="absolute top-full left-0 right-0 mt-2 p-1 rounded-surface border border-seer-border bg-seer-surface shadow-lg z-20"
+        >
           {options.map((option) => (
             <button
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
               key={option.value}
               onClick={() => {
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className={`w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-futarchyGray3 dark:hover:bg-futarchyDarkGray42 transition-colors ${
+              className={`w-full h-10 px-3 flex items-center gap-2 text-left text-sm rounded-control transition-colors ${
                 option.value === value
-                  ? "bg-futarchyGray3 dark:bg-futarchyDarkGray42"
-                  : ""
-              } first:rounded-t-xl last:rounded-b-xl`}
+                  ? "bg-seer-accent-soft text-seer-accent-text font-semibold"
+                  : "text-seer-text hover:bg-seer-surface-raised"
+              }`}
             >
               {option.icon && (
-                <option.icon className="w-5 h-5 text-futarchyGray11 dark:text-futarchyGray112" />
+                <option.icon className={`w-4 h-4 shrink-0 ${option.value === value ? "text-seer-accent-text" : "text-seer-muted"}`} />
               )}
-              <span className="text-futarchyGray12 dark:text-white font-medium">
+              <span className="truncate">
                 {option.label}
               </span>
             </button>

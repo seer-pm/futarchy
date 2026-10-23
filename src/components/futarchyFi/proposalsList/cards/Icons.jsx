@@ -78,7 +78,7 @@ export const EyeIcon = (props) => (
       </svg>
   );
   
-export const LoadingSpinner = ({ className = "h-4 w-4 text-futarchyGray12 dark:text-white" }) => (
+export const LoadingSpinner = ({ className = "h-4 w-4 text-seer-muted" }) => (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.2"/>
       <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
