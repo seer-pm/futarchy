@@ -1,19 +1,12 @@
 import React from 'react';
-import { useTheme, THEMES } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
-/**
- * Theme Toggle Component
- * Cycles through: Light → Dark → Gradient → Light
- * Shows different icons for each theme
- */
+/** Light/dark toggle. The icon shows the theme a click switches to. */
 const ThemeToggle = () => {
-    const { theme, cycleTheme } = useTheme();
+    const { isDarkMode, cycleTheme } = useTheme();
 
-    // Simple light/dark toggle icons
     const getIcon = () => {
-        const isDark = theme === THEMES.DARK || theme === THEMES.GRADIENT;
-
-        if (isDark) {
+        if (isDarkMode) {
             // Sun icon - click to go to light
             return (
                 <svg
@@ -60,10 +53,7 @@ const ThemeToggle = () => {
         }
     };
 
-    const getLabel = () => {
-        const isDark = theme === THEMES.DARK || theme === THEMES.GRADIENT;
-        return isDark ? 'Switch to light mode' : 'Switch to dark mode';
-    };
+    const getLabel = () => (isDarkMode ? 'Switch to light mode' : 'Switch to dark mode');
 
     return (
         <button

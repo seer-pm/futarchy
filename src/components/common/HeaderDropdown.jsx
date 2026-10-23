@@ -145,21 +145,6 @@ const HeaderDropdown = ({ options, config, onWalletConnectClick, chain, mounted 
             {theme === THEMES.DARK && (
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                  <defs>
-                    <linearGradient id="gradDropdown" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#264D8C" />
-                      <stop offset="100%" stopColor="#B8860B" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="12" cy="12" r="10" stroke="url(#gradDropdown)" />
-                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="url(#gradDropdown)" />
-                </svg>
-                <span>Gradient Mode</span>
-              </>
-            )}
-            {theme === THEMES.GRADIENT && (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                   <circle cx="12" cy="12" r="5"></circle>
                   <line x1="12" y1="1" x2="12" y2="3"></line>
                   <line x1="12" y1="21" x2="12" y2="23"></line>

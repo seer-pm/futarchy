@@ -1,17 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 /**
- * Theme options:
- * - 'light': Light mode
- * - 'dark': Dark mode  
- * - 'gradient': Dark mode with blue-to-gold gradient background
+ * The one theme mechanism: 'light' or 'dark', stored in localStorage.theme and
+ * applied as the `dark` class on <html> (Tailwind's class strategy).
  */
 const ThemeContext = createContext();
 
 export const THEMES = {
     LIGHT: 'light',
     DARK: 'dark',
-    GRADIENT: 'gradient',
 };
 
 export const ThemeProvider = ({ children }) => {
@@ -20,7 +17,6 @@ export const ThemeProvider = ({ children }) => {
     useEffect(() => {
         // Load saved theme from localStorage
         const savedTheme = localStorage.getItem('theme');
-        // For now, only support light and dark (gradient is hidden)
         if (savedTheme && (savedTheme === THEMES.LIGHT || savedTheme === THEMES.DARK)) {
             setTheme(savedTheme);
         } else {
@@ -31,28 +27,11 @@ export const ThemeProvider = ({ children }) => {
     }, []);
 
     useEffect(() => {
-        // Apply theme to document
-        const html = document.documentElement;
-
-        // Remove all theme classes
-        html.classList.remove('dark', 'gradient');
-        html.removeAttribute('data-theme');
-
-        if (theme === THEMES.DARK || theme === THEMES.GRADIENT) {
-            html.classList.add('dark');
-        }
-
-        if (theme === THEMES.GRADIENT) {
-            html.classList.add('gradient');
-            html.setAttribute('data-theme', 'gradient');
-        }
-
-        // Save to localStorage
+        document.documentElement.classList.toggle('dark', theme === THEMES.DARK);
         localStorage.setItem('theme', theme);
     }, [theme]);
 
     const cycleTheme = () => {
-        // For now, only toggle between light and dark (gradient hidden)
         setTheme(prev => prev === THEMES.LIGHT ? THEMES.DARK : THEMES.LIGHT);
     };
 
@@ -60,8 +39,7 @@ export const ThemeProvider = ({ children }) => {
         theme,
         setTheme,
         cycleTheme,
-        isDarkMode: theme === THEMES.DARK || theme === THEMES.GRADIENT,
-        isGradient: theme === THEMES.GRADIENT,
+        isDarkMode: theme === THEMES.DARK,
     };
 
     return (
