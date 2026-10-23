@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
+import { CHART_FONT_FAMILY, chartColors } from '../../config/chartColors';
 import { useSubgraphData } from '../../hooks/useSubgraphData';
 import { formatWith } from '../../utils/precisionFormatter';
 import { formatImpactPercent } from '../../utils/marketPageUtils.mjs';
@@ -194,11 +195,12 @@ const SubgraphChart = ({
             chartInstanceRef.current = null;
         }
 
-        // Same colors as TripleChart
-        const backgroundColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
-        const textColor = isDarkMode ? 'rgb(220, 220, 220)' : '#333333';
-        const crosshairColor = isDarkMode ? 'rgba(200, 200, 200, 0.3)' : 'rgba(51, 51, 51, 0.3)';
-        const borderColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
+        // Same palette as TripleChart (config/chartColors.js), on a transparent ground
+        const colors = chartColors(isDarkMode);
+        const backgroundColor = 'transparent';
+        const textColor = colors.text;
+        const crosshairColor = colors.crosshair;
+        const borderColor = 'transparent';
 
         const chart = createChart(chartContainerRef.current, {
             width: containerWidth,
@@ -206,7 +208,7 @@ const SubgraphChart = ({
             layout: {
                 background: { type: 'solid', color: backgroundColor },
                 textColor: textColor,
-                fontFamily: 'Arial, sans-serif',
+                fontFamily: CHART_FONT_FAMILY,
             },
             // Chart-level localization for crosshair tooltip (converts UTC timestamps to local time)
             localization: {
@@ -289,18 +291,16 @@ const SubgraphChart = ({
             minMove: Math.pow(10, -dynamicPrecision),
         };
 
-        // Create YES line - SAME BLUE as TripleChart: rgb(0, 144, 255)
         const yesLine = chart.addSeries(LineSeries, {
-            color: 'rgb(0, 144, 255)',
+            color: colors.pass,
             lineWidth: 2,
             title: 'YES',
             priceFormat: priceFormat,
             visible: lineVisibility.yes,
         });
 
-        // Create NO line - SAME YELLOW as TripleChart: rgb(245, 196, 0)
         const noLine = chart.addSeries(LineSeries, {
-            color: 'rgb(245, 196, 0)',
+            color: colors.fail,
             lineWidth: 2,
             title: 'NO',
             priceFormat: priceFormat,
@@ -313,7 +313,7 @@ const SubgraphChart = ({
 
         // Create SPOT line - dashed, semi-transparent (same as TripleChart)
         const spotLine = chart.addSeries(LineSeries, {
-            color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)',
+            color: colors.spot,
             lineWidth: 2,
             lineStyle: 2, // Dashed
             title: 'SPOT',
