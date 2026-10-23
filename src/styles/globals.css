@@ -145,3 +145,16 @@ html {
     transform: scale(1.05);
   }
 }
+
+/* The kit footer's column follows Tailwind's `container mx-auto px-5`, which the header and every
+   page use, so the footer's edges line up with theirs at each breakpoint. */
+.seer-footer {
+  --seer-footer-gutter: 20px;
+  --seer-footer-max-width: 100%;
+}
+@media (min-width: 640px) { .seer-footer { --seer-footer-max-width: 640px; } }
+@media (min-width: 768px) { .seer-footer { --seer-footer-max-width: 768px; } }
+@media (min-width: 864px) { .seer-footer { --seer-footer-max-width: 864px; } }
+@media (min-width: 900px) { .seer-footer { --seer-footer-max-width: 900px; } }
+@media (min-width: 1024px) { .seer-footer { --seer-footer-max-width: 1024px; } }
+@media (min-width: 1280px) { .seer-footer { --seer-footer-max-width: 1280px; } }

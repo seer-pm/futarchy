@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import Header from '../../components/common/Header';
+import Footer from '../../components/common/Footer';
 import OpsActionCard from '../../ops/components/OpsActionCard';
 import { opsActions } from '../../ops/actions';
 
@@ -16,7 +17,7 @@ export default function OpsPage() {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
-      <Header config="app" />
+      <Header />
 
       <main className="min-h-screen bg-futarchyGray2 px-4 pb-16 pt-28 text-futarchyGray12">
         <div className="mx-auto max-w-6xl">
@@ -53,6 +54,8 @@ export default function OpsPage() {
           </div>
         </div>
       </main>
+
+      <Footer />
     </>
   );
 }

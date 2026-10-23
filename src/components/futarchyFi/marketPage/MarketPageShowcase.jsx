@@ -266,7 +266,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
         onClose={() => chainValidation.setShowModal(false)}
       />
 
-      <RootLayout headerConfig="app" footerConfig="main" useSnapScroll={false} heroContent={marketHero}>
+      <RootLayout useSnapScroll={false} heroContent={marketHero}>
         <PageLayout>
           {/* Holds the height the sticky hero gives up when it collapses */}
           <div aria-hidden="true" style={{ height: heroReserve }} />

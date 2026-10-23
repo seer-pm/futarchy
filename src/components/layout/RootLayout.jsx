@@ -5,8 +5,6 @@ import Footer from "../common/Footer";
 
 const RootLayout = ({
   children,
-  headerConfig = "landing",
-  footerConfig, // kept for backward compat, Footer is now unified
   useSnapScroll = false,
   heroContent = null,
   secondaryHeader = null,
@@ -19,7 +17,7 @@ const RootLayout = ({
           <>
             {/* Section 1: Header + Hero */}
             <section className="snap-start h-screen flex flex-col">
-              <Header config={headerConfig} />
+              <Header />
               <div className="flex-grow overflow-y-auto">
                 {heroContent}
               </div>
@@ -44,7 +42,7 @@ const RootLayout = ({
         {/* Desktop Layout (Original) */}
         <div className="hidden lg:flex flex-col min-h-screen">
           <>
-            <Header config={headerConfig} />
+            <Header />
             {secondaryHeader}
             <div className="sticky top-20 z-30">
               {heroContent}
@@ -62,7 +60,7 @@ const RootLayout = ({
   return (
     <div className="flex flex-col min-h-screen">
       <>
-        <Header config={headerConfig} />
+        <Header />
         {secondaryHeader}
         {/* Sticky only on lg+, where the hero collapses to a compact bar on
             scroll. On phones and tablets the full hero (~500px) would pin

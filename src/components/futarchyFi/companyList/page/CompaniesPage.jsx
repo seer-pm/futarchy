@@ -59,10 +59,7 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
 
 
   return (
-    <RootLayout
-      headerConfig="app"
-      footerConfig="main"
-    >
+    <RootLayout>
       <PageLayout>
         {/* Active Milestones Section */}
         <div className="mb-12 mt-4">

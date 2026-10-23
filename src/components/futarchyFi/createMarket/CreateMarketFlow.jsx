@@ -133,7 +133,7 @@ export default function CreateMarketFlow() {
   };
 
   return (
-    <RootLayout headerConfig="app" footerConfig="main">
+    <RootLayout>
       <PageLayout contentClassName="max-w-7xl">
         <div className="py-8">
           <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">

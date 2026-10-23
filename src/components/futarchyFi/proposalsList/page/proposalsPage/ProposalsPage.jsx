@@ -415,10 +415,7 @@ const ProposalsPage = ({
   }, [isLoadingCompany, companyData, activeProposalsCount, visibleMilestonesCount]);
 
   return (
-    <RootLayout
-      headerConfig="app"
-      footerConfig="main"
-    >
+    <RootLayout>
       <PageLayout hero={heroContent} contentClassName="pt-10 z-10 select-none">
         {/* Test div for new market page */}
         {/*   <div className="my-4 p-4 border border-dashed border-futarchyGray8 dark:border-futarchyDarkGray8 rounded-md">

@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 import Header from '../../components/common/Header';
+import Footer from '../../components/common/Footer';
 import {
   ERC20_ABI,
   FLM_MANAGER_ABI,
@@ -514,7 +515,7 @@ export default function FlmPage({ config }) {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
-      <Header config="app" />
+      <Header />
 
       <main className="min-h-screen bg-futarchyGray2 px-4 pb-16 pt-28 text-futarchyGray12">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -818,6 +819,8 @@ export default function FlmPage({ config }) {
           </div>
         </div>
       </main>
+
+      <Footer />
     </>
   );
 }
