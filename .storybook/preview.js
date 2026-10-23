@@ -1,5 +1,6 @@
 import React from 'react';
 import { GlobalProvider } from '@contexts/GlobalContext.js';
+import '@rainbow-me/rainbowkit/styles.css';
 import '../src/styles/globals.css';
 import { Oxanium, Barlow } from 'next/font/google';
 import {

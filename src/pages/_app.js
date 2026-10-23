@@ -1,24 +1,12 @@
 import "@rainbow-me/rainbowkit/styles.css";
 import "../styles/globals.css";
 
-import { Oxanium, Barlow } from "next/font/google";
 import Head from "next/head";
 import metadata from "../../app/metadata";
 import Providers from "../providers/providers";
 import { useRouter } from "next/router";
 import { CurrencyProvider } from "../contexts/CurrencyContext";
 import { ThemeProvider } from "../contexts/ThemeContext";
-
-const oxanium = Oxanium({
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const barlow = Barlow({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
