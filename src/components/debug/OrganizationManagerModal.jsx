@@ -13,6 +13,22 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicCl
 import { CONTRACT_ADDRESSES, CONTRACT_ABIS } from '../futarchyFi/marketPage/constants/contracts';
 import { AGGREGATOR_SUBGRAPH_URL as SUBGRAPH_URL } from '../../config/subgraphEndpoints';
 import { useSearchProposals } from '../../hooks/useSearchProposals'; // Import search hook
+import { Dialog } from '@seer-pm/ui-kit/react';
+import {
+    ArchiveBoxIcon,
+    ArrowPathIcon,
+    ArrowTopRightOnSquareIcon,
+    BuildingLibraryIcon,
+    Cog6ToothIcon,
+    DocumentTextIcon,
+    GlobeAltIcon,
+    LightBulbIcon,
+    PlusIcon,
+    TrashIcon,
+} from '@heroicons/react/24/outline';
+import Badge from '../ui/Badge';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
 
 // Tabs
 const TAB = {
@@ -98,70 +114,71 @@ export default function OrganizationManagerModal({
 
     if (!isOpen) return null;
 
+    const tabs = [
+        { id: TAB.OVERVIEW, label: 'Overview', icon: DocumentTextIcon },
+        { id: TAB.CONTENT, label: mode === MODE.AGGREGATOR ? 'Organizations' : 'Proposals', icon: ArchiveBoxIcon },
+        { id: TAB.SETTINGS, label: 'Settings', icon: Cog6ToothIcon }
+    ];
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white dark:bg-futarchyDarkGray2 rounded-2xl shadow-xl max-w-2xl w-full mx-4 overflow-hidden flex flex-col max-h-[90vh]">
-
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-futarchyGray6 dark:border-futarchyGray11 bg-futarchyGray2 dark:bg-futarchyDarkGray1">
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${mode === MODE.AGGREGATOR ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
-                            {mode === MODE.AGGREGATOR ? '🌐' : '🏛️'}
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-futarchyGray12 dark:text-white">
-                                {entityData?.name || 'Loading...'}
-                            </h2>
-                            <div className="flex items-center gap-2 text-xs text-futarchyGray11 dark:text-futarchyGray6">
-                                <span className="font-mono">{entityId?.slice(0, 8)}...{entityId?.slice(-6)}</span>
-                                {isOwner && <span className="text-green-600 bg-green-100 px-1.5 rounded">Owner</span>}
-                                {isEditor && <span className="text-yellow-600 bg-yellow-100 px-1.5 rounded">Editor</span>}
-                            </div>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-futarchyGray11 hover:text-white transition-colors">✕</button>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex border-b border-futarchyGray6 dark:border-futarchyGray11">
-                    {[
-                        { id: TAB.OVERVIEW, label: 'Overview', icon: '📝' },
-                        { id: TAB.CONTENT, label: mode === MODE.AGGREGATOR ? 'Organizations' : 'Proposals', icon: '📦' },
-                        { id: TAB.SETTINGS, label: 'Settings', icon: '⚙️' }
-                    ].map(tab => (
+        <Dialog
+            open={isOpen}
+            onClose={onClose}
+            size="wide"
+            title={(
+                <span className="flex items-center gap-3">
+                    <span className="shrink-0 rounded-control bg-seer-accent-soft p-2 text-seer-accent-text">
+                        {mode === MODE.AGGREGATOR ? <GlobeAltIcon className="h-5 w-5" aria-hidden="true" /> : <BuildingLibraryIcon className="h-5 w-5" aria-hidden="true" />}
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block truncate">{entityData?.name || 'Loading...'}</span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-normal text-seer-muted">
+                            <span className="font-mono">{entityId?.slice(0, 8)}...{entityId?.slice(-6)}</span>
+                            {isOwner && <Badge tone="positive">Owner</Badge>}
+                            {isEditor && <Badge tone="warning">Editor</Badge>}
+                        </span>
+                    </span>
+                </span>
+            )}
+        >
+            {/* Tabs */}
+            <div role="tablist" className="-mx-5 -mt-4 mb-5 flex border-b border-seer-border px-5">
+                {tabs.map(tab => {
+                    const Icon = tab.icon;
+                    const selected = activeTab === tab.id;
+                    return (
                         <button
                             key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={selected}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors
-                                ${activeTab === tab.id
-                                    ? 'text-futarchyLavender border-b-2 border-futarchyLavender bg-futarchyLavender/5'
-                                    : 'text-futarchyGray11 hover:text-futarchyGray12 dark:hover:text-white'}`}
+                            className={`-mb-px flex flex-1 items-center justify-center gap-2 border-b-2 py-3 text-sm font-semibold transition-colors ${selected
+                                ? 'border-seer-purple text-seer-text'
+                                : 'border-transparent text-seer-muted hover:text-seer-text'}`}
                         >
-                            <span>{tab.icon}</span>
+                            <Icon className="h-4 w-4" aria-hidden="true" />
                             {tab.label}
                         </button>
-                    ))}
-                </div>
-
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6">
-                    {isLoading ? (
-                        <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div></div>
-                    ) : error ? (
-                        <div className="text-center text-red-500 p-8">{error}</div>
-                    ) : !entityData ? (
-                        <div className="text-center text-futarchyGray11 p-8">No data found</div>
-                    ) : (
-                        <>
-                            {activeTab === TAB.OVERVIEW && <OverviewTab entity={entityData} canEdit={canEdit} mode={mode} onRefresh={refresh} />}
-                            {activeTab === TAB.CONTENT && <ContentTab entity={entityData} canEdit={canEdit} mode={mode} chainId={parsedMetadata.chain || 100} onRefresh={refresh} />}
-                            {activeTab === TAB.SETTINGS && <SettingsTab entity={entityData} isOwner={isOwner} mode={mode} onRefresh={refresh} />}
-                        </>
-                    )}
-                </div>
+                    );
+                })}
             </div>
-        </div>
+
+            {/* Body */}
+            {isLoading ? (
+                <div className="flex justify-center p-8"><div className="h-8 w-8 animate-spin rounded-full border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading"></div></div>
+            ) : error ? (
+                <div role="alert" className="p-8 text-center text-seer-negative">{error}</div>
+            ) : !entityData ? (
+                <div className="p-8 text-center text-seer-muted">No data found</div>
+            ) : (
+                <>
+                    {activeTab === TAB.OVERVIEW && <OverviewTab entity={entityData} canEdit={canEdit} mode={mode} onRefresh={refresh} />}
+                    {activeTab === TAB.CONTENT && <ContentTab entity={entityData} canEdit={canEdit} mode={mode} chainId={parsedMetadata.chain || 100} onRefresh={refresh} />}
+                    {activeTab === TAB.SETTINGS && <SettingsTab entity={entityData} isOwner={isOwner} mode={mode} onRefresh={refresh} />}
+                </>
+            )}
+        </Dialog>
     );
 }
 
@@ -170,22 +187,22 @@ export default function OrganizationManagerModal({
 function OverviewTab({ entity, canEdit, mode, onRefresh }) {
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <InfoCard label="Name" value={entity.name} />
                 <InfoCard label="Type" value={mode === MODE.AGGREGATOR ? 'Aggregator' : 'Organization'} />
                 <InfoCard label="Owner" value={entity.owner} mono />
                 <InfoCard label="Editor" value={entity.editor || 'None'} mono />
             </div>
 
-            <div className="p-4 bg-futarchyGray2 dark:bg-futarchyGray11/20 rounded-xl">
-                <h3 className="text-sm font-semibold mb-2 dark:text-white">Metadata</h3>
-                <pre className="text-xs font-mono overflow-auto max-h-40 bg-white dark:bg-futarchyDarkGray3 p-3 rounded-lg border border-futarchyGray6 dark:border-futarchyGray11">
+            <div>
+                <h3 className="mb-2 text-sm font-semibold text-seer-text">Metadata</h3>
+                <pre className="max-h-40 overflow-auto rounded-surface border border-seer-border bg-seer-surface-raised p-3 font-mono text-xs text-seer-text">
                     {entity.metadata}
                 </pre>
             </div>
 
             <div className="flex justify-end">
-                <div className="text-xs text-futarchyGray11">
+                <div className="break-all text-xs text-seer-muted">
                     ID: {entity.id}
                 </div>
             </div>
@@ -195,9 +212,9 @@ function OverviewTab({ entity, canEdit, mode, onRefresh }) {
 
 function InfoCard({ label, value, mono }) {
     return (
-        <div className="p-3 bg-futarchyGray2 dark:bg-futarchyGray11/20 rounded-lg">
-            <div className="text-xs text-futarchyGray11 dark:text-futarchyGray6 mb-1">{label}</div>
-            <div className={`text-sm dark:text-white truncate ${mono ? 'font-mono' : 'font-medium'}`} title={value}>
+        <div className="min-w-0 rounded-surface bg-seer-surface-raised p-3">
+            <div className="mb-1 text-[13px] text-seer-muted">{label}</div>
+            <div className={`truncate text-sm text-seer-text ${mono ? 'font-mono' : 'font-semibold'}`} title={value}>
                 {value}
             </div>
         </div>
@@ -357,16 +374,17 @@ function ContentTab({ entity, canEdit, mode, chainId, onRefresh }) {
         return (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold dark:text-white">
+                    <h3 className="text-base font-semibold text-seer-text">
                         {mode === MODE.AGGREGATOR ? 'Create & Add Organization' : 'Link Proposal'}
                     </h3>
-                    <button onClick={() => setSubStep('list')} className="text-sm text-futarchyLavender hover:underline">Cancel</button>
+                    <Button variant="ghost" size="sm" onClick={() => setSubStep('list')}>Cancel</Button>
                 </div>
 
                 {mode === MODE.ORGANIZATION && (
                     <div className="space-y-2 mb-4">
-                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 text-sm rounded-lg">
-                            💡 Search for an existing Proposal Pool to create metadata and link it.
+                        <div className="flex items-start gap-2 rounded-surface bg-seer-surface-raised p-3 text-sm text-seer-text">
+                            <LightBulbIcon className="h-5 w-5 shrink-0 text-seer-warning" aria-hidden="true" />
+                            <span>Search for an existing Proposal Pool to create metadata and link it.</span>
                         </div>
                         <Input
                             label="Search Proposals"
@@ -377,16 +395,16 @@ function ContentTab({ entity, canEdit, mode, chainId, onRefresh }) {
 
                         {/* Search Results */}
                         {(isSearching || proposals.length > 0) && (
-                            <div className="border border-futarchyGray6 rounded-lg max-h-40 overflow-y-auto bg-white dark:bg-futarchyDarkGray3">
-                                {isSearching && <div className="p-2 text-xs">Searching...</div>}
+                            <div className="max-h-40 divide-y divide-seer-border overflow-y-auto rounded-surface border border-seer-border bg-seer-surface">
+                                {isSearching && <div className="p-2 text-xs text-seer-muted">Searching...</div>}
                                 {proposals.map(p => (
                                     <div
                                         key={p.id}
                                         onClick={() => selectProposal(p)}
-                                        className="p-2 hover:bg-futarchyGray2 dark:hover:bg-futarchyGray11 cursor-pointer text-sm border-b border-futarchyGray6 last:border-0"
+                                        className="cursor-pointer p-2 text-sm text-seer-text hover:bg-seer-surface-raised"
                                     >
-                                        <div className="font-medium">{p.marketName}</div>
-                                        <div className="text-xs text-futarchyGray11 font-mono">{p.id}</div>
+                                        <div className="font-semibold">{p.marketName}</div>
+                                        <div className="break-all font-mono text-xs text-seer-muted">{p.id}</div>
                                     </div>
                                 ))}
                             </div>
@@ -402,7 +420,7 @@ function ContentTab({ entity, canEdit, mode, chainId, onRefresh }) {
                 )}
 
                 {mode === MODE.ORGANIZATION && (
-                    <div className="space-y-3 pt-2 border-t border-futarchyGray6">
+                    <div className="space-y-3 border-t border-seer-border pt-3">
                         <Input label="Proposal Address (0x...)" value={targetAddress} onChange={setTargetAddress} placeholder="0x123..." mono />
                         <Input label="Market Question" value={propQuestion} onChange={setPropQuestion} placeholder="Will GNO reach..." />
                         <Input label="Event Name" value={propEvent} onChange={setPropEvent} placeholder="GNO Price" />
@@ -414,13 +432,16 @@ function ContentTab({ entity, canEdit, mode, chainId, onRefresh }) {
                     <Input label="Metadata JSON" value={metadataJSON} onChange={setMetadataJSON} isTextArea mono />
                 </div>
 
-                <button
+                <Button
+                    block
+                    size="lg"
                     onClick={handleCreateAndAdd}
                     disabled={isTxPending || (mode === MODE.ORGANIZATION && !targetAddress)}
-                    className="w-full py-3 bg-futarchyLavender text-white rounded-xl font-bold hover:brightness-110 disabled:opacity-50 mt-4"
+                    busy={isTxPending}
+                    className="mt-4"
                 >
                     {isTxPending ? 'Confirming...' : (mode === MODE.AGGREGATOR ? 'Create & Add (1-Tx)' : 'Link Proposal (1-Tx)')}
-                </button>
+                </Button>
             </div>
         );
     }
@@ -431,69 +452,72 @@ function ContentTab({ entity, canEdit, mode, chainId, onRefresh }) {
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold dark:text-white">
+                <h3 className="text-base font-semibold tabular-nums text-seer-text">
                     {items?.length || 0} {mode === MODE.AGGREGATOR ? 'Organizations' : 'Proposals'}
                 </h3>
                 {canEdit && (
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => setSubStep('create')}
-                            className="px-3 py-1.5 bg-futarchyLavender text-white text-sm font-medium rounded-lg hover:brightness-110"
-                        >
-                            + {mode === MODE.AGGREGATOR ? 'Create New' : 'Add Proposal'}
-                        </button>
+                        <Button size="sm" onClick={() => setSubStep('create')}>
+                            <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                            {mode === MODE.AGGREGATOR ? 'Create New' : 'Add Proposal'}
+                        </Button>
                     </div>
                 )}
             </div>
 
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {items?.length === 0 && <div className="text-center text-futarchyGray11 py-8">No content found</div>}
+            <div className="max-h-[400px] divide-y divide-seer-border overflow-y-auto rounded-surface border border-seer-border">
+                {items?.length === 0 && <div className="py-8 text-center text-seer-muted">No content found</div>}
                 {items?.map(item => (
-                    <div key={item.id} className="p-3 border border-futarchyGray6 dark:border-futarchyGray11 rounded-xl flex justify-between items-center bg-white dark:bg-futarchyDarkGray3">
-                        <div>
-                            <div className="font-medium dark:text-white">
+                    <div key={item.id} className="flex items-center justify-between gap-3 p-3">
+                        <div className="min-w-0">
+                            <div className="font-semibold text-seer-text">
                                 {/* Organizations have 'name', proposals usually don't in this basic query but let's see */}
                                 {item.name || item.title || item.id}
                             </div>
-                            <div className="text-xs text-futarchyGray11 font-mono">
+                            <div className="break-all font-mono text-xs text-seer-muted">
                                 {mode === MODE.ORGANIZATION ? (
                                     <a
                                         href={`/market?proposalId=${item.id}&useContractSource=subgraph-100`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="hover:text-futarchyLavender hover:underline cursor-pointer flex items-center gap-1"
+                                        className="flex cursor-pointer items-center gap-1 text-seer-accent-text hover:underline"
                                     >
-                                        {item.id} ↗
+                                        <span className="min-w-0 break-all">{item.id}</span>
+                                        <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
                                     </a>
                                 ) : (
                                     item.id
                                 )}
                             </div>
                             {item.metadataContract && (
-                                <div className="text-[10px] text-futarchyGray11/60 font-mono mt-0.5 flex items-center gap-1">
-                                    <span className="uppercase tracking-wider">Metadata:</span>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1 break-all font-mono text-[11px] text-seer-muted">
+                                    <span className="font-sans">Metadata:</span>
                                     {item.metadataContract}
                                 </div>
                             )}
                         </div>
                         {canEdit && (
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon
                                 onClick={() => handleRemove(item)}
                                 disabled={isTxPending || removingId === item.id}
-                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                className="shrink-0 !text-seer-negative"
                                 title="Remove"
+                                aria-label="Remove"
                             >
                                 {removingId === item.id ? (
-                                    <span className="animate-spin block">⏳</span>
+                                    <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
                                 ) : (
-                                    '🗑️'
+                                    <TrashIcon className="h-4 w-4" aria-hidden="true" />
                                 )}
-                            </button>
+                            </Button>
                         )}
                     </div>
                 ))}
-                {items?.length > 0 && <div className="text-xs text-center text-futarchyGray11 pt-2">Showing {items.length} items</div>}
             </div>
+            {items?.length > 0 && <div className="pt-2 text-center text-xs text-seer-muted">Showing {items.length} items</div>}
         </div>
     );
 }
@@ -534,24 +558,25 @@ function SettingsTab({ entity, isOwner, mode, onRefresh }) {
         });
     };
 
-    if (!isOwner) return <div className="p-8 text-center text-futarchyGray11">Settings are only available to the Owner.</div>;
+    if (!isOwner) return <div className="p-8 text-center text-seer-muted">Settings are only available to the Owner.</div>;
 
     return (
         <div className="space-y-8 animate-in fade-in">
             {/* Editor Management */}
             <section className="space-y-3">
-                <h3 className="font-semibold dark:text-white border-b border-futarchyGray6 pb-2">Manage Editor</h3>
-                <p className="text-sm text-futarchyGray11">Editors can add/remove content but cannot change ownership.</p>
+                <h3 className="border-b border-seer-border pb-2 text-base font-semibold text-seer-text">Manage Editor</h3>
+                <p className="text-sm text-seer-muted">Editors can add/remove content but cannot change ownership.</p>
                 <div className="flex gap-2">
                     <Input value={editorAddr} onChange={setEditorAddr} placeholder="0x..." mono />
-                    <button
+                    <Button
                         onClick={handleSetEditor}
                         disabled={!editorAddr || isPending}
-                        className="px-4 bg-futarchyGray12 dark:bg-white text-white dark:text-black font-medium rounded-lg disabled:opacity-50"
+                        className="self-center"
                     >
                         Set
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        variant="outline"
                         onClick={() => {
                             writeContract({
                                 address: entity.id,
@@ -562,26 +587,27 @@ function SettingsTab({ entity, isOwner, mode, onRefresh }) {
                             })
                         }}
                         disabled={isPending}
-                        className="px-4 bg-red-100 text-red-600 font-medium rounded-lg hover:bg-red-200"
+                        className="self-center !text-seer-negative"
                     >
                         Revoke
-                    </button>
+                    </Button>
                 </div>
             </section>
 
             {/* Ownership Transfer */}
             <section className="space-y-3">
-                <h3 className="font-semibold text-red-600 border-b border-red-200 pb-2">Transfer Ownership</h3>
-                <p className="text-sm text-futarchyGray11">Permanently transfer full control of this entity.</p>
+                <h3 className="border-b border-seer-negative/30 pb-2 text-base font-semibold text-seer-negative">Transfer Ownership</h3>
+                <p className="text-sm text-seer-muted">Permanently transfer full control of this entity.</p>
                 <div className="flex gap-2">
                     <Input value={ownerAddr} onChange={setOwnerAddr} placeholder="New Owner Address (0x...)" mono />
-                    <button
+                    <Button
+                        variant="outline"
                         onClick={handleTransferOwnership}
                         disabled={!ownerAddr || isPending}
-                        className="px-4 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:opacity-50"
+                        className="self-center !text-seer-negative"
                     >
                         Transfer
-                    </button>
+                    </Button>
                 </div>
             </section>
         </div>
@@ -590,21 +616,24 @@ function SettingsTab({ entity, isOwner, mode, onRefresh }) {
 
 // Helper Input
 function Input({ label, value, onChange, placeholder, mono, isTextArea }) {
+    const control = isTextArea ? (
+        <textarea
+            value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+            className={`seer-input text-sm ${mono ? 'font-mono' : ''}`}
+            rows={4}
+        />
+    ) : (
+        <input
+            type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+            className={`seer-input text-sm ${mono ? 'font-mono' : ''}`}
+        />
+    );
+
+    if (!label) return <div className="w-full min-w-0">{control}</div>;
+
     return (
-        <div className="w-full">
-            {label && <label className="block text-xs font-semibold text-futarchyGray11 dark:text-futarchyGray6 mb-1 uppercase">{label}</label>}
-            {isTextArea ? (
-                <textarea
-                    value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-                    className={`w-full p-2.5 rounded-lg border border-futarchyGray6 dark:border-futarchyGray11 bg-white dark:bg-futarchyDarkGray3 dark:text-white text-sm focus:outline-none focus:border-futarchyLavender ${mono ? 'font-mono' : ''}`}
-                    rows={4}
-                />
-            ) : (
-                <input
-                    type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-                    className={`w-full p-2.5 rounded-lg border border-futarchyGray6 dark:border-futarchyGray11 bg-white dark:bg-futarchyDarkGray3 dark:text-white text-sm focus:outline-none focus:border-futarchyLavender ${mono ? 'font-mono' : ''}`}
-                />
-            )}
-        </div>
+        <Field label={label} className="w-full min-w-0">
+            {control}
+        </Field>
     );
 }

@@ -10,6 +10,7 @@ import { fetchEventHighlightData } from "./EventsHighlightDataTransformer";
 import { fetchResolvedEventHighlightData } from "./ResolvedEventsDataTransformer";
 import ForkTile, { ForkTileSkeleton } from "../forkWall/ForkTile";
 import Button from "../../../ui/Button";
+import { BuildingLibraryIcon, ShareIcon } from "@heroicons/react/24/outline";
 import DynamicShareCard from "../../../dynamicImageFolder/DynamicShareCard";
 import CreateProposalModal from "../../../debug/CreateProposalModal";
 import OrganizationManagerModal from "../../../debug/OrganizationManagerModal";
@@ -190,21 +191,26 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
       {debugMode && (
         <>
           {/* Debug Mode: Share Button */}
-          <button
+          <Button
+            icon
+            size="lg"
+            variant="secondary"
             onClick={() => setIsShareModalOpen(true)}
-            className="fixed left-4 bottom-4 z-50 bg-futarchyBlue9 hover:bg-futarchyBlue10 text-white font-bold py-3 px-4 rounded-full shadow-lg transition-colors duration-200"
+            className="fixed left-4 bottom-4 z-50 shadow-lg"
+            aria-label="Share"
           >
-            <span className="text-xl">📤</span>
-          </button>
+            <ShareIcon className="h-5 w-5" aria-hidden="true" />
+          </Button>
 
           {/* Debug Mode: Create Proposal Button */}
-          <button
+          <Button
+            size="lg"
             onClick={() => setIsCreateProposalOpen(true)}
-            className="fixed right-4 bottom-4 z-50 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-3 px-5 rounded-full shadow-lg transition-all duration-200 flex items-center gap-2"
+            className="fixed right-4 bottom-4 z-50 shadow-lg"
           >
-            <span className="text-xl">🏛️</span>
+            <BuildingLibraryIcon className="h-5 w-5" aria-hidden="true" />
             <span>Create Proposal</span>
-          </button>
+          </Button>
 
           <DynamicShareCard
             isOpen={isShareModalOpen}
@@ -217,12 +223,14 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
           />
 
           {/* Debug Mode: Create Organization Button */}
-          <button
+          <Button
+            size="lg"
+            variant="secondary"
             onClick={() => setIsOrgModalOpen(true)}
-            className="fixed right-4 bottom-20 z-50 bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 text-white font-bold py-3 px-5 rounded-full shadow-lg transition-all duration-200 flex items-center gap-2"
+            className="fixed right-4 bottom-20 z-50 shadow-lg"
           >
             <span>Manage Aggregator</span>
-          </button>
+          </Button>
 
           <OrganizationManagerModal
             isOpen={isOrgModalOpen}

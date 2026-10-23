@@ -13,6 +13,10 @@ import {
 
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import { Field, Input } from '../../components/ui/Field';
+import { Surface, SurfaceHeader } from '../../components/ui/Surface';
 import {
   ERC20_ABI,
   FLM_MANAGER_ABI,
@@ -73,39 +77,32 @@ function FormInput({
   inputMode = 'decimal',
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-futarchyGray11">
-        {label}
-      </span>
-      <input
+    <Field label={label} className="min-w-0">
+      <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         inputMode={inputMode}
-        className="h-11 w-full rounded-lg border border-futarchyGray5 bg-white px-3 text-sm text-futarchyGray12 outline-none transition-colors placeholder:text-futarchyGray10 focus:border-futarchyViolet7"
       />
-    </label>
+    </Field>
   );
 }
 
 function Section({ title, action, children }) {
   return (
-    <section className="rounded-lg border border-futarchyGray5 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-futarchyGray12">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
+    <Surface className="min-w-0">
+      <SurfaceHeader title={title} action={action} />
+      <div className="p-4">{children}</div>
+    </Surface>
   );
 }
 
 function Metric({ label, value, tone = 'default' }) {
-  const toneClass = tone === 'accent' ? 'text-futarchyTeal9' : 'text-futarchyGray12';
+  const toneClass = tone === 'accent' ? 'text-seer-accent-text' : 'text-seer-text';
   return (
-    <div className="border-b border-futarchyGray4 pb-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-futarchyGray11">{label}</div>
-      <div className={`mt-1 break-words text-base font-semibold ${toneClass}`}>{value}</div>
+    <div className="min-w-0 border-b border-seer-border pb-3">
+      <div className="text-[13px] text-seer-muted">{label}</div>
+      <div className={`mt-1 break-words text-base font-semibold tabular-nums ${toneClass}`}>{value}</div>
     </div>
   );
 }
@@ -113,7 +110,7 @@ function Metric({ label, value, tone = 'default' }) {
 function AddressLink({ address }) {
   const href = getGnosisExplorerAddressUrl(address);
   if (!href) {
-    return <span className="text-futarchyGray11">Pending</span>;
+    return <span className="text-seer-warning">Pending</span>;
   }
 
   return (
@@ -121,10 +118,10 @@ function AddressLink({ address }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 text-futarchyBlue11 hover:text-futarchyBlue9"
+      className="inline-flex items-center gap-1 text-seer-accent-text hover:underline"
     >
       <span>{shortAddress(address)}</span>
-      <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+      <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
     </a>
   );
 }
@@ -134,28 +131,38 @@ function TxStatus({ status }) {
 
   const href = getGnosisExplorerTxUrl(status.hash);
   const tone = status.type === 'error'
-    ? 'border-futarchyCrimson5 bg-futarchyCrimson3 text-futarchyCrimson11'
-    : 'border-futarchyTeal4 bg-futarchyTeal3 text-futarchyTeal11';
+    ? 'border-seer-negative/40 bg-seer-negative/10 text-seer-negative'
+    : status.type === 'success'
+      ? 'border-seer-positive/40 bg-seer-positive/10 text-seer-positive'
+      : 'border-seer-border bg-seer-surface text-seer-text';
 
   return (
-    <div className={`rounded-lg border px-3 py-2 text-sm ${tone}`}>
+    <div role="status" className={`rounded-surface border px-3 py-2 text-sm ${tone}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span>{status.message}</span>
+        <span className="break-words">{status.message}</span>
         {href && (
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 font-semibold"
+            className="inline-flex items-center gap-1 font-semibold text-seer-accent-text hover:underline"
           >
             Transaction
-            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+            <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
           </a>
         )}
       </div>
     </div>
   );
 }
+
+// The page's three intents onto the kit's buttons: the one main action of a region (primary and
+// accent) is the kit primary, everything beside it is outline.
+const ACTION_VARIANTS = {
+  primary: 'primary',
+  secondary: 'outline',
+  accent: 'primary',
+};
 
 function ActionButton({
   children,
@@ -164,23 +171,15 @@ function ActionButton({
   onClick,
   variant = 'primary',
 }) {
-  const base = 'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50';
-  const variants = {
-    primary: 'bg-futarchyGray12 text-white hover:bg-futarchyGray11',
-    secondary: 'border border-futarchyGray5 bg-white text-futarchyGray12 hover:bg-futarchyGray3',
-    accent: 'bg-futarchyTeal9 text-white hover:bg-futarchyTeal10',
-  };
-
   return (
-    <button
-      type="button"
+    <Button
+      variant={ACTION_VARIANTS[variant]}
       disabled={disabled}
       onClick={onClick}
-      className={`${base} ${variants[variant]}`}
     >
-      {Icon && <Icon className="h-4 w-4" />}
+      {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
       <span>{children}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -517,37 +516,29 @@ export default function FlmPage({ config }) {
 
       <Header />
 
-      <main className="min-h-screen bg-futarchyGray2 px-4 pb-16 pt-28 text-futarchyGray12">
+      <main className="min-h-screen bg-seer-page px-4 pb-16 pt-28 text-seer-text">
         <div className="mx-auto max-w-6xl space-y-6">
           <section className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-futarchyGray11">
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-seer-muted">
                 {config.organizationName} Liquidity Manager
               </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-normal text-futarchyGray12 md:text-4xl">
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-seer-text md:text-[28px]">
                 {config.pair} Liquidity
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-futarchyGray11">
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-seer-muted">
                 FLM means Futarchy Liquidity Manager. It is the LP tool for this pair:
                 deposit liquidity, receive LP shares, and let the manager keep liquidity
                 available for the spot market or the YES/NO markets when an official
                 proposal is active.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                <span className="rounded-lg border border-futarchyGray5 bg-white px-3 py-1 font-medium text-futarchyGray11">
-                  Gnosis Chain
-                </span>
-                <span className="rounded-lg border border-futarchyGray5 bg-white px-3 py-1 font-medium text-futarchyGray11">
-                  {config.status}
-                </span>
-                {disabledReason && (
-                  <span className="rounded-lg border border-futarchyGold5 bg-futarchyGold3 px-3 py-1 font-medium text-futarchyGold11">
-                    {disabledReason}
-                  </span>
-                )}
+                <Badge>Gnosis Chain</Badge>
+                <Badge tone="accent">{config.status}</Badge>
+                {disabledReason && <Badge tone="warning">{disabledReason}</Badge>}
               </div>
             </div>
-            <div className="rounded-lg border border-futarchyGray5 bg-white p-3 shadow-sm">
+            <div className="shrink-0">
               <ConnectButton />
             </div>
           </section>
@@ -578,7 +569,7 @@ export default function FlmPage({ config }) {
               />
             </div>
             {readState.error && (
-              <div className="mt-3 rounded-lg border border-futarchyCrimson5 bg-futarchyCrimson3 px-3 py-2 text-sm text-futarchyCrimson11">
+              <div role="alert" className="mt-3 break-words rounded-surface border border-seer-negative/40 bg-seer-negative/10 px-3 py-2 text-sm text-seer-negative">
                 {readState.error}
               </div>
             )}
@@ -586,32 +577,30 @@ export default function FlmPage({ config }) {
 
           <Section title="Official Proposal">
             <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-futarchyGray11">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-seer-muted">
                   {proposal.label}
                 </div>
-                <div className="mt-1 text-lg font-semibold text-futarchyGray12">{proposal.title}</div>
-                <div className="mt-2 text-sm text-futarchyGray11">
+                <div className="mt-1 text-base font-semibold text-seer-text">{proposal.title}</div>
+                <div className="mt-2 text-sm tabular-nums text-seer-muted">
                   Closes {formatUtcTime(proposal.closeTimestamp)}
                 </div>
               </div>
               <div className="flex flex-wrap items-start gap-2 md:justify-end">
-                <Link
-                  href={proposal.marketUrl}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-futarchyGray5 bg-white px-4 text-sm font-semibold text-futarchyGray12 hover:bg-futarchyGray3"
-                >
-                  <BanknotesIcon className="h-4 w-4" />
+                <Button as={Link} href={proposal.marketUrl} variant="outline">
+                  <BanknotesIcon className="h-4 w-4" aria-hidden="true" />
                   <span>Market</span>
-                </Link>
-                <a
+                </Button>
+                <Button
+                  as="a"
                   href={proposal.snapshotUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-futarchyGray12 px-4 text-sm font-semibold text-white hover:bg-futarchyGray11"
+                  variant="primary"
                 >
-                  <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
                   <span>Snapshot</span>
-                </a>
+                </Button>
               </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -656,7 +645,7 @@ export default function FlmPage({ config }) {
           <div className="grid gap-6 lg:grid-cols-2">
             <Section title="Add Liquidity">
               {depositsDisabledInConditionalMode && (
-                <div className="mb-4 rounded-lg border border-futarchyGold5 bg-futarchyGold3 px-3 py-2 text-sm font-medium text-futarchyGold11">
+                <div role="status" className="mb-4 rounded-surface border border-seer-warning/40 bg-seer-warning/10 px-3 py-2 text-sm font-semibold text-seer-warning">
                   Deposits are paused while this manager is in conditional mode.
                 </div>
               )}
@@ -734,7 +723,7 @@ export default function FlmPage({ config }) {
                 </ActionButton>
               </div>
 
-              <div className="mt-3 text-sm text-futarchyGray11">
+              <div className="mt-3 text-sm tabular-nums text-seer-muted">
                 Allowance: {formatTokenAmount(readState.token.allowance, readState.token.decimals)} {config.token.symbol}
                 {' / '}
                 {formatTokenAmount(readState.collateral.allowance, readState.collateral.decimals)} {config.collateral.symbol}

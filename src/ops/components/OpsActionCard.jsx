@@ -8,32 +8,35 @@ import {
   useWriteContract,
 } from 'wagmi';
 import { addressesEqual, formatValue, getErrorMessage, shortAddress } from '../utils';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import { Surface } from '../../components/ui/Surface';
 
-function StatusPill({ tone = 'neutral', children }) {
-  const classes = {
-    neutral: 'border-futarchyGray5 bg-white text-futarchyGray11',
-    success: 'border-futarchyGreen6 bg-futarchyGreen3 text-futarchyGreen11',
-    warning: 'border-warning/50 bg-warning/10 text-darkWarning',
-    error: 'border-danger/40 bg-danger/10 text-danger',
-  };
+const PILL_TONES = {
+  neutral: 'neutral',
+  success: 'positive',
+  warning: 'warning',
+  error: 'negative',
+};
 
-  return (
-    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-semibold ${classes[tone]}`}>
-      {children}
-    </span>
-  );
+function StatusPill({ tone = 'neutral', className = '', children }) {
+  return <Badge tone={PILL_TONES[tone]} className={className}>{children}</Badge>;
 }
 
 function DetailRow({ label, value, href }) {
   const content = (
-    <code className="block max-w-full break-all rounded bg-futarchyGray2 px-2 py-1 font-mono text-xs text-futarchyGray12">
+    <code
+      className={`block max-w-full break-all rounded-control bg-seer-surface-raised px-2 py-1 font-mono text-xs ${
+        href ? 'text-seer-accent-text' : 'text-seer-text'
+      }`}
+    >
       {value}
     </code>
   );
 
   return (
-    <div className="grid min-w-0 gap-2 border-b border-futarchyGray4 py-3 last:border-b-0 md:grid-cols-[160px_minmax(0,1fr)]">
-      <div className="text-xs font-semibold uppercase tracking-wide text-futarchyGray11">{label}</div>
+    <div className="grid min-w-0 gap-2 border-b border-seer-border py-3 last:border-b-0 md:grid-cols-[160px_minmax(0,1fr)]">
+      <div className="text-[13px] font-semibold text-seer-muted">{label}</div>
       <div className="min-w-0">
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="block min-w-0 hover:underline">
@@ -52,15 +55,18 @@ function CheckRow({ label, state, detail }) {
   const text = state === 'pass' ? 'Pass' : state === 'fail' ? 'Fail' : 'Pending';
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-futarchyGray4 bg-white p-3 md:flex-row md:items-start md:justify-between">
+    <div className="flex min-w-0 flex-col gap-2 py-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-futarchyGray12">{label}</div>
-        {detail && <div className="mt-1 break-words text-xs text-futarchyGray11">{detail}</div>}
+        <div className="text-sm font-semibold text-seer-text">{label}</div>
+        {detail && <div className="mt-1 break-words text-xs text-seer-muted">{detail}</div>}
       </div>
-      <StatusPill tone={tone}>{text}</StatusPill>
+      <StatusPill tone={tone} className="self-start">{text}</StatusPill>
     </div>
   );
 }
+
+const noticeClass = 'mt-3 rounded-surface border p-3 text-sm';
+const errorNoticeClass = `${noticeClass} border-seer-negative/40 bg-seer-negative/10 text-seer-negative`;
 
 export default function OpsActionCard({ action }) {
   const { address, isConnected } = useAccount();
@@ -234,10 +240,10 @@ export default function OpsActionCard({ action }) {
   };
 
   return (
-    <section data-ops-action-card className="min-w-0 rounded-lg border border-futarchyGray5 bg-futarchyGray1 shadow-sm">
-      <div className="border-b border-futarchyGray4 p-5">
+    <Surface data-ops-action-card className="min-w-0">
+      <div className="border-b border-seer-border p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex flex-wrap gap-2">
               <StatusPill tone={actionComplete ? 'success' : 'warning'}>
                 {actionComplete ? 'Complete' : 'Pending'}
@@ -247,24 +253,20 @@ export default function OpsActionCard({ action }) {
                 {isConnected ? shortAddress(address) : 'No wallet'}
               </StatusPill>
             </div>
-            <h2 className="text-xl font-semibold text-futarchyGray12">{action.title}</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-futarchyGray11">{action.description}</p>
+            <h2 className="text-lg font-semibold text-seer-text">{action.title}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-seer-muted">{action.description}</p>
           </div>
-          <button
-            type="button"
-            onClick={loadChecks}
-            className="h-10 rounded-md border border-futarchyGray5 px-4 text-sm font-semibold text-futarchyGray12 transition hover:bg-white"
-          >
+          <Button variant="outline" onClick={loadChecks} className="self-start">
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-5 p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="min-w-0 space-y-5">
-          <div className="min-w-0 rounded-lg border border-futarchyGray4 bg-white p-4">
-            <h3 className="text-sm font-semibold text-futarchyGray12">Transaction</h3>
-            <div className="mt-3">
+      <div className="grid min-w-0 divide-y divide-seer-border lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:divide-x lg:divide-y-0">
+        <div className="min-w-0 divide-y divide-seer-border">
+          <div className="min-w-0 p-5">
+            <h3 className="text-base font-semibold text-seer-text">Transaction</h3>
+            <div className="mt-2">
               <DetailRow label="Contract" value={`${action.targetLabel} ${action.target}`} href={action.explorerLinks.target} />
               <DetailRow label="Function" value={action.functionName} />
               {action.displayArgs.map((arg) => (
@@ -274,9 +276,9 @@ export default function OpsActionCard({ action }) {
             </div>
           </div>
 
-          <div className="min-w-0 rounded-lg border border-futarchyGray4 bg-white p-4">
-            <h3 className="text-sm font-semibold text-futarchyGray12">Checks</h3>
-            <div className="mt-3 space-y-3">
+          <div className="min-w-0 p-5">
+            <h3 className="text-base font-semibold text-seer-text">Checks</h3>
+            <div className="mt-2 divide-y divide-seer-border">
               <CheckRow
                 label="Registry owner"
                 state={checks.registryOwner?.pass ? 'pass' : checks.registryOwner ? 'fail' : 'pending'}
@@ -323,74 +325,76 @@ export default function OpsActionCard({ action }) {
               />
             </div>
             {checks.error && (
-              <div className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+              <div className={errorNoticeClass}>
                 {checks.error}
               </div>
             )}
           </div>
         </div>
 
-        <div className="min-w-0 space-y-5">
-          <div className="min-w-0 rounded-lg border border-futarchyGray4 bg-white p-4">
-            <h3 className="text-sm font-semibold text-futarchyGray12">Signer</h3>
-            <div className="mt-3 space-y-3 text-sm text-futarchyGray11">
+        <div className="min-w-0 divide-y divide-seer-border">
+          <div className="min-w-0 p-5">
+            <h3 className="text-base font-semibold text-seer-text">Signer</h3>
+            <div className="mt-3 space-y-3 text-sm text-seer-muted">
               <div>
-                <div className="font-semibold text-futarchyGray12">Connected wallet</div>
-                <code className="mt-1 block break-all rounded bg-futarchyGray2 px-2 py-1 font-mono text-xs">
+                <div className="text-[13px] font-semibold text-seer-muted">Connected wallet</div>
+                <code className="mt-1 block break-all rounded-control bg-seer-surface-raised px-2 py-1 font-mono text-xs text-seer-text">
                   {address || 'Not connected'}
                 </code>
               </div>
               <div>
-                <div className="font-semibold text-futarchyGray12">Required wallet</div>
-                <code className="mt-1 block break-all rounded bg-futarchyGray2 px-2 py-1 font-mono text-xs">
+                <div className="text-[13px] font-semibold text-seer-muted">Required wallet</div>
+                <code className="mt-1 block break-all rounded-control bg-seer-surface-raised px-2 py-1 font-mono text-xs text-seer-text">
                   {action.requiredSigner}
                 </code>
               </div>
             </div>
           </div>
 
-          <div className="min-w-0 rounded-lg border border-futarchyGray4 bg-white p-4">
-            <h3 className="text-sm font-semibold text-futarchyGray12">Sign</h3>
-            <p className="mt-2 text-sm leading-6 text-futarchyGray11">
+          <div className="min-w-0 p-5">
+            <h3 className="text-base font-semibold text-seer-text">Sign</h3>
+            <p className="mt-2 text-sm leading-6 text-seer-muted">
               This button sends only the decoded transaction shown on this card. It does not build calldata from user input.
             </p>
             {!chainOk && isConnected ? (
-              <button
-                type="button"
+              <Button
+                block
                 onClick={handleSwitchChain}
                 disabled={isSwitching}
-                className="mt-4 h-11 w-full rounded-md bg-futarchyGray12 px-4 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                busy={isSwitching}
+                className="mt-4"
               >
                 {isSwitching ? 'Switching...' : 'Switch to Gnosis Chain'}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                block
                 onClick={handleSign}
                 disabled={Boolean(disabledReason) || isWritePending || isReceiptLoading}
-                className="mt-4 h-11 w-full rounded-md bg-futarchyGray12 px-4 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                busy={isWritePending || isReceiptLoading}
+                className="mt-4"
               >
                 {isWritePending || isReceiptLoading ? 'Waiting for wallet...' : 'Sign transaction'}
-              </button>
+              </Button>
             )}
             {disabledReason && (
-              <div className="mt-3 rounded-md border border-futarchyGray4 bg-futarchyGray2 p-3 text-sm text-futarchyGray11">
+              <div className={`${noticeClass} border-seer-border bg-seer-surface-raised text-seer-muted`}>
                 {disabledReason}
               </div>
             )}
             {writeError && (
-              <div className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+              <div className={errorNoticeClass}>
                 {getErrorMessage(writeError)}
               </div>
             )}
             {hash && (
-              <div className="mt-3 rounded-md border border-futarchyGreen6 bg-futarchyGreen3 p-3 text-sm text-futarchyGreen11">
+              <div className={`${noticeClass} border-seer-positive/40 bg-seer-positive/10 text-seer-positive`}>
                 <div className="font-semibold">Transaction submitted</div>
                 <a
                   href={`https://gnosisscan.io/tx/${hash}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 block break-all font-mono text-xs underline"
+                  className="mt-1 block break-all font-mono text-xs text-seer-accent-text underline"
                 >
                   {hash}
                 </a>
@@ -402,6 +406,6 @@ export default function OpsActionCard({ action }) {
           </div>
         </div>
       </div>
-    </section>
+    </Surface>
   );
 }
