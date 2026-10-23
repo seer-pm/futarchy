@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 
 import ChainBadge from '../components/ChainBadge';
+import Badge from '../../../ui/Badge';
 
 /**
  * Single row in the Organizations table
@@ -24,11 +25,11 @@ const OrgRow = ({
     return (
         <tr
             onClick={onClick}
-            className="border-b border-futarchyGray4 dark:border-futarchyGray112/20 hover:bg-futarchyGray3 dark:hover:bg-futarchyGray112/10 cursor-pointer transition-colors group"
+            className="hover:bg-seer-surface-raised cursor-pointer transition-colors group"
         >
             {/* Logo */}
-            <td className="py-4 px-4">
-                <div className="w-10 h-10 relative rounded-full overflow-hidden bg-futarchyGray3 flex-shrink-0">
+            <td className="py-3 pl-4 pr-0 w-14">
+                <div className="w-9 h-9 relative rounded-full overflow-hidden bg-seer-surface-raised flex-shrink-0">
                     <Image
                         src={image || '/assets/fallback-company.png'}
                         alt={title}
@@ -39,56 +40,52 @@ const OrgRow = ({
             </td>
 
             {/* Name + Badges */}
-            <td className="py-4 px-2">
+            <td className="py-3 px-3">
                 <div className="flex items-center gap-2">
-                    <span className="font-semibold text-futarchyGray12 dark:text-white group-hover:text-futarchyViolet7 transition-colors">
+                    <span className="font-semibold text-seer-text group-hover:text-seer-accent-text transition-colors">
                         {title}
                     </span>
                     {hasActiveMarket && (
-                        <span className="px-2 py-0.5 text-xs font-medium uppercase bg-futarchyTeal9/20 text-futarchyTeal9 rounded-full">
-                            Active Market
-                        </span>
+                        <Badge tone="accent">Open market</Badge>
                     )}
                     {isOwner && (
-                        <span className="px-2 py-0.5 text-xs font-medium uppercase bg-purple-500/20 text-purple-400 rounded-full">
-                            Owner
-                        </span>
+                        <Badge>Owner</Badge>
                     )}
                 </div>
             </td>
 
             {/* Active Proposals Count */}
-            <td className="py-4 px-4 text-center">
-                <span className={`font-medium ${activeProposals > 0 ? 'text-futarchyTeal9' : 'text-futarchyGray11'}`}>
+            <td className="py-3 px-4 text-center tabular-nums">
+                <span className={`font-semibold ${activeProposals > 0 ? 'text-seer-accent-text' : 'text-seer-muted'}`}>
                     {activeProposals}
                 </span>
             </td>
 
             {/* Total Proposals Count */}
-            <td className="py-4 px-4 text-center">
-                <span className="text-futarchyGray12 dark:text-white font-medium">
+            <td className="hidden sm:table-cell py-3 px-4 text-center tabular-nums">
+                <span className="text-seer-text font-semibold">
                     {proposalsCount}
                 </span>
             </td>
 
             {/* Chain */}
-            <td className="py-4 px-4">
+            <td className="hidden sm:table-cell py-3 px-4">
                 <ChainBadge chainId={chainId} size="sm" />
             </td>
 
             {/* Liquidity */}
-            <td className="py-4 px-4">
+            <td className="hidden md:table-cell py-3 px-4">
                 {flmPath ? (
                     <Link
                         href={flmPath}
                         onClick={(event) => event.stopPropagation()}
-                        className="inline-flex h-9 items-center gap-1 rounded-lg border border-futarchyGray5 bg-white px-3 text-sm font-semibold text-futarchyGray12 hover:bg-futarchyGray3"
+                        className="seer-button seer-button-outline seer-button-sm"
                     >
                         <span>Liquidity</span>
-                        <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 text-seer-muted" aria-hidden="true" />
                     </Link>
                 ) : (
-                    <span className="text-sm text-futarchyGray11">-</span>
+                    <span className="text-sm text-seer-muted">—</span>
                 )}
             </td>
         </tr>

@@ -8,7 +8,7 @@ import 'swiper/css/navigation';
 
 import { ProposalsCard } from '../cards/ProposalsCards';
 
-// Re-using NavigationButton component from EventsHighlightCarousel
+// Carousel navigation button
 const NavigationButton = ({ direction, onClick, className }) => (
   <button
     onClick={onClick}

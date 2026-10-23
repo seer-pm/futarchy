@@ -4,7 +4,7 @@ import OrgRow from './OrgRow';
 /**
  * Sortable column header
  */
-const SortableHeader = ({ label, field, currentSort, onSort, align = 'left' }) => {
+const SortableHeader = ({ label, field, currentSort, onSort, align = 'left', hideClass = '' }) => {
     const isActive = currentSort.field === field;
     const direction = isActive ? currentSort.direction : null;
 
@@ -12,12 +12,12 @@ const SortableHeader = ({ label, field, currentSort, onSort, align = 'left' }) =
 
     return (
         <th
-            className={`py-3 px-4 text-xs font-medium text-futarchyGray11 dark:text-futarchyGray112 uppercase tracking-wider cursor-pointer hover:text-futarchyViolet7 transition-colors select-none`}
+            className={`py-3 px-4 text-xs font-semibold text-seer-muted uppercase tracking-wide cursor-pointer hover:text-seer-text transition-colors select-none ${hideClass}`}
             onClick={() => onSort(field)}
         >
             <div className={`flex items-center gap-1 ${alignClass}`}>
                 {label}
-                <span className="text-futarchyGray11/50">
+                <span className="text-seer-muted/60">
                     {direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : ''}
                 </span>
             </div>
@@ -80,7 +80,7 @@ const OrganizationsTable = ({
     if (loading) {
         return (
             <div className="flex justify-center items-center h-40">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyViolet7"></div>
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading organizations"></div>
             </div>
         );
     }
@@ -89,17 +89,17 @@ const OrganizationsTable = ({
     // the user try again instead of reading "No organizations found".
     if (error) {
         return (
-            <div role="alert" className="flex flex-col items-center justify-center gap-3 h-40 rounded-xl border-2 border-futarchyGray4 dark:border-futarchyGray112/40 text-center">
-                <p className="text-sm font-semibold text-futarchyGray12 dark:text-white">
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 h-40 rounded-surface border border-seer-border bg-seer-surface text-center">
+                <p className="text-sm font-semibold text-seer-text">
                     Couldn&apos;t load organizations
                 </p>
-                <p className="text-xs text-futarchyGray11">
+                <p className="text-xs text-seer-muted">
                     The registry did not respond. Check your connection and try again.
                 </p>
                 {onRetry && (
                     <button
                         onClick={onRetry}
-                        className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-futarchyGray4 dark:border-futarchyGray112/40 text-futarchyGray12 dark:text-white hover:border-futarchyViolet7 transition-colors"
+                        className="seer-button seer-button-outline seer-button-sm"
                     >
                         Retry
                     </button>
@@ -114,14 +114,15 @@ const OrganizationsTable = ({
             <div className="mb-4 flex items-center gap-4">
                 <div className="relative flex-1 max-w-md">
                     <input
-                        type="text"
-                        placeholder="Filter by name..."
+                        type="search"
+                        aria-label="Filter organizations by name"
+                        placeholder="Filter by name"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full px-4 py-2 pl-10 rounded-xl border-2 border-futarchyGray4 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 text-futarchyGray12 dark:text-white placeholder:text-futarchyGray11 focus:border-futarchyViolet7 focus:outline-none transition-colors"
+                        className="seer-input !pl-10"
                     />
                     <svg
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-futarchyGray11"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-seer-muted" aria-hidden="true"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -132,11 +133,11 @@ const OrganizationsTable = ({
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto rounded-xl border-2 border-futarchyGray4 dark:border-futarchyGray112/40">
+            <div className="overflow-x-auto rounded-surface border border-seer-border bg-seer-surface">
                 <table className="w-full">
-                    <thead className="bg-futarchyGray3 dark:bg-futarchyDarkGray2 border-b border-futarchyGray4 dark:border-futarchyGray112/40">
+                    <thead className="border-b border-seer-border">
                         <tr>
-                            <th className="py-3 px-4 w-16"></th>
+                            <th className="py-3 pl-4 pr-0 w-14"><span className="sr-only">Logo</span></th>
                             <SortableHeader
                                 label="Name"
                                 field="title"
@@ -156,19 +157,20 @@ const OrganizationsTable = ({
                                 currentSort={sort}
                                 onSort={handleSort}
                                 align="center"
+                                hideClass="hidden sm:table-cell"
                             />
-                            <th className="py-3 px-4 text-xs font-medium text-futarchyGray11 dark:text-futarchyGray112 uppercase tracking-wider">
+                            <th className="hidden sm:table-cell py-3 px-4 text-left text-xs font-semibold text-seer-muted uppercase tracking-wide">
                                 Chain
                             </th>
-                            <th className="py-3 px-4 text-xs font-medium text-futarchyGray11 dark:text-futarchyGray112 uppercase tracking-wider">
+                            <th className="hidden md:table-cell py-3 px-4 text-left text-xs font-semibold text-seer-muted uppercase tracking-wide">
                                 Liquidity
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-transparent divide-y divide-futarchyGray4 dark:divide-futarchyGray112/10">
+                    <tbody className="divide-y divide-seer-border">
                         {filteredOrgs.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="py-8 text-center text-futarchyGray11">
+                                <td colSpan={6} className="py-8 text-center text-sm text-seer-muted">
                                     {searchQuery ? 'No organizations match your search' : 'No organizations found'}
                                 </td>
                             </tr>
@@ -194,7 +196,7 @@ const OrganizationsTable = ({
             </div>
 
             {/* Results count */}
-            <div className="mt-3 text-sm text-futarchyGray11">
+            <div className="mt-3 text-[13px] text-seer-muted">
                 {filteredOrgs.length} organization{filteredOrgs.length !== 1 ? 's' : ''}
             </div>
         </div>

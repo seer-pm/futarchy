@@ -49,26 +49,20 @@ const ChainBadge = ({ chainId, className = "", size = "sm" }) => {
   };
 
   const sizeClasses = {
-    xs: "px-1.5 py-0.5 text-[10px]",
-    sm: "px-2 py-0.5 text-xs",
-    md: "px-2.5 py-1 text-sm",
-    lg: "px-3 py-1.5 text-base",
+    xs: "h-5 px-1.5 text-[10px]",
+    sm: "h-6 px-2 text-xs",
+    md: "h-7 px-2.5 text-sm",
+    lg: "h-8 px-3 text-base",
   };
 
+  // Chains are identity, not status, so every chain gets the same neutral label.
   return (
-    <div
-      className={`
-        w-fit rounded-full border font-medium
-        ${chainConfig.color}
-        ${chainConfig.borderColor}
-        ${chainConfig.textColor}
-        ${sizeClasses[size]}
-        ${className}
-      `}
+    <span
+      className={`inline-flex items-center w-fit rounded-control font-semibold bg-seer-surface-raised text-seer-muted ${sizeClasses[size]} ${className}`}
       title={chainConfig.name}
     >
       {chainConfig.shortName}
-    </div>
+    </span>
   );
 };
 
