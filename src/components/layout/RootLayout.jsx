@@ -2,12 +2,6 @@
 import React from "react";
 import Header from "../common/Header";
 import Footer from "../common/Footer";
-import { Oxanium } from "next/font/google";
-
-const oxanium = Oxanium({
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const RootLayout = ({
   children,
@@ -21,7 +15,7 @@ const RootLayout = ({
     return (
       <>
         {/* Mobile-only Snap Scroll Layout */}
-        <div className={`${oxanium.className} lg:hidden h-screen overflow-y-scroll snap-y snap-mandatory`}>
+        <div className="lg:hidden h-screen overflow-y-scroll snap-y snap-mandatory">
           <>
             {/* Section 1: Header + Hero */}
             <section className="snap-start h-screen flex flex-col">
@@ -48,7 +42,7 @@ const RootLayout = ({
         </div>
         
         {/* Desktop Layout (Original) */}
-        <div className={`${oxanium.className} hidden lg:flex flex-col min-h-screen`}>
+        <div className="hidden lg:flex flex-col min-h-screen">
           <>
             <Header config={headerConfig} />
             {secondaryHeader}
@@ -66,7 +60,7 @@ const RootLayout = ({
   }
 
   return (
-    <div className={`${oxanium.className} flex flex-col min-h-screen`}>
+    <div className="flex flex-col min-h-screen">
       <>
         <Header config={headerConfig} />
         {secondaryHeader}

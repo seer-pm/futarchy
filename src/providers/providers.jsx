@@ -5,7 +5,7 @@ import {
   RainbowKitProvider,
   connectorsForWallets,
   darkTheme,
-  Theme,
+  lightTheme,
 } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig } from "wagmi";
@@ -22,6 +22,7 @@ import SafeAutoConnector from '../components/futarchyFi/SafeAutoConnector';
 import RecentWalletReconnector from '../components/futarchyFi/RecentWalletReconnector';
 import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
 import { SubgraphRefreshProvider } from '../contexts/SubgraphRefreshContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 const chains = [mainnet, gnosis];
 const projectId = "76fa3deb89f7aa56f09cf1ac472eccb4";
@@ -120,27 +121,42 @@ const wagmiConfig = createConfig({
   ssr: true,
 });
 
-const customTheme = {
-  blurs: {
-    modalOverlay: 'small',
-  },
-  colors: {
-    accentColor: '#1F1F1F',
-    accentColorForeground: '#FFFFFF',
-    modalBackground: '#FFFFFF',
-    modalText: '#1F1F1F',
-  },
-  fonts: {
-    body: 'Oxanium, sans-serif',
-  },
-  radii: {
-    modal: '8px',
-    connectButton: '8px',
-    menuButton: '8px',
-  },
+// The wallet modal in Electric Foundation: purple actions, Open Sans, the kit's surfaces, and the
+// theme the app is in. RainbowKit renders outside the app's DOM tree, so the values are passed here
+// rather than read from the CSS tokens.
+const rainbowKitThemeOptions = {
+  accentColor: '#7d33ff',
+  accentColorForeground: '#ffffff',
+  borderRadius: 'small',
+  fontStack: 'system',
+  overlayBlur: 'small',
+};
+
+const withSeerSurfaces = (theme, surfaces) => ({
+  ...theme,
+  colors: { ...theme.colors, ...surfaces },
+  fonts: { body: 'var(--seer-font-sans)' },
+});
+
+const rainbowKitThemes = {
+  light: withSeerSurfaces(lightTheme(rainbowKitThemeOptions), {
+    modalBackground: '#ffffff',
+    modalBorder: '#e2e2e9',
+    modalText: '#17171c',
+    modalTextSecondary: '#5c5c66',
+    modalBackdrop: 'rgba(20, 18, 35, 0.56)',
+  }),
+  dark: withSeerSurfaces(darkTheme(rainbowKitThemeOptions), {
+    modalBackground: '#1a1a1e',
+    modalBorder: '#34343c',
+    modalText: '#ededf2',
+    modalTextSecondary: '#a8a8b3',
+    modalBackdrop: 'rgba(20, 18, 35, 0.56)',
+  }),
 };
 
 const Providers = ({ children }) => {
+  const { isDarkMode } = useTheme();
   return (
     <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
       <QueryClientProvider client={queryClient}>
@@ -148,19 +164,14 @@ const Providers = ({ children }) => {
           chains={chains}
           locale="en-US"
           modalSize="compact"
-          theme={darkTheme({
-            borderRadius: 'small',
-            fontStack: 'system',
-            overlayBlur: 'small',
-            accentColor: '#1F1F1F',
-          })}
+          theme={isDarkMode ? rainbowKitThemes.dark : rainbowKitThemes.light}
           showRecentTransactions={true}
           appInfo={{
             appName: 'Futarchy',
             learnMoreUrl: '#',
             disclaimer: () => (
               <div style={{ padding: '16px', textAlign: 'center' }}>
-                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--seer-muted)' }}>
                   By connecting your wallet, you agree to our terms and acknowledge the risks of using prediction markets.
                 </p>
               </div>

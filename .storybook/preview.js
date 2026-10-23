@@ -1,8 +1,11 @@
 import React from 'react';
 import { GlobalProvider } from '@contexts/GlobalContext.js';
+import '@seer-pm/ui-kit/fonts.css';
+import '@seer-pm/ui-kit/tokens.css';
+import '@seer-pm/ui-kit/base.css';
+import '@seer-pm/ui-kit/components.css';
 import '@rainbow-me/rainbowkit/styles.css';
 import '../src/styles/globals.css';
-import { Oxanium, Barlow } from 'next/font/google';
 import {
   RainbowKitProvider,
   getDefaultWallets,
@@ -35,16 +38,6 @@ const config = createConfig({
 // Create a new QueryClient instance
 const queryClient = new QueryClient();
 
-const oxanium = Oxanium({
-  subsets: ['latin'],
-  display: 'swap',
-});
-
-const barlow = Oxanium({
-  subsets: ['latin'],
-  display: 'swap',
-});
-
 export const decorators = [
   (Story, context) => (
     <WagmiProvider config={config}>
@@ -57,7 +50,7 @@ export const decorators = [
             borderRadius: 'small',
             fontStack: 'system',
             overlayBlur: 'small',
-            accentColor: '#1F1F1F',
+            accentColor: '#7d33ff',
           })}
           showRecentTransactions={false}
           appInfo={{
@@ -72,9 +65,7 @@ export const decorators = [
             selectedSymbol={context.args.selectedSymbol}
             precision={context.args.precision}
           >
-            <div className={`${oxanium.className} ${barlow.className}`}>
-              <Story />
-            </div>
+            <Story />
           </GlobalProvider>
         </RainbowKitProvider>
       </QueryClientProvider>

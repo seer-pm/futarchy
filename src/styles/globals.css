@@ -13,10 +13,7 @@
   display: none;
 }
 
-/* RainbowKit overrides */
-.iekbcc0.ju367v75 {
-  border-radius: 0.5rem !important;
-}
+/* RainbowKit override */
 .iekbcc0.ju367v8b.ju367v6k.ju367v77.ju367v7q.ju367v9.ju367v6 {
   display: none !important;
 }
@@ -40,7 +37,7 @@
   }
 
   .animate-pulsate-color {
-    stroke: #7E38CA;
+    stroke: var(--seer-accent-text);
     animation: pulsate-color 2s infinite ease-in-out;
   }
 
@@ -136,20 +133,6 @@ html {
 .backdrop-blur-xl {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-}
-
-/* Dark mode styles */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #121212;
-    color: white;
-  }
-}
-
-/* Class-based dark mode for when JS detects preference */
-.dark {
-  background-color: #121212;
-  color: white;
 }
 
 @keyframes pulse-bright {

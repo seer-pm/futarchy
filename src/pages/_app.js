@@ -1,3 +1,7 @@
+import "@seer-pm/ui-kit/fonts.css";
+import "@seer-pm/ui-kit/tokens.css";
+import "@seer-pm/ui-kit/base.css";
+import "@seer-pm/ui-kit/components.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import "../styles/globals.css";
 
@@ -17,8 +21,8 @@ export default function App({ Component, pageProps }) {
   const isMarketPage = router.pathname === '/markets/[address]';
 
   return (
-    <Providers>
-      <ThemeProvider>
+    <ThemeProvider>
+      <Providers>
         <CurrencyProvider>
           <Head>
             {/* Google Tag Manager */}
@@ -82,7 +86,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             <Component {...pageProps} />
           </main>
         </CurrencyProvider>
-      </ThemeProvider>
-    </Providers>
+      </Providers>
+    </ThemeProvider>
   );
 }
