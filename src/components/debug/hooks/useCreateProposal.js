@@ -205,8 +205,8 @@ export const useCreateProposal = () => {
             setStatus({
                 type: 'success',
                 message: newProposalAddress
-                    ? `✅ Proposal created successfully!`
-                    : '✅ Transaction confirmed! Check explorer for proposal address.'
+                    ? `Proposal created successfully!`
+                    : 'Transaction confirmed! Check explorer for proposal address.'
             });
 
             return {

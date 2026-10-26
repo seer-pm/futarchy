@@ -6,10 +6,10 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useCreatePool } from '../../../hooks/useCreatePool';
 import { CHAIN_CONFIG, getExplorerTxUrl } from '../../debug/constants/chainConfig';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
+import { Dialog } from '@seer-pm/ui-kit/react';
 
 // Pool type configurations - with clear labels
 const POOL_TYPES = {
@@ -95,16 +95,6 @@ const POOL_TYPES = {
             };
         }
     }
-};
-
-const backdropVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1 }
-};
-
-const modalVariants = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1 }
 };
 
 export default function CreatePoolModal({ isOpen, onClose, config, missingPools = [], onPoolCreated }) {
@@ -220,39 +210,10 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
     if (!isOpen) return null;
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                    onClick={onClose}
-                    variants={backdropVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="hidden"
-                >
-                    <motion.div
-                        className="bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80dvh] overflow-y-auto shadow-lg"
-                        onClick={(e) => e.stopPropagation()}
-                        variants={modalVariants}
-                        initial="hidden"
-                        animate="visible"
-                        exit="hidden"
-                    >
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-futarchyGray12 dark:text-futarchyGray3">Create Pool</h2>
-                            <button
-                                onClick={onClose}
-                                className="text-futarchyGray11 hover:text-futarchyGray12 dark:text-futarchyGray112 dark:hover:text-futarchyGray3 transition-colors"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
+        <Dialog open={isOpen} onClose={onClose} title="Create Pool" dismissible={!isCreating}>
 
                         {/* Description */}
-                        <div className="text-sm text-futarchyGray11 dark:text-futarchyGray112 mb-6">
+                        <div className="text-sm text-seer-muted mb-6">
                             Create missing pools for this proposal.
                             {chainConfig?.amm === 'uniswap'
                                 ? " Pools will be created on Uniswap V3."
@@ -261,24 +222,24 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                         </div>
 
                         {/* Chain Info */}
-                        <div className="p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 mb-4">
-                            <div className="flex items-center gap-2 text-sm text-futarchyGray11 dark:text-futarchyGray112">
-                                <div className={`w-2 h-2 rounded-full ${chainId === 1 ? 'bg-blue-500' : 'bg-green-500'}`} />
-                                <span className="text-futarchyGray12 dark:text-futarchyGray3">{chainConfig?.name || 'Unknown'} Chain</span>
-                                <span className="text-futarchyGray6 dark:text-futarchyGray112">|</span>
+                        <div className="p-3 bg-seer-surface-raised rounded-lg border border-seer-border mb-4">
+                            <div className="flex items-center gap-2 text-sm text-seer-muted">
+                                <div className={`w-2 h-2 rounded-full ${chainId === 1 ? 'bg-seer-accent-text' : 'bg-seer-positive'}`} />
+                                <span className="text-seer-text">{chainConfig?.name || 'Unknown'} Chain</span>
+                                <span className="text-seer-muted text-seer-muted">|</span>
                                 <span>{chainConfig?.amm === 'uniswap' ? 'Uniswap V3' : 'Algebra'}</span>
                             </div>
                         </div>
 
                         {/* Pool Type Selector */}
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">
+                            <label className="block text-sm font-medium text-seer-muted mb-2">
                                 Select Pool to Create
                             </label>
                             <select
                                 value={selectedPoolType || ''}
                                 onChange={(e) => setSelectedPoolType(e.target.value)}
-                                className="w-full bg-futarchyGray3 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyGray112/20 rounded-lg px-4 py-3 text-futarchyGray12 dark:text-futarchyGray3 focus:border-futarchyBlue focus:ring-1 focus:ring-futarchyBlue outline-none"
+                                className="w-full bg-seer-surface-raised border border-seer-border rounded-lg px-4 py-3 text-seer-text focus:border-seer-accent-text focus:ring-1 focus:ring-seer-accent-text outline-none"
                             >
                                 <option value="">Select a pool...</option>
                                 {availablePoolTypes.map((poolType) => (
@@ -291,18 +252,18 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
 
                         {/* Token Pair Display */}
                         {selectedTokens && (
-                            <div className="p-4 bg-futarchyGray3 dark:bg-futarchyDarkGray4 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 mb-4">
-                                <div className="text-sm text-futarchyGray11 dark:text-futarchyGray112 mb-2">Token Pair:</div>
+                            <div className="p-4 bg-seer-surface-raised rounded-lg border border-seer-border mb-4">
+                                <div className="text-sm text-seer-muted mb-2">Token Pair:</div>
                                 <div className="flex items-center justify-between">
-                                    <div className="text-futarchyGray12 dark:text-futarchyGray3 font-mono text-sm">
+                                    <div className="text-seer-text font-mono text-sm">
                                         {selectedTokens.token0Symbol || 'Token0'}
                                     </div>
-                                    <div className="text-futarchyGray11 dark:text-futarchyGray112">/</div>
-                                    <div className="text-futarchyGray12 dark:text-futarchyGray3 font-mono text-sm">
+                                    <div className="text-seer-muted">/</div>
+                                    <div className="text-seer-text font-mono text-sm">
                                         {selectedTokens.token1Symbol || 'Token1'}
                                     </div>
                                 </div>
-                                <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-2 break-all">
+                                <div className="text-xs text-seer-muted mt-2 break-all">
                                     {selectedTokens.token0?.slice(0, 10)}...{selectedTokens.token0?.slice(-6)}
                                 </div>
                             </div>
@@ -310,7 +271,7 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
 
                         {/* Initial Price Input */}
                         <div className="mb-6">
-                            <label className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">
+                            <label className="block text-sm font-medium text-seer-muted mb-2">
                                 Initial Price {selectedTokens ? `(${selectedTokens.token1Symbol} per ${selectedTokens.token0Symbol})` : ''}
                             </label>
                             <input
@@ -319,39 +280,39 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                                 value={initialPrice}
                                 onChange={(e) => setInitialPrice(e.target.value)}
                                 placeholder="e.g., 120"
-                                className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                className="w-full bg-seer-surface border border-seer-border rounded-lg px-4 py-3 text-seer-text placeholder-seer-muted focus:border-seer-accent-text focus:ring-1 focus:ring-seer-accent-text outline-none"
                                 disabled={isCreating}
                             />
-                            <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-1">
+                            <div className="text-xs text-seer-muted mt-1">
                                 For conditional pools, this is typically the spot price of the company token
                             </div>
                         </div>
 
                         {/* Status Display */}
                         {status.type !== 'idle' && (
-                            <div className={`rounded-lg p-3 mb-4 ${status.type === 'pending' ? 'bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700/50' :
-                                status.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700/50' :
-                                    status.type === 'error' ? 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/50' :
-                                        'bg-futarchyGray3 dark:bg-futarchyDarkGray4'
+                            <div className={`rounded-lg p-3 mb-4 ${status.type === 'pending' ? 'bg-fail-soft border border-yellow-300 ' :
+                                status.type === 'success' ? 'bg-seer-positive/10 border border-seer-positive/40 ' :
+                                    status.type === 'error' ? 'bg-seer-negative/10 border border-seer-negative/40 ' :
+                                        'bg-seer-surface-raised'
                                 }`}>
                                 <div className="flex items-center gap-2">
                                     {status.type === 'pending' && (
-                                        <div className="animate-spin h-4 w-4 border-2 border-yellow-500 border-t-transparent rounded-full" />
+                                        <div className="animate-spin h-4 w-4 border-2 border-seer-border border-t-seer-purple rounded-full" />
                                     )}
                                     {status.type === 'success' && (
-                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-4 h-4 text-seer-positive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                         </svg>
                                     )}
                                     {status.type === 'error' && (
-                                        <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-4 h-4 text-seer-negative" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                         </svg>
                                     )}
-                                    <span className={`text-sm ${status.type === 'pending' ? 'text-yellow-700 dark:text-yellow-400' :
-                                        status.type === 'success' ? 'text-green-700 dark:text-green-400' :
-                                            status.type === 'error' ? 'text-red-700 dark:text-red-400' :
-                                                'text-futarchyGray11 dark:text-futarchyGray112'
+                                    <span className={`text-sm ${status.type === 'pending' ? 'text-yellow-700' :
+                                        status.type === 'success' ? 'text-seer-positive' :
+                                            status.type === 'error' ? 'text-seer-negative' :
+                                                'text-seer-muted'
                                         }`}>
                                         {status.message}
                                     </span>
@@ -361,13 +322,13 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
 
                         {/* Transaction Hash */}
                         {txHash && (
-                            <div className="p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 mb-4">
-                                <div className="text-sm text-futarchyGray11 dark:text-futarchyGray112 mb-1">Transaction Hash:</div>
+                            <div className="p-3 bg-seer-surface-raised rounded-lg border border-seer-border mb-4">
+                                <div className="text-sm text-seer-muted mb-1">Transaction Hash:</div>
                                 <a
                                     href={getExplorerTxUrl(chainId, txHash)}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-futarchyBlue hover:text-futarchyBlue/80 text-sm font-mono break-all"
+                                    className="text-seer-accent-text hover:text-seer-accent-text text-sm font-mono break-all"
                                 >
                                     {txHash}
                                 </a>
@@ -376,10 +337,10 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
 
                         {/* Pool Address */}
                         {poolAddress && (
-                            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-300 dark:border-green-700/50 mb-4">
-                                <div className="text-sm text-green-700 dark:text-green-400 mb-1">Pool Created:</div>
-                                <div className="text-futarchyGray12 dark:text-futarchyGray3 text-sm font-mono break-all">{poolAddress}</div>
-                                <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-2">
+                            <div className="p-3 bg-seer-positive/10 rounded-lg border border-seer-positive/40 mb-4">
+                                <div className="text-sm text-seer-positive mb-1">Pool Created:</div>
+                                <div className="text-seer-text text-sm font-mono break-all">{poolAddress}</div>
+                                <div className="text-xs text-seer-muted mt-2">
                                     The pool may take a few minutes to appear in the subgraph
                                 </div>
                             </div>
@@ -389,7 +350,7 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                         <div className="flex gap-3">
                             <button
                                 onClick={onClose}
-                                className="flex-1 px-4 py-3 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 text-futarchyGray11 dark:text-futarchyGray112 hover:bg-futarchyGray3 dark:hover:bg-futarchyDarkGray4 transition-colors"
+                                className="flex-1 px-4 py-3 rounded-lg border border-seer-border text-seer-muted hover:bg-seer-surface-raised hover:bg-seer-surface transition-colors"
                                 disabled={isCreating}
                             >
                                 Cancel
@@ -398,10 +359,10 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                                 onClick={handleCreatePool}
                                 disabled={!isConnected || !selectedPoolType || !initialPrice || isCreating || status.type === 'success'}
                                 className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors ${!isConnected || !selectedPoolType || !initialPrice || isCreating || status.type === 'success'
-                                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                    ? 'bg-seer-surface-raised text-seer-muted cursor-not-allowed'
                                     : selectedPoolType?.includes('YES')
-                                        ? 'bg-futarchyBlue3 dark:bg-futarchyBlue6/40 text-futarchyBlue11 dark:text-futarchyBlue6 border-2 border-futarchyBlue7 hover:bg-futarchyBlue4'
-                                        : 'bg-futarchyGold3 dark:bg-futarchyGold6/30 text-futarchyGold11 dark:text-futarchyGold6 border-2 border-futarchyGold9 hover:bg-futarchyGold4'
+                                        ? 'bg-pass-soft text-pass-text border border-pass hover:bg-pass-soft'
+                                        : 'bg-fail-soft text-fail-text border border-fail hover:bg-fail-soft'
                                     }`}
                             >
                                 {isCreating ? 'Creating...' : status.type === 'success' ? 'Pool Created!' : 'Create Pool'}
@@ -410,13 +371,10 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
 
                         {/* Wallet Connection Warning */}
                         {!isConnected && (
-                            <div className="mt-4 text-center text-sm text-yellow-600 dark:text-yellow-400">
+                            <div className="mt-4 text-center text-sm text-fail-text">
                                 Please connect your wallet to create pools
                             </div>
                         )}
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+        </Dialog>
     );
 }

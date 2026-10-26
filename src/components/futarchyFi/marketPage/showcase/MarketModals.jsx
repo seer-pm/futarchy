@@ -64,7 +64,7 @@ const MarketModals = ({
       <AnimatePresence>
         {isCollateralModalOpen && (
           <div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"
+            className="fixed inset-0 bg-seer-ink/60 flex items-end sm:items-center justify-center sm:p-4 z-[60]"
             onClick={handleBackdropClick}
           >
             <CollateralModal

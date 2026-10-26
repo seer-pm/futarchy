@@ -3,10 +3,11 @@ import { SHOW_DATA_DEBUG } from '../../../../config/featureFlags';
 import { useAccount } from 'wagmi';
 import dayjs from 'dayjs';
 import { openTransactionInExplorer, useTradeHistory } from '../MarketHistoryViewModel';
+import { Badge } from '../../../ui/Badge';
 
 const Spinner = () => (
   <div className="flex justify-center items-center py-8">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyBlue9"></div>
+    <div className="animate-spin rounded-full h-7 w-7 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading trades"></div>
   </div>
 );
 
@@ -114,36 +115,17 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
     }
   }, [isLoading, loadingFromHook, trades.length]);
 
-  // Add back the OutcomeBadge component
-  const OutcomeBadge = ({ actionText, tradeType }) => { // Changed props
-    // const [action, type] = outcome.split(' - '); // Removed this line
-
-    // Define width classes to ensure consistent size
-    const containerWidth = "w-[160px]";
-    const halfWidth = "w-[80px]";
-
+  // Outcome as a pass/fail badge, the side beside it in status colour. Both carry text, so colour
+  // is never the only cue.
+  const OutcomeBadge = ({ actionText, tradeType }) => {
+    const isYes = actionText.toLowerCase() === 'yes';
+    const isSell = tradeType && tradeType.toLowerCase() === 'sell';
     return (
-      <div className={`inline-flex overflow-hidden ${containerWidth}`}>
-        {/* Yes/No part */}
-        <div
-          className={`${halfWidth} px-3 py-1 text-sm font-medium text-center ${actionText.toLowerCase() === 'yes' // Use actionText
-            ? 'bg-futarchyBlue4 text-futarchyBlue11 border border-futarchyBlue6 rounded-l-full dark:bg-transparent dark:text-futarchyBlue9 dark:border-futarchyBlue9'
-            : 'bg-futarchyGold4 text-futarchyGold11 border border-futarchyGold6 rounded-l-full dark:bg-transparent dark:text-futarchyGold7 dark:border-futarchyGold7'
-            }`}
-        >
-          {actionText} {/* Use actionText */}
-        </div>
-
-        {/* Buy/Sell part */}
-        <div
-          className={`${halfWidth} px-3 py-1 text-sm font-medium text-center ${ // Ensure this line number matches if editing only this line, adjust context if needed
-            (tradeType && tradeType.toLowerCase() === 'sell') // Use tradeType with a check
-              ? 'bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6 rounded-r-full dark:bg-transparent dark:text-futarchyCrimson9 dark:border-futarchyCrimson9'
-              : 'bg-futarchyTeal3 text-futarchyTeal9 border border-futarchyTeal5 rounded-r-full dark:bg-transparent dark:text-futarchyTeal7 dark:border-futarchyTeal7'
-            }`}
-        >
-          {tradeType} {/* Use tradeType */}
-        </div>
+      <div className="inline-flex items-center gap-2">
+        <Badge tone={isYes ? 'pass' : 'fail'} className="min-w-[44px] justify-center">{actionText}</Badge>
+        <span className={`text-[13px] font-semibold capitalize ${isSell ? 'text-seer-negative' : 'text-seer-positive'}`}>
+          {tradeType}
+        </span>
       </div>
     );
   };
@@ -471,7 +453,7 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
   // Add this SVG component at the top of TradeHistoryTable
   const ExternalLinkIcon = () => (
     <svg
-      className="w-4 h-4 text-black dark:text-white hover:text-futarchyGray11 dark:hover:text-futarchyGray5 transition-colors"
+      className="w-4 h-4 text-seer-text hover:text-seer-muted transition-colors"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -486,16 +468,16 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
   );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-futarchyGray62 dark:border-futarchyDarkGray42">
+    <div className="overflow-hidden">
       {/* Header */}
-      <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3">
+      <div className="bg-seer-surface">
         <table className="w-full">
           <thead>
-            <tr className="border-b-2 border-futarchyGray62 dark:border-futarchyDarkGray42 dark:bg-futarchyDarkGray3 h-[60px]">
-              <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-left px-4 w-[200px]">Outcome</th>
-              <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-left px-4 w-[180px]">Amount</th>
-              <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-right px-4 w-[100px]">Price</th>
-              <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-right px-4 w-[220px]">Date</th>
+            <tr className="border-b border-seer-border h-11">
+              <th className="text-xs uppercase tracking-wide text-seer-muted font-semibold text-left px-4 w-[200px]">Outcome</th>
+              <th className="text-xs uppercase tracking-wide text-seer-muted font-semibold text-left px-4 w-[180px]">Amount</th>
+              <th className="text-xs uppercase tracking-wide text-seer-muted font-semibold text-right px-4 w-[100px]">Price</th>
+              <th className="text-xs uppercase tracking-wide text-seer-muted font-semibold text-right px-4 w-[220px]">Date</th>
             </tr>
           </thead>
         </table>
@@ -504,18 +486,18 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
       {/* Scrollable body with fade effect */}
       <div className="relative">
         {!walletConnected ? (
-          <div className="py-8 text-center text-futarchyGray11">
+          <div className="py-8 text-center text-seer-muted">
             Connect wallet to view trade history
           </div>
         ) : (isLoading || (loadingFromHook && trades.length === 0 && !forceShowData)) ? (
-          <div className="py-8 text-center text-futarchyGray11">
+          <div className="py-8 text-center text-seer-muted">
             {retryCount > 0 ? `Retrying... (${retryCount}/${MAX_RETRIES})` : 'Loading trades...'}
-            {SHOW_DATA_DEBUG && <div className="text-xs mt-1 text-futarchyGray8">
+            {SHOW_DATA_DEBUG && <div className="text-xs mt-1 text-seer-muted">
               Local: {isLoading ? 'loading' : 'ready'} | Hook: {loadingFromHook ? 'loading' : 'ready'} | Trades: {trades.length} | Force: {forceShowData ? 'yes' : 'no'}
             </div>}
           </div>
         ) : error ? (
-          <div className="py-8 text-center text-futarchyCrimson11">
+          <div className="py-8 text-center text-seer-negative">
             Error loading trades: {error}
             {retryCount >= MAX_RETRIES && (
               <div className="text-xs mt-2">
@@ -524,11 +506,11 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
             )}
           </div>
         ) : trades.length === 0 ? (
-          <div className="py-8 text-center text-futarchyGray11">
+          <div className="py-8 text-center text-seer-muted">
             {retryCount >= MAX_RETRIES ? (
               <div>
                 <div>No trades found</div>
-                <div className="text-xs mt-2 text-futarchyGray8">
+                <div className="text-xs mt-2 text-seer-muted">
                   Try switching tabs or refreshing the page if this persists.
                 </div>
               </div>
@@ -563,37 +545,37 @@ const TradeHistoryTable = React.memo(({ tokenImages = { company: null, currency:
                 {trades.map((trade, index) => (
                   <tr
                     key={`trade-${index}-${trade.txHash}`}
-                    className="border-b border-futarchyGray62 dark:border-futarchyDarkGray42 hover:bg-futarchyGray3 dark:hover:bg-futarchyGray3/20 transition-colors h-[60px]"
+                    className="border-b border-seer-border last:border-b-0 hover:bg-seer-surface-raised transition-colors h-14"
                   >
                     <td className="px-4 w-[200px]">
                       <OutcomeBadge actionText={trade.outcome} tradeType={trade.type} />
                     </td>
                     <td className="px-4 w-[180px]">
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-futarchyGray12 dark:text-futarchyGray112 whitespace-nowrap flex items-center">
+                        <span className="text-[13px] text-seer-text tabular-nums whitespace-nowrap flex items-center">
                           {/* Image removed */}
                           {`${trade.amounts.in.value} ${trade.amounts.in.token}`}
-                          <span className="text-futarchyTeal7 ml-1">in</span>
+                          <span className="text-seer-positive ml-1">in</span>
                         </span>
-                        <span className="text-xs text-futarchyGray12 dark:text-futarchyGray112 whitespace-nowrap flex items-center">
+                        <span className="text-[13px] text-seer-text tabular-nums whitespace-nowrap flex items-center">
                           {/* Image removed */}
                           {`${trade.amounts.out.value} ${trade.amounts.out.token}`}
-                          <span className="text-futarchyCrimson9 ml-1">out</span>
+                          <span className="text-seer-negative ml-1">out</span>
                         </span>
                       </div>
                     </td>
                     <td className="px-4 w-[100px] text-right">
-                      <span className="text-xs text-futarchyGray12 dark:text-futarchyGray112 block">{trade.price}</span>
+                      <span className="text-[13px] font-semibold text-seer-text tabular-nums block">{trade.price}</span>
                     </td>
                     <td className="px-4 w-[220px]">
                       <div className="flex items-center justify-end gap-1">
-                        <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">{trade.formattedTimestamp}</span>
+                        <span className="text-[13px] text-seer-muted tabular-nums">{trade.formattedTimestamp}</span>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             openTransactionInExplorer(trade.txHash, config);
                           }}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-futarchyGray4 dark:hover:bg-futarchyGray3/45 transition-colors"
+                          className="w-7 h-7 flex items-center justify-center rounded-control text-seer-muted hover:text-seer-text hover:bg-seer-surface-raised transition-colors"
                           title="View on Block Explorer"
                         >
                           <ExternalLinkIcon />

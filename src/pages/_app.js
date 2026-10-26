@@ -1,24 +1,16 @@
+import "@seer-pm/ui-kit/fonts.css";
+import "@seer-pm/ui-kit/tokens.css";
+import "@seer-pm/ui-kit/base.css";
+import "@seer-pm/ui-kit/components.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import "../styles/globals.css";
 
-import { Oxanium, Barlow } from "next/font/google";
 import Head from "next/head";
 import metadata from "../../app/metadata";
 import Providers from "../providers/providers";
 import { useRouter } from "next/router";
 import { CurrencyProvider } from "../contexts/CurrencyContext";
 import { ThemeProvider } from "../contexts/ThemeContext";
-
-const oxanium = Oxanium({
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const barlow = Barlow({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
@@ -29,8 +21,8 @@ export default function App({ Component, pageProps }) {
   const isMarketPage = router.pathname === '/markets/[address]';
 
   return (
-    <Providers>
-      <ThemeProvider>
+    <ThemeProvider>
+      <Providers>
         <CurrencyProvider>
           <Head>
             {/* Google Tag Manager */}
@@ -94,7 +86,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             <Component {...pageProps} />
           </main>
         </CurrencyProvider>
-      </ThemeProvider>
-    </Providers>
+      </Providers>
+    </ThemeProvider>
   );
 }

@@ -48,17 +48,17 @@ const SafeDetector = () => {
     }, [walletClient]);
 
     return (
-        <div className="fixed bottom-4 right-4 p-4 bg-black/90 text-green-400 font-mono text-xs rounded-lg border border-green-500 shadow-xl z-[9999] max-w-sm overflow-hidden">
-            <h3 className="font-bold border-b border-green-500 mb-2 pb-1">Safe Environment Detector</h3>
+        <div className="fixed bottom-4 right-4 z-[9999] max-w-sm overflow-hidden rounded-surface border border-seer-border bg-seer-surface p-4 font-mono text-xs text-seer-text shadow-lg">
+            <h3 className="mb-2 border-b border-seer-border pb-2 font-sans text-sm font-semibold">Safe Environment Detector</h3>
             <div className="space-y-1">
-                <div><span className="text-gray-400">Referrer:</span> <span className="break-all">{debugInfo.referrer}</span></div>
-                <div><span className="text-gray-400">isSafe:</span> {String(debugInfo.isSafe)}</div>
-                <div><span className="text-gray-400">isSafeApp:</span> {String(debugInfo.isSafeApp)}</div>
-                <div><span className="text-gray-400">Connector:</span> {debugInfo.connectorName} ({debugInfo.connectorId})</div>
-                <div><span className="text-gray-400">Parent:</span> <span className="break-all">{debugInfo.parentOrigin}</span></div>
-                <div className="mt-2 pt-2 border-t border-green-500/30">
-                    <span className="text-gray-400">SDK Status:</span>
-                    <span className={debugInfo.sdkStatus?.includes('Connected') ? 'text-green-400 font-bold' : 'text-red-400'}>
+                <div><span className="text-seer-muted">Referrer:</span> <span className="break-all">{debugInfo.referrer}</span></div>
+                <div><span className="text-seer-muted">isSafe:</span> {String(debugInfo.isSafe)}</div>
+                <div><span className="text-seer-muted">isSafeApp:</span> {String(debugInfo.isSafeApp)}</div>
+                <div><span className="text-seer-muted">Connector:</span> {debugInfo.connectorName} ({debugInfo.connectorId})</div>
+                <div><span className="text-seer-muted">Parent:</span> <span className="break-all">{debugInfo.parentOrigin}</span></div>
+                <div className="mt-2 border-t border-seer-border pt-2">
+                    <span className="text-seer-muted">SDK Status:</span>{' '}
+                    <span className={debugInfo.sdkStatus?.includes('Connected') ? 'font-semibold text-seer-positive' : 'text-seer-negative'}>
                         {debugInfo.sdkStatus}
                     </span>
                 </div>

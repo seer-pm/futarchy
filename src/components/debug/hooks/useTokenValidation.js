@@ -71,7 +71,7 @@ export const useTokenValidation = (chainId) => {
 
             // Validate decimals === 18
             if (decimalsNumber !== 18) {
-                setError(`❌ Invalid: Must be 18 decimals (got ${decimalsNumber})`);
+                setError(`Invalid: Must be 18 decimals (got ${decimalsNumber})`);
                 setIsLoading(false);
                 return;
             }
@@ -89,9 +89,9 @@ export const useTokenValidation = (chainId) => {
         } catch (err) {
             console.error('Token validation error:', err);
             if (err.message === 'Timeout') {
-                setError('⏱️ Timeout - RPC not responding');
+                setError('Timeout - RPC not responding');
             } else {
-                setError('❌ Failed to fetch token - check address');
+                setError('Failed to fetch token - check address');
             }
         } finally {
             setIsLoading(false);

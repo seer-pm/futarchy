@@ -97,10 +97,6 @@ The core logic resides here.
 *   **`fetchBestPoolsForProposal`**: The function that executes the query and sorting logic.
 *   **`formatSubgraphPoolData`**: Normalizes the raw subgraph data into the app's `volume` and `liquidity` format, utilizing the intelligent volume logic.
 
-### `src/components/futarchyFi/marketPage/PoolDataDisplay.jsx`
-*   Updated to display the **Source** (Badge) so users know if data comes from "Subgraph" or "Tickspread".
-*   Handles formatting of raw Liquidity (e.g., converting large `1e21` numbers to readable scientific or compact notation).
-
 ## 6. Verification
 A script is available to verify the logic in isolation:
 *   **Path**: `scripts/test_smart_pool_selection.js`

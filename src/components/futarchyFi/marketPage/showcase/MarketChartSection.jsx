@@ -30,9 +30,9 @@ const MarketChartSection = ({
     <>
       {/* Market Container - Only shows if TripleChart is enabled */}
       {showTripleChart && (
-        <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden flex flex-col h-[550px]">
-          {/* Market Stats Header */}
-          <div className="h-16 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70">
+        <div className="bg-seer-surface rounded-surface border border-seer-border overflow-hidden flex flex-col">
+          {/* Legend: each series with its latest value, pressed to show or hide its line */}
+          <div className="border-b border-seer-border">
             <ChartParameters
               tradingPair={`${config?.BASE_TOKENS_CONFIG?.company?.symbol || DEFAULT_BASE_TOKENS_CONFIG.company.symbol}/${selectedCurrency === 'WXDAI' ? 'xDAI' : currencySymbol}`}
               spotPrice={(() => {
@@ -85,7 +85,7 @@ const MarketChartSection = ({
           </div>
 
           {/* Chart Area */}
-          <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 flex-grow overflow-hidden">
+          <div className="h-[470px] overflow-hidden">
             <div className="w-full h-full flex flex-col">
               <TripleChart
                 propYesData={latestPrices.yesData}

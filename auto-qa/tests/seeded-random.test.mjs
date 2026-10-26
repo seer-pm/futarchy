@@ -1,17 +1,10 @@
 /**
  * SeededRandom spec mirror (auto-qa).
  *
- * Pins src/utils/seededRandom.js — a deterministic PRNG used to
- * generate stable per-market visual jitter (chart shimmer, fake
- * candle wicks before live data arrives) in two chart components:
- *
- *   - src/components/futarchyFi/marketPage/SpotMarketChart.jsx (imports it)
- *   - src/components/futarchyFi/marketPage/MarketCharts.jsx     (DUPLICATES the class inline!)
- *
- * The duplication is a code-smell worth pinning: if the inline copy
- * drifts from the canonical class, two charts of the same proposal
- * will look subtly different (visual flicker on tab switch). This
- * file pins both.
+ * Pins src/utils/seededRandom.js — a deterministic PRNG for stable
+ * per-market visual jitter (chart shimmer, placeholder candle wicks
+ * before live data arrives). No component imports it today; the spec
+ * keeps its contract fixed for the next chart that does.
  *
  * The implementation is `Math.sin(seed++) * 10000`, fractional part —
  * not cryptographic, not even uniform, but deterministic. Three things
@@ -33,10 +26,6 @@ import { readFileSync } from 'node:fs';
 
 const CANONICAL_SRC = readFileSync(
     new URL('../../src/utils/seededRandom.js', import.meta.url),
-    'utf8',
-);
-const MARKETCHARTS_SRC = readFileSync(
-    new URL('../../src/components/futarchyFi/marketPage/MarketCharts.jsx', import.meta.url),
     'utf8',
 );
 const MARKDOWN_PARSER_SRC = readFileSync(
@@ -158,41 +147,14 @@ test('SeededRandom — negative seed works (no throw, in [0, 1))', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Cross-file consistency — MarketCharts.jsx inline copy MUST match canonical
+// Source shape — the core PRNG expression
 // ---------------------------------------------------------------------------
 
-test('cross-file — MarketCharts.jsx inline SeededRandom matches the canonical algorithm', () => {
-    // Pinned: MarketCharts.jsx duplicates the SeededRandom class inline
-    // (with a "// Using the same seeded random as SwapPage" comment).
-    // If one drifts from the other, two charts of the same proposal
-    // produce different visual jitter — silent UX inconsistency.
-    //
-    // Approach: extract the inline class body and compare its
-    // structural shape to the canonical one. Whitespace-tolerant.
-    function normalize(s) {
-        return s.replace(/\s+/g, ' ').trim();
-    }
-    const canonicalClass = CANONICAL_SRC.match(/class SeededRandom\s*\{([\s\S]*?)^\}/m);
-    const inlineClass = MARKETCHARTS_SRC.match(/class SeededRandom\s*\{([\s\S]*?)^\}/m);
-    assert.ok(canonicalClass, 'canonical SeededRandom class body not found in seededRandom.js');
-    assert.ok(inlineClass,
-        `MarketCharts.jsx no longer contains an inline SeededRandom class — ` +
-        `if it has been removed in favor of an import, this test should be deleted ` +
-        `(and the duplication code-smell is fixed).`);
-    assert.equal(normalize(inlineClass[1]), normalize(canonicalClass[1]),
-        `MarketCharts.jsx inline SeededRandom DRIFTED from canonical seededRandom.js. ` +
-        `Two charts of the same proposal will produce different visual jitter. ` +
-        `Either re-sync, or import the canonical class instead.`);
-});
-
-test('cross-file — both copies use the exact Math.sin(seed++) * 10000 expression', () => {
-    // A simpler shape pin: the core PRNG expression. Catches drift in
-    // either file independently.
-    const re = /Math\.sin\(this\.seed\+\+\)\s*\*\s*10000/;
-    assert.match(CANONICAL_SRC, re,
+test('source — seededRandom.js uses the exact Math.sin(seed++) * 10000 expression', () => {
+    // The spec mirror above only proves the algorithm; this pins that the
+    // shipped file still implements it.
+    assert.match(CANONICAL_SRC, /Math\.sin\(this\.seed\+\+\)\s*\*\s*10000/,
         `canonical seededRandom.js no longer uses Math.sin(this.seed++) * 10000`);
-    assert.match(MARKETCHARTS_SRC, re,
-        `MarketCharts.jsx no longer uses Math.sin(this.seed++) * 10000`);
 });
 
 // ---------------------------------------------------------------------------

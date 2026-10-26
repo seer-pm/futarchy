@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import Header from '../components/common/Header';
+import Footer from '../components/common/Footer';
+import { buttonClassName } from '../components/ui/Button';
 
 // Match /market/<addr>, /markets/<addr>, /market/<addr>/, optional trailing slash
 // and preserve any query string / hash.
@@ -37,19 +40,25 @@ export default function Custom404() {
         <title>{redirecting ? 'Loading market…' : 'Page not found'} — Futarchy</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <div className="flex flex-col items-center justify-center min-h-screen bg-white text-gray-800 px-6">
+      <Header />
+      <main className="flex flex-col items-center justify-center min-h-screen pt-20 px-5 bg-seer-page text-seer-text">
         {redirecting ? (
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-futarchyLavender" />
+          <div
+            className="animate-spin rounded-full h-10 w-10 border-2 border-seer-border border-t-seer-purple"
+            role="status"
+            aria-label="Loading market"
+          />
         ) : (
           <div className="text-center max-w-md">
-            <h1 className="text-3xl font-bold mb-3">Page not found</h1>
-            <p className="text-gray-600 mb-6">
+            <h1 className="text-3xl font-semibold tracking-tight mb-3">Page not found</h1>
+            <p className="text-seer-muted mb-6">
               We couldn&apos;t find what you were looking for.
             </p>
-            <Link href="/" className="text-futarchyBlue9 underline">Back to home</Link>
+            <Link href="/" className={buttonClassName({ variant: 'secondary' })}>Back to home</Link>
           </div>
         )}
-      </div>
+      </main>
+      <Footer />
     </>
   );
 }

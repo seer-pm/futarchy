@@ -1,28 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAccount, useSwitchChain } from 'wagmi';
 import { useRouter } from 'next/router';
+import { LinkIcon } from '@heroicons/react/24/outline';
 
 const CHAIN_STYLE_MAP = {
   1: {
     name: 'Ethereum Mainnet',
     logoSrc: '/assets/ethereum-icon.svg',
-    accentBg: 'bg-futarchyBlue3',
-    accentBorder: 'border-futarchyBlue5',
-    accentText: 'text-futarchyBlue11'
+    accentBg: 'bg-seer-accent-soft',
+    accentBorder: 'border-seer-accent-text/40',
+    accentText: 'text-seer-accent-text'
   },
   100: {
     name: 'Gnosis Chain',
     logoSrc: '/assets/gnosis-dao-logo.svg',
-    accentBg: 'bg-futarchyGreen3',
-    accentBorder: 'border-futarchyGreen5',
-    accentText: 'text-futarchyGreen11'
+    accentBg: 'bg-seer-positive/10',
+    accentBorder: 'border-seer-positive/40',
+    accentText: 'text-seer-positive'
   }
 };
 
 const DEFAULT_CHAIN_STYLE = {
-  accentBg: 'bg-futarchyGray3',
-  accentBorder: 'border-futarchyGray6',
-  accentText: 'text-futarchyGray11'
+  accentBg: 'bg-seer-surface-raised',
+  accentBorder: 'border-seer-border',
+  accentText: 'text-seer-muted'
 };
 
 const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
@@ -160,22 +161,22 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center sm:px-4 sm:py-6">
+      <div className="absolute inset-0 bg-seer-ink/60" onClick={onClose} />
 
-      <div className="relative w-full max-w-[393px] md:max-w-[480px]">
-        <div className="relative flex flex-col w-full max-h-[80dvh] overflow-y-auto bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-2xl p-5 md:p-6 gap-6">
+      <div className="relative w-full sm:max-w-[480px]" role="dialog" aria-modal="true" aria-labelledby="wrong-network-title">
+        <div className="relative flex flex-col w-full max-h-[calc(100dvh-24px)] sm:max-h-[85dvh] overflow-y-auto overscroll-contain bg-seer-surface text-seer-text border border-seer-border rounded-t-surface sm:rounded-surface shadow-2xl p-5 gap-6">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-futarchyCrimson3 text-futarchyCrimson11">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-seer-negative/10 text-seer-negative">
               <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="text-lg md:text-xl font-semibold text-futarchyGray12 dark:text-white">
+              <h2 id="wrong-network-title" className="text-lg font-semibold tracking-tight text-seer-text">
                 Wrong Network
-              </h3>
-              <p className="mt-1 text-sm text-futarchyGray11 dark:text-futarchyGray112">
+              </h2>
+              <p className="mt-1 text-sm text-seer-muted">
                 Switch to the correct network to continue interacting with this market.
               </p>
             </div>
@@ -183,8 +184,8 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
 
           <div className="space-y-3">
             {currentChainInfo && (
-              <div className={`flex items-start gap-3 rounded-xl border ${currentChainInfo.accentBorder} bg-futarchyCrimson3/60 px-4 py-3`}>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-futarchyCrimson3 text-futarchyCrimson11 overflow-hidden">
+              <div className={`flex items-start gap-3 rounded-xl border ${currentChainInfo.accentBorder} bg-seer-negative/10 px-4 py-3`}>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-seer-negative/10 text-seer-negative overflow-hidden">
                   {currentChainInfo.logoSrc ? (
                     <img
                       src={currentChainInfo.logoSrc}
@@ -192,18 +193,18 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="text-xl">🔗</span>
+                    <LinkIcon className="h-5 w-5" aria-hidden="true" />
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-futarchyCrimson11">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-seer-negative">
                     Current Network
                   </p>
-                  <p className="text-base font-semibold text-futarchyGray12 dark:text-black">
+                  <p className="text-base font-semibold text-seer-text">
                     {currentChainInfo.name}
                   </p>
                 </div>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-futarchyCrimson7 text-white">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-seer-negative text-white">
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
@@ -212,7 +213,7 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
             )}
 
             <div className="flex justify-center">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-futarchyGray3 text-futarchyGray10">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-seer-surface-raised text-seer-muted">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
@@ -220,7 +221,7 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
             </div>
 
             <div className={`flex items-start gap-3 rounded-xl border ${requiredChain.accentBorder} ${requiredChain.accentBg} px-4 py-3`}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/70 text-futarchyGreen11 dark:bg-futarchyDarkGray3/70 overflow-hidden">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-seer-surface text-seer-positive overflow-hidden">
                 {requiredChain.logoSrc ? (
                   <img
                     src={requiredChain.logoSrc}
@@ -228,18 +229,18 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span className="text-xl">🔗</span>
+                  <LinkIcon className="h-5 w-5" aria-hidden="true" />
                 )}
               </div>
               <div className="flex-1">
                 <p className={`text-xs font-semibold uppercase tracking-wide ${requiredChain.accentText}`}>
                   Required Network
                 </p>
-                <p className="text-base font-semibold text-futarchyGray12 dark:text-black">
+                <p className="text-base font-semibold text-seer-text">
                   {requiredChain.name}
                 </p>
               </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-futarchyGreen6 text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-seer-positive text-white">
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -247,14 +248,14 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
             </div>
           </div>
 
-          <div className="rounded-xl bg-futarchyGray3 dark:bg-futarchyDarkGray2 px-4 py-3">
-            <p className="text-sm text-futarchyGray11 dark:text-futarchyGray112">
-              This proposal runs on <span className="font-semibold text-futarchyGray12 dark:text-white">{requiredChain.name}</span>. Switch networks in your wallet to trade, add liquidity, or manage collateral for this market.
+          <div className="rounded-xl bg-seer-surface-raised px-4 py-3">
+            <p className="text-sm text-seer-muted">
+              This proposal runs on <span className="font-semibold text-seer-text ">{requiredChain.name}</span>. Switch networks in your wallet to trade, add liquidity, or manage collateral for this market.
             </p>
           </div>
 
           {error && (
-            <div className="rounded-xl border border-futarchyCrimson5 bg-futarchyCrimson3 px-4 py-3 text-sm text-futarchyCrimson11">
+            <div className="rounded-xl border border-seer-negative/40 bg-seer-negative/10 px-4 py-3 text-sm text-seer-negative">
               {error.message || 'Failed to switch network. Please try again.'}
             </div>
           )}
@@ -264,9 +265,9 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
               <button
                 onClick={handleSwitch}
                 disabled={isPending}
-                className={`flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white transition-colors ${isPending
-                  ? 'bg-futarchyGray6 text-futarchyGray112'
-                  : 'bg-black hover:bg-lightBlack dark:bg-white dark:text-black dark:hover:bg-futarchyGray122'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-control px-6 py-3 text-sm font-semibold text-white transition-colors ${isPending
+                  ? 'bg-seer-surface-raised text-seer-muted'
+                  : 'bg-seer-purple hover:bg-seer-purple-hover '}`}
               >
                 {isPending ? (
                   <>
@@ -281,14 +282,14 @@ const WrongNetworkModal = ({ requiredChainId, isOpen, onClose }) => {
                 )}
               </button>
             ) : (
-              <div className="rounded-lg border border-futarchyGray6 bg-futarchyGray3 px-4 py-3 text-center text-sm font-medium text-futarchyGray11 dark:bg-futarchyDarkGray3 dark:text-futarchyGray112">
+              <div className="rounded-lg border border-seer-border bg-seer-surface-raised px-4 py-3 text-center text-sm font-medium text-seer-muted">
                 Network not available in your wallet. Please add {requiredChain.name} manually.
               </div>
             )}
 
             <button
               onClick={handleGoBack}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-futarchyGray6 bg-white px-6 py-3 text-sm font-semibold text-futarchyGray11 transition-colors hover:bg-futarchyGray3 dark:bg-futarchyDarkGray3 dark:text-futarchyGray112 dark:hover:bg-futarchyDarkGray4"
+              className="flex w-full items-center justify-center gap-2 rounded-control border border-seer-border bg-seer-surface px-6 py-3 text-sm font-semibold text-seer-muted transition-colors hover:bg-seer-surface-raised hover:bg-seer-surface"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />

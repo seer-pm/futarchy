@@ -8,11 +8,12 @@ import 'swiper/css/navigation';
 
 import { ProposalsCard } from '../cards/ProposalsCards';
 
-// Re-using NavigationButton component from EventsHighlightCarousel
+// Carousel navigation button
 const NavigationButton = ({ direction, onClick, className }) => (
   <button
     onClick={onClick}
-    className={`absolute top-1/2 -translate-y-1/2 z-10 md:w-[48px] md:h-[48px] flex items-center justify-center md:rounded-xl rounded-lg bg-[#FCFCFC] border border-[#D9D9D9] shadow-sm dark:bg-[#191919] dark:border-futarchyGray112/40 hover:bg-futarchyGray2 dark:hover:bg-futarchyGray11/70 transition-colors text-[#1F1F1F] dark:text-white ${className}`}
+    aria-label={direction === 'next' ? 'Next milestones' : 'Previous milestones'}
+    className={`seer-button seer-button-outline seer-button-icon absolute top-1/2 -translate-y-1/2 z-10 bg-seer-surface ${className}`}
   >
     <svg
       width="24"
@@ -20,6 +21,7 @@ const NavigationButton = ({ direction, onClick, className }) => (
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
       className={direction === 'next' ? 'rotate-180' : ''}
     >
       <path
@@ -35,7 +37,7 @@ const NavigationButton = ({ direction, onClick, className }) => (
 
 const LoadingSpinner = () => (
     <div className="flex justify-center items-center h-[200px]">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
+      <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading milestones"></div>
     </div>
 );
 
@@ -76,7 +78,7 @@ const ProposalsListCarousel = ({ proposals, isLoading }) => {
 
   if (!proposals || proposals.length === 0) {
     return (
-      <div className="flex justify-center items-center h-[200px] text-futarchyGray11">
+      <div className="flex justify-center items-center h-[200px] text-sm text-seer-muted">
         No proposals available.
       </div>
     );

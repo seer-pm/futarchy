@@ -72,19 +72,19 @@ const PositionsTable = ({
   // Show error state if there's an error fetching balances
   if (balanceError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 space-y-4 bg-futarchyGray2 dark:bg-futarchyDarkGray3 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyDarkGray42">
+      <div className="flex flex-col items-center justify-center py-12 space-y-4 bg-seer-page rounded-xl border border-seer-border">
         <div className="text-center">
-          <p className="text-sm font-semibold text-futarchyGray12 dark:text-white mb-1">
+          <p className="text-sm font-semibold text-seer-text mb-1">
             Failed to load positions
           </p>
-          <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+          <p className="text-xs text-seer-muted">
             {balanceError || 'RPC connection failed'}
           </p>
         </div>
         {refetchBalances && (
           <button
             onClick={refetchBalances}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7 text-futarchyGray12 dark:text-white border border-futarchyGray6 dark:border-futarchyGray6 transition-colors"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-seer-surface-raised hover:bg-seer-border text-seer-text border border-seer-border transition-colors"
           >
             Try Again
           </button>
@@ -96,9 +96,9 @@ const PositionsTable = ({
   // Show loading state if positions are being loaded
   if (isLoadingPositions || !positions) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 space-y-3 bg-futarchyGray2 dark:bg-futarchyDarkGray3 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyDarkGray42">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyGray12 dark:border-white"></div>
-        <p className="text-sm text-futarchyGray11 dark:text-white/70">
+      <div className="flex flex-col items-center justify-center py-12 space-y-3 bg-seer-page rounded-xl border border-seer-border">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-seer-border border-t-seer-purple"></div>
+        <p className="text-sm text-seer-muted ">
           Loading positions...
         </p>
       </div>
@@ -110,7 +110,7 @@ const PositionsTable = ({
   const cDiffRaw = calculateSurplus(positions?.companyYes?.total, positions?.companyNo?.total);
   const hasPos = !ethers.utils.parseUnits(cDiffRaw, 18).isZero() || !ethers.utils.parseUnits(yDiffRaw, 18).isZero();
   if (!hasPos) {
-    return <div className="text-center py-8 text-futarchyGray11">No active positions</div>;
+    return <div className="text-center py-8 text-seer-muted">No active positions</div>;
   }
 
   // Use these for display and logic
@@ -126,10 +126,10 @@ const PositionsTable = ({
 
   return (
     <div>
-      <div className="flex flex-col bg-futarchyGray2 dark:bg-futarchyDarkGray3 rounded-xl border-2 border-futarchyGray62 dark:border-futarchyDarkGray42">
-        <div className="px-5 py-3 border-b-2 border-futarchyGray62 dark:border-futarchyDarkGray42">
+      <div className="flex flex-col bg-seer-page rounded-xl border border-seer-border">
+        <div className="px-5 py-3 border-b border-seer-border">
           <div className="grid grid-cols-4 gap-4 items-center">
-            <div className="text-sm text-futarchyGray11 dark:text-futarchyGray112 font-semibold">Condition</div>
+            <div className="text-sm text-seer-muted font-semibold">Condition</div>
           </div>
         </div>
 
@@ -138,21 +138,21 @@ const PositionsTable = ({
           <div className="px-5 py-3">
             <div className="grid grid-cols-4 gap-4 items-center text-sm">
               <div className="flex items-center gap-2">
-                <svg className={`w-5 h-5 ${Number(companyDiff) >= 0 ? 'text-futarchyBlue9' : 'text-futarchyGold7'}`} viewBox="0 0 20 20" fill="currentColor">
+                <svg className={`w-5 h-5 ${Number(companyDiff) >= 0 ? 'text-seer-positive' : 'text-seer-negative'}`} viewBox="0 0 20 20" fill="currentColor">
                   {Number(companyDiff) >= 0 ? (
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   ) : (
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   )}
                 </svg>
-                <span className="text-futarchyGray12 dark:text-futarchyGray3 font-semibold">
+                <span className="text-seer-text font-semibold">
                   {Number(companyDiff) >= 0 ? 'If the event occurs' : "If the event doesn't occur"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-futarchyGray11 dark:text-futarchyGray112">Receive</span>
+                <span className="text-seer-muted">Receive</span>
               </div>
-              <div className={`font-medium ${Number(companyDiff) >= 0 ? 'text-futarchyBlue9' : 'text-futarchyGold9'}`}>
+              <div className={`font-medium ${Number(companyDiff) >= 0 ? 'text-seer-positive' : 'text-seer-negative'}`}>
                 {formatSmallAmount(Math.abs(companyDiff), config?.BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY')}
               </div>
               <div>
@@ -168,7 +168,7 @@ const PositionsTable = ({
                     setCurrentTransactionData(tx);
                     setIsConfirmModalOpen(true);
                   }}
-                  className="w-full py-2 px-4 rounded-lg font-medium transition-colors dark:hover:bg-futarchyDarkGray4 dark:hover:text-futarchyCrimson7 dark:hover:border-futarchyCrimson7 dark:bg-transparent dark:text-futarchyCrimson9 dark:border-futarchyCrimson9 bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6 hover:bg-futarchyCrimson5"
+                  className="w-full py-2 px-4 rounded-lg font-medium transition-colors hover:bg-seer-surface hover:text-seer-negative hover:border-seer-negative/40 dark:bg-transparent bg-seer-negative/10 text-seer-negative border border-seer-negative/40 hover:bg-seer-negative/10"
                 >
                   {Number(companyDiff) >= 0 ? `Sell YES_${config?.BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY'} to close` : `Sell NO_${config?.BASE_TOKENS_CONFIG?.company?.symbol || 'COMPANY'} to close`}
                 </button>
@@ -182,21 +182,21 @@ const PositionsTable = ({
           <div className="px-5 py-3">
             <div className="grid grid-cols-4 gap-4 items-center text-sm">
               <div className="flex items-center gap-2">
-                <svg className={`w-5 h-5 ${Number(currencyDiff) >= 0 ? 'text-futarchyBlue9' : 'text-futarchyGold7'}`} viewBox="0 0 20 20" fill="currentColor">
+                <svg className={`w-5 h-5 ${Number(currencyDiff) >= 0 ? 'text-seer-positive' : 'text-seer-negative'}`} viewBox="0 0 20 20" fill="currentColor">
                   {Number(currencyDiff) >= 0 ? (
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   ) : (
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   )}
                 </svg>
-                <span className="text-futarchyGray12 dark:text-futarchyGray3 font-semibold">
+                <span className="text-seer-text font-semibold">
                   {Number(currencyDiff) >= 0 ? 'If the event occurs' : "If the event doesn't occur"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-futarchyGray11 dark:text-futarchyGray112">Receive</span>
+                <span className="text-seer-muted">Receive</span>
               </div>
-              <div className={`font-medium ${Number(currencyDiff) >= 0 ? 'text-futarchyBlue9' : 'text-futarchyGold9'}`}>
+              <div className={`font-medium ${Number(currencyDiff) >= 0 ? 'text-seer-positive' : 'text-seer-negative'}`}>
                 {(() => {
                   const val = Math.abs(Number(currencyDiff));
                   const curr = selectedCurrency;
@@ -246,7 +246,7 @@ const PositionsTable = ({
                       setIsConfirmModalOpen(true);
                     }
                   }}
-                  className="w-full py-2 px-4 rounded-lg font-medium transition-colors dark:hover:bg-futarchyDarkGray4 dark:hover:text-futarchyCrimson7 dark:hover:border-futarchyCrimson7 dark:bg-transparent dark:text-futarchyCrimson9 dark:border-futarchyCrimson9 bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6 hover:bg-futarchyCrimson5"
+                  className="w-full py-2 px-4 rounded-lg font-medium transition-colors hover:bg-seer-surface hover:text-seer-negative hover:border-seer-negative/40 dark:bg-transparent bg-seer-negative/10 text-seer-negative border border-seer-negative/40 hover:bg-seer-negative/10"
                 >
                   {(() => {
                     // Check if this is the special case: only currency position exists (no company position)

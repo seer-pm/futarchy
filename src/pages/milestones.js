@@ -11,8 +11,8 @@ const MarketPageShowcase = dynamic(
   () => import("../components/futarchyFi/marketPage/MarketPageShowcase"),
   {
     ssr: false, loading: () => (
-      <div className="flex justify-center items-center min-h-screen bg-white dark:bg-futarchyDarkGray2">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>
+      <div className="flex justify-center items-center min-h-screen bg-seer-page">
+        <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading"></div>
       </div>
     )
   }
@@ -148,13 +148,13 @@ export default function MilestonesPage() {
 
   if (unknownCompanyId !== null && !showMarket) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-futarchyDarkGray2 text-gray-800 dark:text-white px-6">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-seer-page text-seer-text px-5">
         <div className="text-center max-w-md">
-          <h1 className="text-3xl font-bold mb-3">Organization not found</h1>
-          <p className="text-gray-600 dark:text-futarchyGray11 mb-6">
+          <h1 className="text-[26px] leading-tight font-semibold tracking-tight mb-3">Organization not found</h1>
+          <p className="text-[15px] text-seer-muted mb-6 break-words">
             There is no organization with the id &quot;{unknownCompanyId}&quot;.
           </p>
-          <Link href="/companies" className="text-futarchyBlue9 underline">See all organizations</Link>
+          <Link href="/companies" className="text-sm font-semibold text-seer-accent-text underline underline-offset-4">See all organizations</Link>
         </div>
       </div>
     );
@@ -163,8 +163,8 @@ export default function MilestonesPage() {
   // Show loading state initially or while router is not ready
   if (isLoading || !router.isReady || (effectiveCompanyId === null && !showMarket)) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-white dark:bg-futarchyDarkGray2">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-futarchyLavender"></div>
+      <div className="flex justify-center items-center min-h-screen bg-seer-page">
+        <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading"></div>
       </div>
     );
   }

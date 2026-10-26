@@ -14,6 +14,9 @@ import SearchBox from "../../components/SearchBox";
 import ProposalsListCarousel from "../../components/ProposalsListCarousel";
 import PageHeader from "../../../../layout/PageHeader";
 import PageLayout from "../../../../layout/PageLayout";
+import Badge from "../../../../ui/Badge";
+import Button from "../../../../ui/Button";
+import ChainBadge from "../../../companyList/components/ChainBadge";
 import { useOrganization } from "../../../../../hooks/useOrganization";
 import { useChainId } from "wagmi";
 import OrganizationManagerModal from "../../../../debug/OrganizationManagerModal";
@@ -346,9 +349,9 @@ const ProposalsPage = ({
   const heroContent = useMemo(() => {
     if (isLoadingCompany) {
       return (
-        <div className="relative bg-gradient-to-r from-futarchyDarkGray2 via-futarchyDarkGray2 to-futarchyDarkGray2/90 pt-20 font-oxanium">
-          <div className="flex justify-center items-center min-h-[400px]">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
+        <div className="bg-seer-page pt-20">
+          <div className="flex justify-center items-center min-h-[240px]">
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading organization"></div>
           </div>
         </div>
       );
@@ -356,57 +359,46 @@ const ProposalsPage = ({
     if (companyData) {
       return (
         <PageHeader title={companyData.name} logoSrc={companyData.logo} logoAlt={`${companyData.name} Logo`}>
-          <div className="flex flex-col items-start gap-8 w-full">
-            <div className="flex gap-3">
+          <div className="flex flex-col items-start gap-4 w-full mt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <ChainBadge chainId={companyData.chain || 100} />
               {activeProposalsCount > 0 && (
-                <div className="py-1 px-2 bg-futarchyEmerald3 rounded-full text-futarchyEmerald11 text-sm leading-4 border border-futarchyEmerald6 flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-futarchyEmerald11 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-futarchyEmerald11"></span>
-                  </span>
+                <Badge tone="accent">
+                  <span className="h-1.5 w-1.5 rounded-full bg-seer-accent-text" aria-hidden="true"></span>
                   {activeProposalsCount} Active Milestone
                   {activeProposalsCount !== 1 ? "s" : ""}
-                </div>
+                </Badge>
               )}
-              <div className="py-1 px-2 bg-white/10 rounded-full text-futarchyGray112 text-sm leading-4 border border-futarchyGray6">
-                {companyData.currencyToken}
-              </div>
               {/* Subgraph badge */}
               {SHOW_DATA_DEBUG && companyData.fromSubgraph && (
-                <div className="py-1 px-2 bg-purple-600 rounded-full text-white text-sm leading-4 font-medium">
-                  📊 Subgraph
-                </div>
+                <Badge>Subgraph</Badge>
               )}
               {/* Owner badge + Manage button */}
               {isOwner && (
                 <>
-                  <div className="py-1 px-2 bg-green-600 rounded-full text-white text-sm leading-4 font-medium">
-                    👑 Owner
-                  </div>
-                  <button
-                    onClick={() => setShowManager(true)}
-                    className="py-1 px-3 bg-futarchyLavender hover:bg-futarchyLavender/80 rounded-full text-white text-sm leading-4 font-medium transition-colors"
-                  >
-                    ⚙️ Manage Organization
-                  </button>
+                  <Badge tone="positive">Owner</Badge>
+                  <Button variant="outline" size="sm" onClick={() => setShowManager(true)}>
+                    Manage Organization
+                  </Button>
                 </>
               )}
             </div>
 
-            <p className="text-sm lg:text-base text-white/70 leading-relaxed lg:w-2/3">
-              {companyData.description}
-            </p>
+            {companyData.description && (
+              <p className="text-[15px] leading-relaxed text-seer-muted max-w-[68ch]">
+                {companyData.description}
+              </p>
+            )}
 
-            <div className="flex flex-col md:grid md:grid-cols-3 md:gap-8 gap-4 justify-between">
-              <div className="w-full md:w-[167px] lg:py-7 lg:px-10 lg:w-[286px] h-[88px] lg:h-auto p-4 border border-futarchyGray6 bg-futarchyDarkGray3 rounded-xl shadow-[inset_0_0_12px_rgba(255,255,255,0.1)] md:justify-self-start">
-                <p className="text-xl lg:text-4xl text-futarchyGray122 font-semibold text-center lg:leading-10 leading-8">
-                  {visibleMilestonesCount}
-                </p>
-                <p className="text-sm lg:text-[22px] text-futarchyGray112 font-normal text-center lg:leading-9 leading-6">
-                  Milestones
-                </p>
-              </div>
-            </div>
+            {/* The count reads first; the term stays first in the markup for screen readers. */}
+            <dl className="flex items-baseline gap-2">
+              <dt className="order-2 text-[13px] text-seer-muted">
+                Milestones
+              </dt>
+              <dd className="order-1 text-xl font-semibold tabular-nums text-seer-text">
+                {visibleMilestonesCount}
+              </dd>
+            </dl>
           </div>
         </PageHeader>
       );
@@ -415,20 +407,8 @@ const ProposalsPage = ({
   }, [isLoadingCompany, companyData, activeProposalsCount, visibleMilestonesCount]);
 
   return (
-    <RootLayout
-      headerConfig="app"
-      footerConfig="main"
-    >
-      <PageLayout hero={heroContent} contentClassName="pt-10 z-10 select-none">
-        {/* Test div for new market page */}
-        {/*   <div className="my-4 p-4 border border-dashed border-futarchyGray8 dark:border-futarchyDarkGray8 rounded-md">
-          <p className="text-sm text-futarchyGray11 dark:text-futarchyGray112 mb-2">
-            Test Area: Link to new Market Page
-          </p>
-          <Link href="/markets/new" className="text-futarchyBlue11 hover:underline">
-            Go to new Market Page
-          </Link>
-        </div>*/}
+    <RootLayout>
+      <PageLayout hero={heroContent} contentClassName="pt-8 z-10 select-none">
         {/* Filter Controls */}
         <div className="flex flex-col md:flex-row gap-4 justify-center md:justify-between items-center">
           <div className="hidden w-full md:w-auto flex flex-col md:flex-row gap-4">
@@ -450,73 +430,62 @@ const ProposalsPage = ({
         ) : (
           <>
             {/* Proposals Section */}
-            <div className="text-2xl text-futarchyDarkGray4 dark:text-futarchyGray3 font-semibold mt-8">
-              <span>Proposals</span>
-            </div>
-            <div className="text-sm text-futarchyDarkGray4/70 dark:text-futarchyGray112/80 font-medium">
+            <h2 className="mt-8 text-lg font-semibold tracking-tight text-seer-text">
+              Proposals
+            </h2>
+            <p className="mt-1 text-sm text-seer-muted max-w-[68ch]">
               Fully realized proposals with all features and comprehensive
               data where functionalities meet their full expression
-            </div>
+            </p>
             <div className="mt-6">
-              <div className="mt-2">
-                {isLoading ? (
-                  <div className="flex justify-center items-center min-h-[200px]">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyLavender"></div>
-                  </div>
-                ) : error ? (
-                  <div role="alert" className="flex flex-col items-center gap-3 text-center text-futarchyCrimson11 py-8">
-                    <span>{error}</span>
-                    {orgError && (
-                      <button
-                        onClick={() => { setIsLoading(true); refetchOrg(); }}
-                        className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-futarchyGray62 dark:border-futarchyGray11/70 text-futarchyGray12 dark:text-white hover:border-futarchyLavender transition-colors"
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </div>
-                ) : filteredProposals.length === 0 ? (
-                  <div className="text-center text-black dark:text-futarchyGray112 py-8">
-                    No milestones found matching your criteria.
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      className="grid auto-rows-fr gap-6 md:gap-8 justify-center"
-                      style={{
-                        gridTemplateColumns:
-                          "repeat(auto-fit, minmax(304px, 1fr))",
-                        "@media (minWidth: 768px)": {
-                          gridTemplateColumns:
-                            "repeat(auto-fit, minmax(392px, 1fr))",
-                        },
-                        maxWidth: "1280px",
-                        margin: "0 auto",
-                      }}
+              {isLoading ? (
+                <div className="flex justify-center items-center min-h-[200px]">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple" role="status" aria-label="Loading milestones"></div>
+                </div>
+              ) : error ? (
+                <div role="alert" className="flex flex-col items-center gap-3 rounded-surface border border-seer-border bg-seer-surface p-6 text-center">
+                  <span className="text-sm font-semibold text-seer-negative">{error}</span>
+                  {orgError && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setIsLoading(true); refetchOrg(); }}
                     >
-                      {filteredProposals.map((proposal) => (
-                        <div
-                          key={proposal.proposalID || proposal.proposalTitle}
-                          className="flex justify-start"
-                        >
-                          <div className="hidden md:block">
-                            <ProposalsCard
-                              {...proposal}
-                              resolutionStatus={proposal.resolution_status}
-                            />
-                          </div>
-                          <div className="block md:hidden">
-                            <MobileProposalsCard
-                              {...proposal}
-                              resolutionStatus={proposal.resolution_status}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                      Retry
+                    </Button>
+                  )}
+                </div>
+              ) : filteredProposals.length === 0 ? (
+                <p className="rounded-surface border border-dashed border-seer-border p-6 text-center text-sm text-seer-muted">
+                  No milestones found matching your criteria.
+                </p>
+              ) : (
+                <div className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filteredProposals.map((proposal) => (
+                    <div
+                      key={proposal.proposalID || proposal.proposalTitle}
+                      className="flex min-w-0"
+                    >
+                      <div className="hidden md:flex w-full">
+                        <ProposalsCard
+                          {...proposal}
+                          resolutionStatus={proposal.resolution_status}
+                          organizationName={companyData?.name}
+                          organizationLogo={companyData?.logo}
+                        />
+                      </div>
+                      <div className="flex md:hidden w-full">
+                        <MobileProposalsCard
+                          {...proposal}
+                          resolutionStatus={proposal.resolution_status}
+                          organizationName={companyData?.name}
+                          organizationLogo={companyData?.logo}
+                        />
+                      </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}

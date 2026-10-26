@@ -96,6 +96,8 @@ jspm_packages/
 
 # Output of 'npm pack'
 *.tgz
+# The ui-kit tarball installs from here until @seer-pm/ui-kit is published to npm.
+!vendor/*.tgz
 
 # Yarn Integrity file
 .yarn-integrity

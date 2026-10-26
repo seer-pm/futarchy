@@ -309,6 +309,7 @@ export const ListIcon = ({ className }) => (
 
 export const DownVectorIcon = ({ className }) => (
   <svg
+    aria-hidden="true"
     width="14"
     height="8"
     viewBox="0 0 14 8"
@@ -318,7 +319,7 @@ export const DownVectorIcon = ({ className }) => (
   >
     <path
       d="M13 1L7 7L1 1"
-      stroke="#6B7280"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -328,21 +329,24 @@ export const DownVectorIcon = ({ className }) => (
 
 export const DropdownListIcon = ({ className }) => (
   <svg
+    aria-hidden="true"
     width="20"
     height="20"
     viewBox="0 0 20 20"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    className={className}
   >
     <path
       d="M15.9375 10.625C15.9375 10.8736 15.8387 11.1121 15.6629 11.2879C15.4871 11.4637 15.2486 11.5625 15 11.5625H5C4.75136 11.5625 4.5129 11.4637 4.33709 11.2879C4.16127 11.1121 4.0625 10.8736 4.0625 10.625C4.0625 10.3764 4.16127 10.1379 4.33709 9.96209C4.5129 9.78627 4.75136 9.6875 5 9.6875H15C15.2486 9.6875 15.4871 9.78627 15.6629 9.96209C15.8387 10.1379 15.9375 10.3764 15.9375 10.625ZM18.125 5.9375H1.875C1.62636 5.9375 1.3879 6.03627 1.21209 6.21209C1.03627 6.3879 0.9375 6.62636 0.9375 6.875C0.9375 7.12364 1.03627 7.3621 1.21209 7.53791C1.3879 7.71373 1.62636 7.8125 1.875 7.8125H18.125C18.3736 7.8125 18.6121 7.71373 18.7879 7.53791C18.9637 7.3621 19.0625 7.12364 19.0625 6.875C19.0625 6.62636 18.9637 6.3879 18.7879 6.21209C18.6121 6.03627 18.3736 5.9375 18.125 5.9375ZM11.875 13.4375H8.125C7.87636 13.4375 7.6379 13.5363 7.46209 13.7121C7.28627 13.8879 7.1875 14.1264 7.1875 14.375C7.1875 14.6236 7.28627 14.8621 7.46209 15.0379C7.6379 15.2137 7.87636 15.3125 8.125 15.3125H11.875C12.1236 15.3125 12.3621 15.2137 12.5379 15.0379C12.7137 14.8621 12.8125 14.6236 12.8125 14.375C12.8125 14.1264 12.7137 13.8879 12.5379 13.7121C12.3621 13.5363 12.1236 13.4375 11.875 13.4375Z"
-      fill="#636363"
+      fill="currentColor"
     />
   </svg>
 );
 
 export const DropdownCheckIcon = ({ className }) => (
   <svg
+    aria-hidden="true"
     width="16"
     height="16"
     viewBox="0 0 16 16"
@@ -350,10 +354,10 @@ export const DropdownCheckIcon = ({ className }) => (
     xmlns="http://www.w3.org/2000/svg"
     className={className}
   >
-    <circle cx="8" cy="8" r="7" stroke="#6B7280" strokeWidth="2" />
+    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
     <path
       d="M5 8l2 2 4-4"
-      stroke="#6B7280"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -363,6 +367,7 @@ export const DropdownCheckIcon = ({ className }) => (
 
 export const DropdownCancelIcon = ({ className }) => (
   <svg
+    aria-hidden="true"
     width="16"
     height="16"
     viewBox="0 0 16 16"
@@ -370,10 +375,10 @@ export const DropdownCancelIcon = ({ className }) => (
     xmlns="http://www.w3.org/2000/svg"
     className={className}
   >
-    <circle cx="8" cy="8" r="7" stroke="#6B7280" strokeWidth="2" />
+    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
     <path
       d="M5.5 5.5l5 5m0-5l-5 5"
-      stroke="#6B7280"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -383,6 +388,7 @@ export const DropdownCancelIcon = ({ className }) => (
 
 export const DropdownOngoingIcon = ({ className }) => (
   <svg
+    aria-hidden="true"
     width="16"
     height="16"
     viewBox="0 0 16 16"
@@ -390,10 +396,10 @@ export const DropdownOngoingIcon = ({ className }) => (
     xmlns="http://www.w3.org/2000/svg"
     className={className}
   >
-    <circle cx="8" cy="8" r="7" stroke="#6B7280" strokeWidth="2" />
+    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
     <path
       d="M8 4v4l2.5 2.5"
-      stroke="#6B7280"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"

@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import RootLayout from '../../../components/layout/RootLayout';
 import { ENABLE_SUBGRAPH_FOR_ALL_PROPOSALS } from '../../../config/featureFlags';
-import PageLayout from '../../layout/PageLayout';
 import ShowcaseSwapComponent from './ShowcaseSwapComponent';
 import { useAccount } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
@@ -19,7 +18,6 @@ import { useSdaiRate } from '../../../hooks/useSdaiRate';
 import { ProcessingToast, SafeTransactionToast } from './showcase/toasts';
 import { YourViewCard } from './showcase/YourViewCard';
 import { PROPOSALS_USING_SUBGRAPH_TRADES, useMarketPageParams } from './showcase/useMarketPageParams';
-import { useHeroCollapse } from './showcase/useHeroCollapse';
 import { useChartFilters } from './showcase/useChartFilters';
 import { useMarketSpotPrice } from './showcase/useMarketSpotPrice';
 import { useMarketTabs } from './showcase/useMarketTabs';
@@ -31,7 +29,7 @@ import { useCollateralFlow } from './showcase/useCollateralFlow';
 import { useMarketData } from './showcase/useMarketData';
 import { useConfirmSwapState } from './showcase/useConfirmSwapState';
 import { useMarketTiming } from './showcase/useMarketTiming';
-import { MarketHero } from './showcase/MarketHero';
+import { MarketHero, MarketDecisionSection, MarketTestSection, MarketMoneySection, BriefingSection } from './showcase/MarketHero';
 import { MarketChartSection } from './showcase/MarketChartSection';
 import { MarketTabsSection } from './showcase/MarketTabsSection';
 import { MarketModals } from './showcase/MarketModals';
@@ -60,7 +58,6 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const [isCreatePoolModalOpen, setIsCreatePoolModalOpen] = useState(false);
   const [isEditProposalModalOpen, setIsEditProposalModalOpen] = useState(false);
 
-  const { isScrolled, attachHeroRef, heroReserve } = useHeroCollapse();
   const { chartFilters, handleChartFilterClick } = useChartFilters();
 
   const { address: connectedAddress, isConnected: walletConnected } = useAccount();
@@ -238,25 +235,19 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
     setIsEditProposalModalOpen
   };
 
-  // Extract hero content for RootLayout
-  const marketHero = (
-    <MarketHero
-      attachHeroRef={attachHeroRef}
-      isScrolled={isScrolled}
-      marketData={marketData}
-      config={config}
-      configLoading={configLoading}
-      currencySymbol={currencySymbol}
-      isProposalOwner={isProposalOwner}
-      prices={prices}
-      pool={{ poolData, poolDataLoading, poolDataError }}
-      liquiditySummary={liquiditySummary}
-      timing={timing}
-      snapshot={snapshot}
-      badgeModals={badgeModals}
-    />
-  );
+  const briefingProps = {
+    marketData,
+    config,
+    configLoading,
+    currencySymbol,
+    snapshot,
+    timing,
+    badgeModals
+  };
 
+  // The page is a briefing for the people deciding (left) with the trade rail beside it (right).
+  // On a phone the rail sits after the chart: the reader sees the answer and the evidence, then
+  // can act, then reads on about the test and the money.
   return (
     <>
       {/* Wrong Network Modal */}
@@ -266,146 +257,140 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
         onClose={() => chainValidation.setShowModal(false)}
       />
 
-      <RootLayout headerConfig="app" footerConfig="main" useSnapScroll={false} heroContent={marketHero}>
-        <PageLayout>
-          {/* Holds the height the sticky hero gives up when it collapses */}
-          <div aria-hidden="true" style={{ height: heroReserve }} />
-          {/* Main Content Area - Split Design */}
-          <div className="relative flex-1">
-            {/* Dark top half */}
-            <div id="black-section-boundary" className="bg-black">
-              <div className="absolute inset-0 background-gradient opacity-20" />
-            </div>
+      <RootLayout useSnapScroll={false}>
+        <div className="bg-seer-page text-seer-text">
+          <div className="container mx-auto px-5 pt-28 pb-20">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-10">
+              <div className="lg:col-span-8 lg:row-start-1 min-w-0">
+                <MarketHero
+                  {...briefingProps}
+                  isProposalOwner={isProposalOwner}
+                  prices={prices}
+                />
+                <MarketDecisionSection marketData={marketData} />
+                <BriefingSection id="briefing-chart" title="What the market expects">
+                  <p className="-mt-2 mb-5 text-sm leading-relaxed text-seer-muted max-w-[68ch]">
+                    Each line is the token&apos;s price in one of two worlds: purple if the proposal passes, gold if it
+                    fails. The gap between them is the market&apos;s estimate of the proposal&apos;s impact; the dashed line is
+                    today&apos;s spot price.
+                  </p>
+                  <MarketChartSection
+                    showTripleChart={showTripleChart}
+                    showSubgraphChart={showSubgraphChart}
+                    config={config}
+                    currencySymbol={currencySymbol}
+                    selectedCurrency={selectedCurrency}
+                    rate={rate}
+                    prices={prices}
+                    latestPrices={latestPrices}
+                    hasSpot={hasSpot}
+                    chartFilters={chartFilters}
+                    handleChartFilterClick={handleChartFilterClick}
+                    marketHasClosed={marketHasClosed}
+                    spot={spot}
+                  />
+                </BriefingSection>
+              </div>
 
-            {/* White bottom half */}
-            <div className="bg-white dark:bg-futarchyDarkGray2 w-full relative">
-              {/* Content */}
-              <div className="relative z-10">
-                <div className="container mx-auto pt-10 pb-20">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Left side - Market iframe */}
-                    <div className="md:col-span-2">
-                      {/* Title */}
+              <aside aria-label="Trade" className="lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:row-span-2 min-w-0">
+                <div className="lg:sticky lg:top-28 space-y-6">
+                  <ShowcaseSwapComponent
+                    positions={positions}
+                    prices={{
+                      yesPrice: newYesPrice,
+                      noPrice: newNoPrice,
+                      spotPrice: newBasePrice !== null ? newBasePrice : latestPrices.spotPriceSDAI, // Pass the actual spot price
+                      isLoading: !pricesUnavailable && (newYesPrice === null || newNoPrice === null),
+                      error: pricesUnavailable ? (livePriceError || 'Price data unavailable') : null
+                    }}
+                    walletBalances={{
+                      sdaiBalance: rawBalances.currency,
+                      wxdaiBalance: rawBalances.native, // Native xDAI balance
+                      nativeBalance: rawBalances.native
+                    }}
+                    isLoadingBalances={isLoadingPositions}
+                    account={address}
+                    isConnected={isConnected}
+                    onConnectWallet={handleConnectWallet}
+                    proposalId={proposalId}
+                    marketHasClosed={marketHasClosed}
+                    refetchBalances={refetchBalances}
+                  />
 
+                  <YourViewCard subject={marketSubject} />
 
-                      <MarketChartSection
-                        showTripleChart={showTripleChart}
-                        showSubgraphChart={showSubgraphChart}
-                        config={config}
-                        currencySymbol={currencySymbol}
-                        selectedCurrency={selectedCurrency}
-                        rate={rate}
-                        prices={prices}
-                        latestPrices={latestPrices}
-                        hasSpot={hasSpot}
-                        chartFilters={chartFilters}
-                        handleChartFilterClick={handleChartFilterClick}
-                        marketHasClosed={marketHasClosed}
-                        spot={spot}
-                      />
-
-                      {/* Tabs Section */}
-                      <MarketTabsSection
-                        tabs={tabs}
-                        balances={balances}
-                        config={config}
-                        tokenImages={tokenImages}
-                        selectedCurrency={selectedCurrency}
-                        rate={rate}
-                        setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
-                        setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
-                      />
-                    </div>
-
-                    {/* Right side - Balance Panel */}
-                    <div className="md:col-span-1">
-                      <div className="sticky top-24 space-y-8">
-                        {(
-                          <div className="">
-                            <ShowcaseSwapComponent
-                              positions={positions}
-                              prices={{
-                                yesPrice: newYesPrice,
-                                noPrice: newNoPrice,
-                                spotPrice: newBasePrice !== null ? newBasePrice : latestPrices.spotPriceSDAI, // Pass the actual spot price
-                                isLoading: !pricesUnavailable && (newYesPrice === null || newNoPrice === null),
-                                error: pricesUnavailable ? (livePriceError || 'Price data unavailable') : null
-                              }}
-                              walletBalances={{
-                                sdaiBalance: rawBalances.currency,
-                                wxdaiBalance: rawBalances.native, // Native xDAI balance
-                                nativeBalance: rawBalances.native
-                              }}
-                              isLoadingBalances={isLoadingPositions}
-                              account={address}
-                              isConnected={isConnected}
-                              onConnectWallet={handleConnectWallet}
-                              proposalId={proposalId}
-                              marketHasClosed={marketHasClosed}
-                              refetchBalances={refetchBalances}
-                            />
-                          </div>
-                        )}
-
-                        <YourViewCard subject={marketSubject} />
-
-                        {/* Balance Stats Container */}
-                        <MarketBalancePanel
-                          positions={positions}
-                          address={address}
-                          handleOpenCollateralModal={handleOpenCollateralModal}
-                          isLoadingPositions={isLoadingPositions}
-                          balanceError={balanceError}
-                          refetchBalances={refetchBalances}
-                          proposalId={proposalId}
-                          devMode={true}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <MarketBalancePanel
+                    positions={positions}
+                    address={address}
+                    handleOpenCollateralModal={handleOpenCollateralModal}
+                    isLoadingPositions={isLoadingPositions}
+                    balanceError={balanceError}
+                    refetchBalances={refetchBalances}
+                    proposalId={proposalId}
+                    devMode={true}
+                  />
                 </div>
+              </aside>
+
+              <div className="lg:col-span-8 lg:row-start-2 min-w-0 -mt-10">
+                <MarketTestSection config={config} marketData={marketData} snapshot={snapshot} />
+                <MarketMoneySection
+                  {...briefingProps}
+                  pool={{ poolData, poolDataLoading, poolDataError }}
+                  liquiditySummary={liquiditySummary}
+                />
+                <BriefingSection id="briefing-activity" title="Activity">
+                  <MarketTabsSection
+                    tabs={tabs}
+                    balances={balances}
+                    config={config}
+                    tokenImages={tokenImages}
+                    selectedCurrency={selectedCurrency}
+                    rate={rate}
+                    setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
+                    setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
+                  />
+                </BriefingSection>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Add Processing Toast */}
-          {showProcessingToast && processingStep && !isCollateralModalOpen && (
-            <ProcessingToast
-              step={processingStep}
-              onToastClick={handleToastClick}
-            />
-          )}
-
-
-
-          {/* Render Modals */}
-          <MarketModals
-            collateral={collateral}
-            confirmSwap={confirmSwap}
-            badgeModals={badgeModals}
-            isDebugMode={isDebugMode}
-            handleSafeTransaction={handleSafeTransaction}
-            address={address}
-            positions={positions}
-            proposalId={proposalId}
-            config={config}
-            configLoading={configLoading}
-            refetchConfig={refetchConfig}
+        {/* Add Processing Toast */}
+        {showProcessingToast && processingStep && !isCollateralModalOpen && (
+          <ProcessingToast
+            step={processingStep}
+            onToastClick={handleToastClick}
           />
+        )}
 
-          <MarketDebugPanels
-            isDebugMode={isDebugMode}
-            marketAddress={MARKET_ADDRESS}
-            snapshot={snapshot}
-            prices={prices}
-            positions={positions}
-            config={config}
-          />
+        {/* Render Modals */}
+        <MarketModals
+          collateral={collateral}
+          confirmSwap={confirmSwap}
+          badgeModals={badgeModals}
+          isDebugMode={isDebugMode}
+          handleSafeTransaction={handleSafeTransaction}
+          address={address}
+          positions={positions}
+          proposalId={proposalId}
+          config={config}
+          configLoading={configLoading}
+          refetchConfig={refetchConfig}
+        />
 
-          {safeToastVisible && (
-            <SafeTransactionToast onClose={() => setSafeToastVisible(false)} />
-          )}
-        </PageLayout>
+        <MarketDebugPanels
+          isDebugMode={isDebugMode}
+          marketAddress={MARKET_ADDRESS}
+          snapshot={snapshot}
+          prices={prices}
+          positions={positions}
+          config={config}
+        />
+
+        {safeToastVisible && (
+          <SafeTransactionToast onClose={() => setSafeToastVisible(false)} />
+        )}
       </RootLayout>
     </>
   );

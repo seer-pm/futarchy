@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog } from '@seer-pm/ui-kit/react';
+import {
+    CheckCircleIcon,
+    ExclamationTriangleIcon,
+    PlusIcon,
+    XCircleIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from 'wagmi';
 import { CHAIN_CONFIG, getExplorerTxUrl, getExplorerAddressUrl } from './constants/chainConfig';
 import { CONTRACT_ABIS } from '../futarchyFi/marketPage/constants/contracts';
 import { AGGREGATOR_SUBGRAPH_URL } from '../../config/subgraphEndpoints';
+import Badge from '../ui/Badge';
+import Button from '../ui/Button';
+import { Field, Input } from '../ui/Field';
 
 // Registry is ALWAYS on Gnosis Chain
 const REGISTRY_CHAIN_ID = 100;
@@ -256,326 +266,284 @@ const EditCompanyModal = ({ isOpen, onClose, organizationAddress, initialData = 
 
     if (!isOpen) return null;
 
+    const segmentClass = (selected) => `rounded-control px-2 py-1 text-xs font-semibold transition-colors ${selected
+        ? 'bg-seer-surface-raised text-seer-text'
+        : 'text-seer-muted hover:text-seer-text'
+        }`;
+
+    const footer = (
+        <>
+            {/* Error Message */}
+            {writeError && (
+                <div role="alert" className="flex basis-full items-start gap-2 rounded-surface border border-seer-negative/40 bg-seer-negative/10 p-3 text-sm text-seer-negative">
+                    <XCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 break-words">{writeError.message?.slice(0, 100)}</span>
+                </div>
+            )}
+
+            {/* Success Message */}
+            {isSuccess && (
+                <div role="status" className="basis-full space-y-2 rounded-surface border border-seer-positive/40 bg-seer-positive/10 p-3 text-sm text-seer-positive">
+                    <div className="flex items-center gap-2">
+                        <CheckCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                        Metadata updated successfully!
+                    </div>
+                    {transactionHash && (
+                        <a
+                            href={getExplorerTxUrl(REGISTRY_CHAIN_ID, transactionHash)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block text-xs text-seer-accent-text hover:underline"
+                        >
+                            View transaction →
+                        </a>
+                    )}
+                </div>
+            )}
+
+            {/* Processing Message */}
+            {isProcessing && (
+                <div role="status" className="flex basis-full items-center gap-2 rounded-surface border border-seer-border bg-seer-surface-raised p-3 text-sm text-seer-text">
+                    <LoadingSpinner className="h-4 w-4" />
+                    {isSubmitting ? 'Waiting for wallet...' : 'Confirming transaction...'}
+                </div>
+            )}
+
+            {/* Close button */}
+            <Button variant="outline" block onClick={handleClose}>
+                {isSuccess ? 'Close' : 'Cancel'}
+            </Button>
+        </>
+    );
+
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={handleClose}
-                >
-                    <motion.div
-                        className="bg-white dark:bg-futarchyDarkGray3 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-futarchyGray6 dark:border-futarchyDarkGray7"
-                        onClick={(e) => e.stopPropagation()}
-                        initial={{ scale: 0.95, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.95, opacity: 0 }}
+        <Dialog
+            open={isOpen}
+            onClose={handleClose}
+            dismissible={!isProcessing}
+            title={(
+                <span className="flex flex-wrap items-center gap-2">
+                    Edit Organization
+                    <Badge tone="positive">{chainConfig?.name || 'Gnosis'} Registry</Badge>
+                </span>
+            )}
+            footer={footer}
+        >
+            <div className="space-y-5">
+                {/* Contract Address */}
+                <div className="seer-field">
+                    <span className="seer-label">Organization contract</span>
+                    <div className="flex items-center gap-2">
+                        <code className="min-w-0 flex-1 break-all rounded-control bg-seer-surface-raised p-2 font-mono text-xs text-seer-text">
+                            {organizationAddress}
+                        </code>
+                        <Button variant="outline" size="sm" onClick={() => copyToClipboard(organizationAddress, 'addr')}>
+                            {copiedField === 'addr' ? 'Copied' : 'Copy'}
+                        </Button>
+                    </div>
+                    <a
+                        href={getExplorerAddressUrl(REGISTRY_CHAIN_ID, organizationAddress)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-seer-accent-text hover:underline"
                     >
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-futarchyGray6 dark:border-futarchyDarkGray7">
-                            <div className="flex items-center gap-3">
-                                <span className="text-2xl">🏢</span>
-                                <h2 className="text-lg font-semibold text-futarchyGray12 dark:text-futarchyGray112">
-                                    Edit Organization
-                                </h2>
-                                <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-500 text-white">
-                                    {chainConfig?.name || 'Gnosis'} Registry
-                                </span>
+                        View on {chainConfig?.name || 'Gnosis'} Explorer →
+                    </a>
+                </div>
+
+                {isLoadingData ? (
+                    <div className="flex items-center justify-center gap-2 py-8 text-seer-muted">
+                        <LoadingSpinner className="h-5 w-5" />
+                        <span>Loading organization data...</span>
+                    </div>
+                ) : loadError ? (
+                    <div role="alert" className="flex items-start gap-2 rounded-surface border border-seer-negative/40 bg-seer-negative/10 p-4 text-sm text-seer-negative">
+                        <XCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 break-words">Failed to load: {loadError}</span>
+                    </div>
+                ) : (
+                    <>
+                        {/* Company Name */}
+                        <Field label="Company name">
+                            <Input
+                                type="text"
+                                value={companyName}
+                                onChange={(e) => setCompanyName(e.target.value)}
+                                placeholder="Gnosis DAO"
+                            />
+                        </Field>
+
+                        {/* Description */}
+                        <Field label="Description">
+                            <textarea
+                                className="seer-input resize-none"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="Description of the organization..."
+                                rows={3}
+                            />
+                        </Field>
+
+                        {/* Chain Warning */}
+                        {!isOnCorrectChain && isConnected && (
+                            <div className="space-y-2 rounded-surface border border-seer-warning/40 bg-seer-warning/10 p-3">
+                                <div className="flex items-center gap-2 text-sm text-seer-warning">
+                                    <ExclamationTriangleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                                    <span>Registry contracts are on <strong>Gnosis Chain</strong>. Please switch.</span>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    block
+                                    onClick={() => switchChain({ chainId: REGISTRY_CHAIN_ID })}
+                                    disabled={isSwitchingChain}
+                                    busy={isSwitchingChain}
+                                >
+                                    {isSwitchingChain ? 'Switching...' : 'Switch to Gnosis Chain'}
+                                </Button>
                             </div>
-                            <button
-                                onClick={handleClose}
-                                disabled={isProcessing}
-                                className="text-futarchyGray9 hover:text-futarchyGray12 dark:hover:text-futarchyGray112 transition-colors p-1"
-                            >
-                                ✕
-                            </button>
+                        )}
+
+                        {/* Update Company Info Button */}
+                        <Button
+                            block
+                            disabled={isProcessing || !isConnected || !isOnCorrectChain}
+                            busy={isProcessing && updateType === 'info'}
+                            onClick={handleUpdateCompanyInfo}
+                        >
+                            {isProcessing && updateType === 'info' ? 'Updating...' : 'Update company info'}
+                        </Button>
+
+                        {/* Separator */}
+                        <hr className="border-seer-border" />
+
+                        {/* Extended Metadata Section */}
+                        <div className="flex items-center justify-between gap-3">
+                            <h4 className="text-base font-semibold text-seer-text">
+                                Extended Metadata
+                            </h4>
+                            {/* Mode Toggle */}
+                            <div className="flex items-center gap-1 rounded-control border border-seer-border p-1">
+                                <button
+                                    type="button"
+                                    aria-pressed={metadataMode === 'keyValue'}
+                                    onClick={() => setMetadataMode('keyValue')}
+                                    className={segmentClass(metadataMode === 'keyValue')}
+                                >
+                                    Key-Value
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-pressed={metadataMode === 'raw'}
+                                    onClick={() => {
+                                        setMetadataMode('raw');
+                                        validateJson(metadata);
+                                    }}
+                                    className={segmentClass(metadataMode === 'raw')}
+                                >
+                                    Raw JSON
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Body */}
-                        <div className="p-6 space-y-5">
-                            {/* Contract Address */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112">
-                                    Organization Contract
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    <code className="flex-1 text-xs text-futarchyGray12 dark:text-futarchyGray112 bg-futarchyGray4 dark:bg-futarchyDarkGray4 p-2 rounded break-all font-mono">
-                                        {organizationAddress}
-                                    </code>
-                                    <button
-                                        className="text-xs px-2 py-1 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray5 text-futarchyGray12 dark:text-futarchyGray112 transition-colors"
-                                        onClick={() => copyToClipboard(organizationAddress, 'addr')}
-                                    >
-                                        {copiedField === 'addr' ? '✓' : 'Copy'}
-                                    </button>
-                                </div>
-                                <a
-                                    href={getExplorerAddressUrl(REGISTRY_CHAIN_ID, organizationAddress)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-futarchyBlue11 hover:underline"
-                                >
-                                    View on {chainConfig?.name || 'Gnosis'} Explorer →
-                                </a>
-                            </div>
-
-                            {isLoadingData ? (
-                                <div className="flex items-center gap-2 text-futarchyGray9 dark:text-futarchyGray112 py-8 justify-center">
-                                    <LoadingSpinner className="h-5 w-5" />
-                                    <span>Loading organization data...</span>
-                                </div>
-                            ) : loadError ? (
-                                <div className="p-4 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg">
-                                    ❌ Failed to load: {loadError}
-                                </div>
+                        {/* Metadata Editor */}
+                        <div className="space-y-2">
+                            {metadataMode === 'keyValue' ? (
+                                <>
+                                    {/* Key-Value Pairs */}
+                                    <div className="space-y-2">
+                                        {keyValuePairs.map((pair, index) => (
+                                            <div key={index} className="flex items-center gap-2">
+                                                <Input
+                                                    type="text"
+                                                    className="!w-auto flex-1 font-mono text-sm"
+                                                    aria-label="Key"
+                                                    placeholder="key"
+                                                    value={pair.key}
+                                                    onChange={(e) => handleKeyValueChange(index, 'key', e.target.value)}
+                                                />
+                                                <span className="text-seer-muted">:</span>
+                                                <Input
+                                                    type="text"
+                                                    className="!w-auto flex-[2] font-mono text-sm"
+                                                    aria-label="Value"
+                                                    placeholder="value"
+                                                    value={pair.value}
+                                                    onChange={(e) => handleKeyValueChange(index, 'value', e.target.value)}
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    icon
+                                                    onClick={() => removeKeyValuePair(index)}
+                                                    className="shrink-0 !text-seer-negative"
+                                                    title="Remove"
+                                                    aria-label="Remove"
+                                                >
+                                                    <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {/* Add New Key-Value Button */}
+                                    <Button variant="outline" block onClick={addKeyValuePair}>
+                                        <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                                        Add field
+                                    </Button>
+                                </>
                             ) : (
                                 <>
-                                    {/* Company Name */}
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112">
-                                            Company Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="w-full px-4 py-3 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all"
-                                            value={companyName}
-                                            onChange={(e) => setCompanyName(e.target.value)}
-                                            placeholder="Gnosis DAO"
-                                        />
-                                    </div>
-
-                                    {/* Description */}
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112">
-                                            Description
-                                        </label>
-                                        <textarea
-                                            className="w-full px-4 py-3 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all resize-none"
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            placeholder="Description of the organization..."
-                                            rows={3}
-                                        />
-                                    </div>
-
-                                    {/* Chain Warning */}
-                                    {!isOnCorrectChain && isConnected && (
-                                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-2">
-                                            <div className="flex items-center gap-2 text-amber-400 text-sm">
-                                                ⚠️ <span>Registry contracts are on <strong>Gnosis Chain</strong>. Please switch.</span>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
-                                                onClick={() => switchChain({ chainId: REGISTRY_CHAIN_ID })}
-                                                disabled={isSwitchingChain}
-                                            >
-                                                {isSwitchingChain ? 'Switching...' : 'Switch to Gnosis Chain'}
-                                            </button>
+                                    {/* Raw JSON Textarea */}
+                                    <textarea
+                                        className="seer-input resize-none font-mono text-sm"
+                                        aria-invalid={jsonError ? 'true' : undefined}
+                                        aria-label="Raw JSON metadata"
+                                        value={metadata}
+                                        onChange={(e) => handleMetadataRawChange(e.target.value)}
+                                        placeholder='{"coingecko_ticker": "...", "chain": "100"}'
+                                        rows={5}
+                                    />
+                                    {/* JSON Validation Error */}
+                                    {jsonError && (
+                                        <div className="flex items-center gap-2 text-sm text-seer-negative">
+                                            <ExclamationTriangleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                            <span className="min-w-0 break-words">{jsonError}</span>
                                         </div>
                                     )}
-
-                                    {/* Update Company Info Button */}
-                                    <button
-                                        type="button"
-                                        className={`w-full py-3 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 ${!isConnected || isProcessing || !isOnCorrectChain
-                                            ? 'bg-futarchyGray6 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700'
-                                            }`}
-                                        disabled={isProcessing || !isConnected || !isOnCorrectChain}
-                                        onClick={handleUpdateCompanyInfo}
-                                    >
-                                        {isProcessing && updateType === 'info' ? (
-                                            <>
-                                                <LoadingSpinner className="h-4 w-4" />
-                                                Updating...
-                                            </>
-                                        ) : (
-                                            '✅ Update Company Info'
-                                        )}
-                                    </button>
-
-                                    {/* Separator */}
-                                    <hr className="border-futarchyGray6 dark:border-futarchyDarkGray7" />
-
-                                    {/* Extended Metadata Section */}
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-semibold text-futarchyGray11 dark:text-futarchyGray112 uppercase">
-                                            Extended Metadata
-                                        </h4>
-                                        <div className="flex items-center gap-1 bg-futarchyGray4 dark:bg-futarchyDarkGray4 rounded-lg p-0.5">
-                                            <button
-                                                type="button"
-                                                onClick={() => setMetadataMode('keyValue')}
-                                                className={`px-2 py-1 text-xs rounded-md transition-all ${metadataMode === 'keyValue'
-                                                        ? 'bg-white dark:bg-futarchyDarkGray6 text-futarchyGray12 dark:text-futarchyGray112 shadow-sm'
-                                                        : 'text-futarchyGray9 dark:text-futarchyGray112 hover:text-futarchyGray11'
-                                                    }`}
-                                            >
-                                                🔑 Key-Value
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setMetadataMode('raw');
-                                                    validateJson(metadata);
-                                                }}
-                                                className={`px-2 py-1 text-xs rounded-md transition-all ${metadataMode === 'raw'
-                                                        ? 'bg-white dark:bg-futarchyDarkGray6 text-futarchyGray12 dark:text-futarchyGray112 shadow-sm'
-                                                        : 'text-futarchyGray9 dark:text-futarchyGray112 hover:text-futarchyGray11'
-                                                    }`}
-                                            >
-                                                📝 Raw JSON
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Metadata Editor */}
-                                    <div className="space-y-2">
-                                        {metadataMode === 'keyValue' ? (
-                                            <>
-                                                <div className="space-y-2">
-                                                    {keyValuePairs.map((pair, index) => (
-                                                        <div key={index} className="flex items-center gap-2">
-                                                            <input
-                                                                type="text"
-                                                                className="flex-1 px-3 py-2 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all text-sm font-mono"
-                                                                placeholder="key"
-                                                                value={pair.key}
-                                                                onChange={(e) => handleKeyValueChange(index, 'key', e.target.value)}
-                                                            />
-                                                            <span className="text-futarchyGray9 dark:text-futarchyGray112">:</span>
-                                                            <input
-                                                                type="text"
-                                                                className="flex-[2] px-3 py-2 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all text-sm font-mono"
-                                                                placeholder="value"
-                                                                value={pair.value}
-                                                                onChange={(e) => handleKeyValueChange(index, 'value', e.target.value)}
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeKeyValuePair(index)}
-                                                                className="p-2 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                                                                title="Remove"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={addKeyValuePair}
-                                                    className="w-full py-2 border-2 border-dashed border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-sm text-futarchyGray9 dark:text-futarchyGray112 hover:border-futarchyBlue9 hover:text-futarchyBlue9 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    ➕ Add Field
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <textarea
-                                                    className={`w-full px-4 py-3 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all resize-none font-mono text-sm ${jsonError
-                                                            ? 'border-red-500 dark:border-red-400'
-                                                            : 'border-futarchyGray6 dark:border-futarchyDarkGray7'
-                                                        }`}
-                                                    value={metadata}
-                                                    onChange={(e) => handleMetadataRawChange(e.target.value)}
-                                                    placeholder='{"coingecko_ticker": "...", "chain": "100"}'
-                                                    rows={5}
-                                                />
-                                                {jsonError && (
-                                                    <div className="flex items-center gap-2 text-sm text-red-400">
-                                                        <span>⚠️</span>
-                                                        <span>{jsonError}</span>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Metadata URI */}
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112">
-                                            Metadata URI
-                                            <span className="text-xs text-futarchyGray9 dark:text-futarchyGray112 ml-2">(IPFS or HTTP)</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="w-full px-4 py-3 bg-futarchyGray4 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyDarkGray7 rounded-lg text-futarchyGray12 dark:text-futarchyGray112 focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all font-mono text-sm"
-                                            value={metadataURI}
-                                            onChange={(e) => setMetadataURI(e.target.value)}
-                                            placeholder="ipfs://Qm... or https://..."
-                                        />
-                                    </div>
-
-                                    {/* Update Extended Metadata Button */}
-                                    <button
-                                        type="button"
-                                        className={`w-full py-3 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 ${!isConnected || isProcessing || !isOnCorrectChain || jsonError
-                                            ? 'bg-futarchyGray6 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700'
-                                            }`}
-                                        disabled={isProcessing || !isConnected || !isOnCorrectChain || !!jsonError}
-                                        onClick={handleUpdateExtended}
-                                    >
-                                        {isProcessing && updateType === 'extended' ? (
-                                            <>
-                                                <LoadingSpinner className="h-4 w-4" />
-                                                Updating...
-                                            </>
-                                        ) : (
-                                            '📦 Update Extended Metadata'
-                                        )}
-                                    </button>
                                 </>
                             )}
                         </div>
 
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-futarchyGray6 dark:border-futarchyDarkGray7 space-y-4">
-                            {writeError && (
-                                <div className="p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/30">
-                                    ❌ {writeError.message?.slice(0, 100)}
-                                </div>
+                        {/* Metadata URI */}
+                        <Field
+                            label={(
+                                <>
+                                    Metadata URI
+                                    <span className="ml-2 text-xs font-normal text-seer-muted">(IPFS or HTTP)</span>
+                                </>
                             )}
+                        >
+                            <Input
+                                type="text"
+                                className="font-mono text-sm"
+                                value={metadataURI}
+                                onChange={(e) => setMetadataURI(e.target.value)}
+                                placeholder="ipfs://Qm... or https://..."
+                            />
+                        </Field>
 
-                            {isSuccess && (
-                                <div className="p-3 rounded-lg text-sm bg-green-500/10 text-green-400 border border-green-500/30 space-y-2">
-                                    <div>✅ Metadata updated successfully!</div>
-                                    {transactionHash && (
-                                        <a
-                                            href={getExplorerTxUrl(REGISTRY_CHAIN_ID, transactionHash)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs text-futarchyBlue11 hover:underline block"
-                                        >
-                                            View transaction →
-                                        </a>
-                                    )}
-                                </div>
-                            )}
-
-                            {isProcessing && (
-                                <div className="p-3 rounded-lg text-sm bg-blue-500/10 text-blue-400 border border-blue-500/30 flex items-center gap-2">
-                                    <LoadingSpinner className="h-4 w-4" />
-                                    {isSubmitting ? 'Waiting for wallet...' : 'Confirming transaction...'}
-                                </div>
-                            )}
-
-                            <button
-                                type="button"
-                                className="w-full py-3 rounded-xl font-semibold text-futarchyGray12 dark:text-futarchyGray112 bg-futarchyGray4 dark:bg-futarchyDarkGray5 hover:bg-futarchyGray5 dark:hover:bg-futarchyDarkGray6 transition-all"
-                                onClick={handleClose}
-                            >
-                                {isSuccess ? 'Close' : 'Cancel'}
-                            </button>
-                        </div>
-                    </motion.div>
-                </motion.div>
-            )}
-        </AnimatePresence>
+                        {/* Update Extended Metadata Button */}
+                        <Button
+                            block
+                            disabled={isProcessing || !isConnected || !isOnCorrectChain || !!jsonError}
+                            busy={isProcessing && updateType === 'extended'}
+                            onClick={handleUpdateExtended}
+                        >
+                            {isProcessing && updateType === 'extended' ? 'Updating...' : 'Update extended metadata'}
+                        </Button>
+                    </>
+                )}
+            </div>
+        </Dialog>
     );
 };
 

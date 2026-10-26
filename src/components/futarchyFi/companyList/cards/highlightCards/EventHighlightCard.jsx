@@ -12,7 +12,7 @@ const poolFetcher = createSubgraphPoolFetcher();
 
 // Simple hook for fetching latest pool prices from the subgraph including event probability.
 // Accepts optional prefetchedPrices to skip the per-pool fetch when bulk-fetched prices are available.
-const useLatestPoolPrices = (poolAddresses, eventId, metadata, prefetchedPrices = null) => {
+export const useLatestPoolPrices = (poolAddresses, eventId, metadata, prefetchedPrices = null) => {
   const [prices, setPrices] = useState({ yes: null, no: null, eventProbability: null });
   const [loading, setLoading] = useState(true);
 

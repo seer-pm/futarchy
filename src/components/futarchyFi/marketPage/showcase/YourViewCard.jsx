@@ -1,40 +1,42 @@
+import { Surface, SurfaceHeader } from '../../../ui/Surface';
 
-
+// How a view on the proposal maps onto trades in each conditional world. Buy and sell carry the
+// positive and negative status colours; the words, not the colour, say which is which.
 const YourViewCard = ({ subject }) => (
-  <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
-    <div className="px-4 py-3 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70">
-      <h3 className="font-oxanium text-sm font-semibold text-futarchyGray12 dark:text-white">
-        Your view on {subject}
-      </h3>
-    </div>
-    <div className="px-4 py-3">
-      <table className="w-full table-fixed font-oxanium text-xs text-center">
+  <Surface>
+    <SurfaceHeader as="h3" title={`Your view on ${subject}`} />
+    <div className="px-4 py-2">
+      <table className="w-full table-fixed text-[13px] text-center">
         <thead>
-          <tr className="text-futarchyGray11 dark:text-white/60">
-            <th className="pb-2 text-left font-medium" />
-            <th className="pb-2 font-medium">If YES</th>
-            <th className="pb-2 font-medium">If NO</th>
+          <tr className="text-seer-muted">
+            <th className="pb-2 text-left font-normal" />
+            <th className="pb-2 font-normal">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-pass" aria-hidden="true" />If YES
+              </span>
+            </th>
+            <th className="pb-2 font-normal">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-fail" aria-hidden="true" />If NO
+              </span>
+            </th>
           </tr>
         </thead>
-        <tbody className="text-futarchyGray12 dark:text-white">
-          <tr className="border-t border-futarchyGray62 dark:border-futarchyGray11/50">
-            <th scope="row" className="py-2 text-left font-medium">
-              <span className="inline-block w-2 h-2 mr-2 rounded-full bg-futarchyTeal9" />Bullish
-            </th>
-            <td className="py-2 font-semibold text-futarchyTeal9">BUY</td>
-            <td className="py-2 font-semibold text-futarchyCrimson9">SELL</td>
+        <tbody className="text-seer-text">
+          <tr className="border-t border-seer-border">
+            <th scope="row" className="py-2.5 text-left font-semibold">Bullish</th>
+            <td className="py-2.5 font-semibold text-seer-positive">BUY</td>
+            <td className="py-2.5 font-semibold text-seer-negative">SELL</td>
           </tr>
-          <tr className="border-t border-futarchyGray62 dark:border-futarchyGray11/50">
-            <th scope="row" className="py-2 text-left font-medium">
-              <span className="inline-block w-2 h-2 mr-2 rounded-full bg-futarchyCrimson9" />Bearish
-            </th>
-            <td className="py-2 font-semibold text-futarchyCrimson9">SELL</td>
-            <td className="py-2 font-semibold text-futarchyTeal9">BUY</td>
+          <tr className="border-t border-seer-border">
+            <th scope="row" className="py-2.5 text-left font-semibold">Bearish</th>
+            <td className="py-2.5 font-semibold text-seer-negative">SELL</td>
+            <td className="py-2.5 font-semibold text-seer-positive">BUY</td>
           </tr>
         </tbody>
       </table>
     </div>
-  </div>
+  </Surface>
 );
 
 export { YourViewCard };

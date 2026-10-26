@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { PRECISION_CONFIG } from '../futarchyFi/marketPage/constants/contracts';
+import { CHART_FONT_FAMILY, chartColors, impactColor } from '../../config/chartColors';
 
 const computeRightOffset = (...seriesList) => {
   if (!seriesList.length) return 0;
@@ -14,9 +15,6 @@ const computeRightOffset = (...seriesList) => {
 const DEFAULT_YES_POOL = '0xF336F812Db1ad142F22A9A4dd43D40e64B478361';
 const DEFAULT_NO_POOL = '0xfbf1BE5CE2f9056dAaB1C368EC241ad7Be3507A8';
 const DEFAULT_BASE_POOL = '0xd1d7fa8871d84d0e77020fc28b7cd5718c446522';
-
-const IMPACT_POSITIVE_COLOR = '#00A89D'; // futarchyTeal7
-const IMPACT_NEGATIVE_COLOR = '#ED91B2'; // futarchyCrimson7
 
 // The Supabase candles backend is permanently gone; the chart renders from
 // prop data only. `supabase` is a stub so the (disabled) legacy code paths
@@ -141,14 +139,9 @@ const TripleChart = ({
   };
 
   const getImpactColor = (impactSeries = []) => {
-    if (!impactSeries?.length) {
-      return IMPACT_POSITIVE_COLOR;
-    }
-    const lastPoint = impactSeries[impactSeries.length - 1];
-    if (!lastPoint || typeof lastPoint.value !== 'number') {
-      return IMPACT_POSITIVE_COLOR;
-    }
-    return lastPoint.value >= 0 ? IMPACT_POSITIVE_COLOR : IMPACT_NEGATIVE_COLOR;
+    const lastPoint = impactSeries?.[impactSeries.length - 1];
+    const value = typeof lastPoint?.value === 'number' ? lastPoint.value : 0;
+    return impactColor(isDarkMode, value);
   };
 
   // Helper function to crop spot data to only include timestamps where YES/NO data exists
@@ -614,11 +607,12 @@ const TripleChart = ({
 
     console.log('[TripleChart Render Effect] Data is available, creating chart...');
 
-    const backgroundColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
-    const textColor = isDarkMode ? 'rgb(220, 220, 220)' : '#333333';
-    const crosshairColor = isDarkMode ? 'rgba(200, 200, 200, 0.3)' : 'rgba(51, 51, 51, 0.3)';
-    const baseLineColor = isDarkMode ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)';
-    const borderColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
+    // The chart is transparent so it sits on whatever surface holds it, in either theme.
+    const colors = chartColors(isDarkMode);
+    const backgroundColor = 'transparent';
+    const textColor = colors.text;
+    const crosshairColor = colors.crosshair;
+    const borderColor = 'transparent';
 
     const chart = createChart(chartContainerRef.current, {
       width: containerWidth,
@@ -626,7 +620,7 @@ const TripleChart = ({
       layout: {
         background: { type: 'solid', color: backgroundColor },
         textColor: textColor,
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: CHART_FONT_FAMILY,
       },
       grid: {
         vertLines: { color: 'rgba(0, 0, 0, 0)' },
@@ -779,21 +773,21 @@ const TripleChart = ({
     };
 
     const yesLine = chart.addSeries(LineSeries, {
-      color: 'rgb(0, 144, 255)',
+      color: colors.pass,
       lineWidth: 2,
       title: 'YES',
       priceFormat: priceFormat,
     });
 
     const noLine = chart.addSeries(LineSeries, {
-      color: 'rgb(245, 196, 0)',
+      color: colors.fail,
       lineWidth: 2,
       title: 'NO',
       priceFormat: priceFormat,
     });
 
     const baseLine = chart.addSeries(LineSeries, {
-      color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)', // Semi-transparent
+      color: colors.spot,
       lineWidth: 2,
       lineStyle: 2, // Dashed line (0=solid, 1=dotted, 2=dashed, 3=large dashed, 4=sparse dotted)
       title: 'SPOT',
@@ -801,7 +795,7 @@ const TripleChart = ({
     });
 
     const eventProbabilityLine = chart.addSeries(LineSeries, {
-      color: 'rgb(196, 79, 255)',
+      color: colors.eventProbability,
       lineWidth: 2,
       title: 'EVENT %',
       priceFormat: {
@@ -811,9 +805,9 @@ const TripleChart = ({
       },
     });
 
-    // Add impact line series (purple)
+    // Impact line, coloured by the sign of its latest point
     const impactLine = chart.addSeries(LineSeries, {
-      color: IMPACT_POSITIVE_COLOR,
+      color: colors.impactPositive,
       lineWidth: 2,
       title: 'IMPACT %',
       priceFormat: {
@@ -898,8 +892,8 @@ const TripleChart = ({
     currencyLabel.style.padding = '2px 6px';
     currencyLabel.style.fontSize = '10px';
     currencyLabel.style.borderRadius = '4px';
-    currencyLabel.style.backgroundColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
-    currencyLabel.style.color = isDarkMode ? 'rgb(200, 200, 200)' : 'rgb(50, 50, 50)';
+    currencyLabel.style.backgroundColor = colors.labelBackground;
+    currencyLabel.style.color = colors.labelText;
     const displayCurrencyLabel = selectedCurrency === 'WXDAI' ? 'xDAI' : selectedCurrency;
     currencyLabel.textContent = `Prices in ${displayCurrencyLabel}`;
     if (isLoadingRate && selectedCurrency === 'WXDAI') {
@@ -932,11 +926,11 @@ const TripleChart = ({
   useEffect(() => {
     if (!chartInstanceRef.current) return;
 
-    const backgroundColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
-    const textColor = isDarkMode ? 'rgb(220, 220, 220)' : '#333333';
-    const crosshairColor = isDarkMode ? 'rgba(200, 200, 200, 0.3)' : 'rgba(51, 51, 51, 0.3)';
-    const baseLineColor = isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'; // Semi-transparent
-    const borderColor = isDarkMode ? 'transparent' : 'rgb(249, 249, 249)';
+    const colors = chartColors(isDarkMode);
+    const backgroundColor = 'transparent';
+    const textColor = colors.text;
+    const crosshairColor = colors.crosshair;
+    const borderColor = 'transparent';
 
     chartInstanceRef.current.applyOptions({
       layout: {
@@ -952,19 +946,21 @@ const TripleChart = ({
       leftPriceScale: { borderColor: borderColor },
     });
 
-    // Update BASE line color (semi-transparent and dashed)
-    if (chartInstanceRef.current.baseLine) {
-      chartInstanceRef.current.baseLine.applyOptions({
-        color: baseLineColor,
-        lineStyle: 2 // Keep dashed style
-      });
+    // Each theme has its own series steps, validated against that theme's surface
+    const { yesLine, noLine, baseLine, eventProbabilityLine, impactLine } = chartInstanceRef.current;
+    yesLine?.applyOptions({ color: colors.pass });
+    noLine?.applyOptions({ color: colors.fail });
+    baseLine?.applyOptions({ color: colors.spot, lineStyle: 2 });
+    eventProbabilityLine?.applyOptions({ color: colors.eventProbability });
+    if (impactLine) {
+      impactLine.applyOptions({ color: getImpactColor(impactLine.data()) });
     }
 
     // Update currency label
     const currencyLabel = chartContainerRef.current?.querySelector('#currency-label');
     if (currencyLabel) {
-      currencyLabel.style.backgroundColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
-      currencyLabel.style.color = isDarkMode ? 'rgb(200, 200, 200)' : 'rgb(50, 50, 50)';
+      currencyLabel.style.backgroundColor = colors.labelBackground;
+      currencyLabel.style.color = colors.labelText;
     }
   }, [isDarkMode]);
 
@@ -1190,16 +1186,15 @@ const TripleChart = ({
       <div
         onClick={() => setIsIntervalDropdownOpen(!isIntervalDropdownOpen)}
         style={{
-          background: isDarkMode ? '#333' : '#fff',
+          background: 'var(--seer-surface)',
           borderRadius: 4,
           padding: '4px 8px',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          color: isDarkMode ? '#eee' : '#333',
-          border: isDarkMode ? '1px solid #555' : '1px solid #ddd'
+          color: 'var(--seer-text)',
+          border: '1px solid var(--seer-border)'
         }}
       >
         <span>Interval: {INTERVAL_OPTIONS.find(opt => opt.value === interval)?.label}</span>
@@ -1211,12 +1206,12 @@ const TripleChart = ({
           top: '100%',
           left: 0,
           right: 0,
-          background: isDarkMode ? '#4B5563' : '#F3F4F6',
+          background: 'var(--seer-surface)',
           marginTop: 4,
           borderRadius: 4,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          boxShadow: '0 10px 28px rgb(20 18 35 / 0.14)',
           overflow: 'hidden',
-          border: isDarkMode ? '1px solid #555' : '1px solid #ddd'
+          border: '1px solid var(--seer-border)'
         }}>
           {INTERVAL_OPTIONS.map(opt => {
             const isSelected = opt.value === interval;
@@ -1230,10 +1225,8 @@ const TripleChart = ({
                 style={{
                   padding: '8px 12px',
                   cursor: 'pointer',
-                  background: isDarkMode
-                    ? (isSelected ? '#374151' : 'transparent')
-                    : (isSelected ? '#e0e0e0' : 'transparent'),
-                  color: isDarkMode ? '#F9FAFB' : '#111827',
+                  background: isSelected ? 'var(--seer-surface-raised)' : 'transparent',
+                  color: 'var(--seer-text)',
                   fontWeight: isSelected ? 'bold' : 'normal'
                 }}
               >
@@ -1252,32 +1245,32 @@ const TripleChart = ({
       : "Loading chart data...";
 
     return (
-      <div className={`flex items-center justify-center h-[${height}px] ${isDarkMode ? 'bg-transparent' : 'bg-white'}`}>
-        <div className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{loadingMessage}</div>
+      <div className={`flex items-center justify-center h-[${height}px] bg-transparent`}>
+        <div className={`text-seer-muted`}>{loadingMessage}</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-[${height}px] ${isDarkMode ? 'bg-transparent' : 'bg-white'}`}>
-        <div className={`${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>Error loading chart data: {error}</div>
+      <div className={`flex items-center justify-center h-[${height}px] bg-transparent`}>
+        <div className={`text-seer-negative`}>Error loading chart data: {error}</div>
       </div>
     );
   }
 
   if (usingSupabaseRealtime && isLoadingSupabase && isInitialLoad.current) {
     return (
-      <div className={`flex items-center justify-center h-[${height}px] ${isDarkMode ? 'bg-transparent' : 'bg-white'}`}>
-        <div className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Loading market data...</div>
+      <div className={`flex items-center justify-center h-[${height}px] bg-transparent`}>
+        <div className={`text-seer-muted`}>Loading market data...</div>
       </div>
     );
   }
 
   if (usingSupabaseRealtime && errorSupabase) {
     return (
-      <div className={`flex items-center justify-center h-[${height}px] ${isDarkMode ? 'bg-transparent' : 'bg-white'}`}>
-        <div className={`${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>Error: {errorSupabase}</div>
+      <div className={`flex items-center justify-center h-[${height}px] bg-transparent`}>
+        <div className={`text-seer-negative`}>Error: {errorSupabase}</div>
       </div>
     );
   }

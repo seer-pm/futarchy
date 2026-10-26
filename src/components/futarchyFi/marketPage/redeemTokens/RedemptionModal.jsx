@@ -17,6 +17,9 @@ import { waitForSafeTxReceipt } from "../../../../utils/waitForSafeTxReceipt";
 import { useSafeConnection } from "../../../../hooks/useSafeConnection";
 import { approvalAmountFor } from "../../../../utils/approvalAmount";
 import { getRedeemSide, describeRedeemError } from "../../../../utils/redeemPlan";
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import Button from '../../../ui/Button';
+import { dialogPanelWide, dialogTitle } from '../../../ui/dialogClasses';
 
 // MetaMask icon component
 const MetamaskIcon = () => (
@@ -33,12 +36,12 @@ const WalletInformation = ({ walletAddress, walletIcon }) => {
   };
 
   return (
-    <div className="flex flex-row bg-white dark:bg-futarchyDarkGray4 border border-futarchyGray6 rounded-lg p-3 md:p-4">
+    <div className="flex flex-row bg-seer-surface border border-seer-border rounded-lg p-3 md:p-4">
       <div className="flex flex-col gap-[2px]">
-        <div className="text-futarchyGray11 text-xs md:text-sm font-normal">
+        <div className="text-seer-muted text-xs md:text-sm font-normal">
           Connected Wallet
         </div>
-        <div className="flex flex-row items-center gap-[6px] text-futarchyGray12 dark:text-futarchyGray3 text-sm md:text-base font-medium">
+        <div className="flex flex-row items-center gap-[6px] text-seer-text text-sm md:text-base font-medium">
           {walletIcon} {truncateAddress(walletAddress)}
         </div>
       </div>
@@ -108,14 +111,14 @@ const TransactionParamsCollapse = ({ params, isWinningOutcomeYes }) => {
   if (!params || !isDebugMode) return null;
 
   const borderColor = isWinningOutcomeYes
-    ? "border-futarchyBlue7"
-    : "border-futarchyGold9";
+    ? "border-pass"
+    : "border-fail";
   const bgColor = isWinningOutcomeYes
-    ? "bg-futarchyBlue3/30 dark:bg-futarchyBlue6/10"
-    : "bg-futarchyGold3/30 dark:bg-futarchyGold6/10";
+    ? "bg-pass-soft "
+    : "bg-fail-soft ";
   const textColor = isWinningOutcomeYes
-    ? "text-futarchyBlue11 dark:text-futarchyBlue6"
-    : "text-futarchyGold11 dark:text-futarchyGold6";
+    ? "text-pass-text"
+    : "text-fail-text";
 
   const handleCopy = async () => {
     try {
@@ -158,16 +161,16 @@ const TransactionParamsCollapse = ({ params, isWinningOutcomeYes }) => {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 py-2 bg-white dark:bg-futarchyDarkGray4 border-t border-futarchyGray6 dark:border-futarchyGray11/50">
+            <div className="px-3 py-2 bg-seer-surface border-t border-seer-border">
               <div className="flex items-start justify-between gap-2 mb-2">
-                <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+                <p className="text-xs text-seer-muted">
                   Transaction data that will be sent to MetaMask:
                 </p>
                 <button
                   onClick={handleCopy}
                   className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${copied
-                    ? "bg-futarchyGreen3 text-futarchyGreen11"
-                    : "bg-futarchyGray4 dark:bg-futarchyGray11 text-futarchyGray12 dark:text-futarchyGray3 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray10"
+                    ? "bg-seer-positive/10 text-seer-positive"
+                    : "bg-seer-surface-raised text-seer-text hover:bg-seer-surface-raised "
                     }`}
                 >
                   {copied ? (
@@ -187,7 +190,7 @@ const TransactionParamsCollapse = ({ params, isWinningOutcomeYes }) => {
                   )}
                 </button>
               </div>
-              <pre className="text-xs text-futarchyGray12 dark:text-futarchyGray3 overflow-x-auto whitespace-pre-wrap break-all font-mono p-2 bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded">
+              <pre className="text-xs text-seer-text overflow-x-auto whitespace-pre-wrap break-all font-mono p-2 bg-seer-surface-raised rounded">
                 {JSON.stringify(params, null, 2)}
               </pre>
             </div>
@@ -241,29 +244,29 @@ const StepWithSubsteps = ({
   const getStepColors = () => {
     if (isStepCompleted) {
       return isWinningOutcomeYes
-        ? "text-futarchyBlue11 bg-futarchyBlue3"
-        : "text-futarchyGold11 bg-futarchyGold3";
+        ? "text-pass-text bg-pass-soft"
+        : "text-fail-text bg-fail-soft";
     }
     if (isStepActive) {
       return isWinningOutcomeYes
-        ? "text-futarchyBlue11 bg-futarchyBlue3"
-        : "text-futarchyGold11 bg-futarchyGold3";
+        ? "text-pass-text bg-pass-soft"
+        : "text-fail-text bg-fail-soft";
     }
-    return "text-futarchyGray8 bg-futarchyGray4";
+    return "text-seer-muted bg-seer-surface-raised";
   };
 
   const getSubstepColor = (isCompleted, isActive) => {
     if (isCompleted) {
       return isWinningOutcomeYes
-        ? "text-futarchyBlue11"
-        : "text-futarchyGold11";
+        ? "text-pass-text"
+        : "text-fail-text";
     }
     if (isActive) {
       return isWinningOutcomeYes
-        ? "text-futarchyBlue11"
-        : "text-futarchyGold11";
+        ? "text-pass-text"
+        : "text-fail-text";
     }
-    return "text-futarchyGray8";
+    return "text-seer-muted";
   };
 
   // Add debug logging
@@ -297,17 +300,17 @@ const StepWithSubsteps = ({
         </div>
         <span
           className={`flex-1 ${isStepCompleted
-            ? "text-futarchyGray12 dark:text-futarchyGray112"
+            ? "text-seer-text"
             : isStepActive
-              ? "text-futarchyGray12 dark:text-futarchyGray112"
-              : "text-futarchyGray11 dark:text-futarchyGray112"
+              ? "text-seer-text"
+              : "text-seer-muted"
             }`}
         >
           {title}
         </span>
         <button
           onClick={onToggle}
-          className="text-futarchyBlue11 hover:text-futarchyBlue9 text-sm"
+          className="text-seer-accent-text hover:underline underline-offset-2 text-sm"
         >
           {expanded ? "Hide details" : "Show details"}
         </button>
@@ -375,10 +378,10 @@ const StepWithSubsteps = ({
                     </div>
                     <span
                       className={`text-sm flex-1 ${isSubstepCompleted
-                        ? "text-futarchyGray12 dark:text-futarchyGray112"
+                        ? "text-seer-text"
                         : isSubstepActive
-                          ? "text-futarchyGray12 dark:text-futarchyGray112"
-                          : "text-futarchyGray11 dark:text-futarchyGray112"
+                          ? "text-seer-text"
+                          : "text-seer-muted"
                         }`}
                     >
                       {substep.text}
@@ -694,52 +697,59 @@ const RedemptionModal = ({
   let buttonContent;
   let buttonAction = () => { };
   let buttonIsEnabled = false;
-  let buttonClasses = "w-full py-2 md:py-3 px-4 rounded-lg font-semibold transition-colors";
+  let buttonClasses = "w-full min-h-12 px-4 rounded-control text-[15px] font-semibold transition-colors";
 
   if (localProcessingStep === "completed") {
     buttonContent = "Redemption Complete - Close";
     buttonAction = handleClose;
     buttonIsEnabled = true;
     const completedColors = isWinningOutcomeYes
-      ? "bg-futarchyBlue9 hover:bg-futarchyBlue11 text-white"
-      : "bg-futarchyGold9 hover:bg-futarchyGold11 text-black";
+      ? "bg-pass hover:opacity-90 text-white"
+      : "bg-fail hover:opacity-90 text-seer-ink";
     buttonClasses += ` flex ${completedColors} items-center justify-center gap-2`;
   } else if (localIsProcessing) {
     buttonContent = "Processing Redemption...";
     buttonIsEnabled = false;
-    buttonClasses += " bg-futarchyGray6 text-futarchyGray112/40 cursor-not-allowed";
+    buttonClasses += " bg-seer-surface-raised text-seer-muted/40 cursor-not-allowed";
   } else if (requiredChain.isWrongChain) {
     // Redemption goes through this market's router, which only exists on its chain
     buttonContent = requiredChain.isSwitching ? "Switching network..." : `Switch to ${requiredChain.requiredChainName}`;
     buttonAction = requiredChain.switchToRequiredChain;
     buttonIsEnabled = !requiredChain.isSwitching;
-    buttonClasses += " bg-black hover:bg-black/80 text-white dark:bg-futarchyGray112 dark:hover:bg-futarchyGray112/80 dark:text-futarchyDarkGray1";
+    buttonClasses += " bg-seer-purple hover:bg-seer-purple-hover text-white ";
   } else {
     buttonContent = "Redeem Winning Tokens";
     buttonAction = handleRedemption;
     buttonIsEnabled = true;
     const actionColors = isWinningOutcomeYes
-      ? "bg-futarchyBlue9 hover:bg-futarchyBlue11 text-white"
-      : "bg-futarchyGold9 hover:bg-futarchyGold11 text-black";
+      ? "bg-pass hover:opacity-90 text-white"
+      : "bg-fail hover:opacity-90 text-seer-ink";
     buttonClasses += ` ${actionColors}`;
   }
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="flex flex-col relative w-11/12 max-w-[393px] max-h-[80dvh] md:w-[480px] md:h-auto md:max-h-[min(638px,80dvh)] bg-white dark:bg-futarchyDarkGray3 dark:border dark:border-futarchyGray112/20 rounded-xl shadow-lg gap-4 p-4 md:p-6 overflow-y-auto">
-        <div className="flex justify-between items-center">
-          <div className="text-lg md:text-xl text-futarchyGray12 dark:text-futarchyGray3 font-medium">
+    <div className="fixed inset-0 bg-seer-ink/60 flex items-end sm:items-center justify-center sm:p-4 z-50">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="redemption-modal-title"
+        className={`${dialogPanelWide} sm:w-[480px] gap-4 p-5 overflow-y-auto overscroll-contain`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2 id="redemption-modal-title" className={dialogTitle}>
             {title}
-          </div>
-          <button
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon
+            aria-label="Close"
+            className="-mr-2"
             onClick={handleClose}
             disabled={localIsProcessing && localProcessingStep !== "completed"}
-            className="text-futarchyGray11 hover:text-futarchyGray12 dark:text-futarchyGray112 dark:hover:text-futarchyGray3"
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <XMarkIcon className="w-5 h-5" aria-hidden="true" />
+          </Button>
         </div>
 
         <WalletInformation
@@ -756,24 +766,24 @@ const RedemptionModal = ({
             >
               {/* Redemption Summary */}
               <div className="mb-6">
-                <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray4 dark:border dark:border-futarchyGray112/20 rounded-lg p-3 md:p-4">
-                  <h4 className="font-medium mb-2 text-black dark:text-futarchyGray112 text-sm">Redemption Summary</h4>
+                <div className="bg-seer-surface-raised rounded-surface p-3 md:p-4">
+                  <h4 className="font-medium mb-2 text-seer-text text-sm">Redemption Summary</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-futarchyGray11 text-sm">Winning Outcome</span>
-                      <span className="text-futarchyGreen11 font-medium text-sm">
+                      <span className="text-seer-muted text-sm">Winning Outcome</span>
+                      <span className="text-seer-positive font-medium text-sm">
                         {config?.marketInfo?.finalOutcome || 'Unknown'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-futarchyGray11 text-sm">Currency Tokens</span>
-                      <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium text-sm">
+                      <span className="text-seer-muted text-sm">Currency Tokens</span>
+                      <span className="text-seer-text font-medium text-sm">
                         {formatBalance(winningTokens?.currencyAmount || '0', winningTokens?.currencySymbol || 'CURRENCY')}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-futarchyGray11 text-sm">Company Tokens</span>
-                      <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium text-sm">
+                      <span className="text-seer-muted text-sm">Company Tokens</span>
+                      <span className="text-seer-text font-medium text-sm">
                         {formatBalance(winningTokens?.companyAmount || '0', winningTokens?.companySymbol || 'COMPANY')}
                       </span>
                     </div>
@@ -788,13 +798,13 @@ const RedemptionModal = ({
                     type="checkbox"
                     checked={useUnlimitedApproval}
                     onChange={(e) => setUseUnlimitedApproval(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-futarchyBlue9 bg-futarchyGray3 border-futarchyGray7 rounded focus:ring-futarchyBlue9 focus:ring-2 dark:bg-futarchyDarkGray4 dark:border-futarchyGray112"
+                    className="mt-1 w-4 h-4 accent-seer-purple text-seer-purple bg-seer-surface-raised border-seer-border rounded focus:ring-seer-accent-text focus:ring-2"
                   />
                   <div className="flex-1">
-                    <span className="text-sm font-medium text-futarchyGray12 dark:text-futarchyGray3 group-hover:text-futarchyBlue11 dark:group-hover:text-futarchyBlue9 transition-colors">
+                    <span className="text-sm font-medium text-seer-text group-hover:text-seer-accent-text transition-colors">
                       Max Approval
                     </span>
-                    <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-1">
+                    <p className="text-xs text-seer-muted mt-1">
                       {useUnlimitedApproval
                         ? "Will request max allowance. Useful for saving gas on future requests."
                         : "Will request exact allowance for this transaction."
@@ -805,9 +815,9 @@ const RedemptionModal = ({
               </div>
 
               {/* Info Container */}
-              <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray4 dark:border dark:border-futarchyGray112/20 rounded-lg p-3 md:p-4">
-                <h4 className="font-medium mb-1 text-black dark:text-futarchyGray112 text-xs">Redemption Information</h4>
-                <p className="text-xs text-black dark:text-futarchyGray112">
+              <div className="bg-seer-surface-raised rounded-surface p-3 md:p-4">
+                <h4 className="font-medium mb-1 text-seer-text text-xs">Redemption Information</h4>
+                <p className="text-xs text-seer-text">
                   You are redeeming your winning outcome tokens. This will convert your position tokens back to the underlying collateral tokens based on the market resolution.
                 </p>
               </div>
@@ -844,7 +854,7 @@ const RedemptionModal = ({
         </AnimatePresence>
 
         {requiredChain.isWrongChain && !localIsProcessing && localProcessingStep !== "completed" && (
-          <div className="p-2 bg-futarchyCrimson3 border border-futarchyCrimson5 rounded-lg text-futarchyCrimson11 text-sm">
+          <div className="p-2 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm">
             This market is on {requiredChain.requiredChainName}, but your wallet is on {requiredChain.walletChainName || "another network"}.
           </div>
         )}
@@ -861,36 +871,36 @@ const RedemptionModal = ({
         </div>
 
         {(error || localError) && (
-          <div className="mb-2 p-1 bg-red-50 border border-red-200 rounded-lg text-red-400 text-sm">
+          <div className="mb-2 p-1 bg-seer-negative/10 border border-seer-negative/40 rounded-lg text-seer-negative text-sm">
             {error || localError}
           </div>
         )}
 
         {/* Debug Info */}
         {DEBUG_MODE && debugInfo && (
-          <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-200 dark:border-gray-700">
-            <div className="font-bold mb-2 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-1">
+          <div className="mt-4 p-3 bg-seer-surface-raised rounded-lg text-xs font-mono border border-seer-border">
+            <div className="font-bold mb-2 text-seer-text border-b border-seer-border pb-1">
               Safe Transaction Tracker
             </div>
 
             <div className="space-y-1">
               <div className="flex justify-between">
-                <span className="font-semibold text-gray-500">Status:</span>
-                <span className="text-blue-600 dark:text-blue-400 font-bold">{debugInfo.status}</span>
+                <span className="font-semibold text-seer-muted">Status:</span>
+                <span className="text-seer-accent-text font-bold">{debugInfo.status}</span>
               </div>
 
-              <div className="text-gray-600 dark:text-gray-400">
+              <div className="text-seer-muted">
                 {debugInfo.message}
               </div>
 
               {debugInfo.safeTxHash && (
-                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <div className="font-semibold text-gray-500 mb-1">Safe Tx Hash:</div>
+                <div className="mt-2 pt-2 border-t border-seer-border">
+                  <div className="font-semibold text-seer-muted mb-1">Safe Tx Hash:</div>
                   <a
                     href={`https://app.safe.global/transactions/tx?safe=gno:${connectedWalletAddress}&id=${debugInfo.safeTxHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline break-all block"
+                    className="text-seer-accent-text hover:underline break-all block"
                   >
                     {debugInfo.safeTxHash} ↗
                   </a>
@@ -898,13 +908,13 @@ const RedemptionModal = ({
               )}
 
               {debugInfo.txHash && (
-                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <div className="font-semibold text-gray-500 mb-1">On-Chain Tx Hash:</div>
+                <div className="mt-2 pt-2 border-t border-seer-border">
+                  <div className="font-semibold text-seer-muted mb-1">On-Chain Tx Hash:</div>
                   <a
                     href={`https://gnosisscan.io/tx/${debugInfo.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-green-500 hover:underline break-all block"
+                    className="text-seer-positive hover:underline break-all block"
                   >
                     {debugInfo.txHash} ↗
                   </a>

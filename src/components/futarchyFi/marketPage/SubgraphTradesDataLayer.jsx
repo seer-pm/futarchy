@@ -13,6 +13,8 @@
  * - No Supabase connection (completely isolated)
  */
 
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import Badge from '../../ui/Badge';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { fetchFormattedTrades, fetchPoolsForProposal } from '../../../utils/subgraphTradesClient';
@@ -205,8 +207,8 @@ const SubgraphTradesDataLayer = ({
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-futarchyViolet9 mb-4"></div>
-                    <p className="text-futarchyGray11 dark:text-futarchyGray112">{SHOW_DATA_DEBUG ? 'Loading from Subgraph...' : 'Loading trades...'}</p>
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-seer-border border-t-seer-purple mb-3" aria-hidden="true"></div>
+                    <p className="text-sm text-seer-muted">{SHOW_DATA_DEBUG ? 'Loading from Subgraph...' : 'Loading trades...'}</p>
                 </div>
             </div>
         );
@@ -217,11 +219,11 @@ const SubgraphTradesDataLayer = ({
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                    <p className="text-red-500 mb-2">Error loading trades</p>
-                    <p className="text-sm text-futarchyGray11">{error}</p>
+                    <p className="text-seer-negative font-semibold mb-2">Error loading trades</p>
+                    <p className="text-sm text-seer-muted">{error}</p>
                     <button
                         onClick={handleResync}
-                        className="mt-4 px-4 py-2 bg-futarchyViolet9 text-white rounded-lg hover:bg-futarchyViolet10"
+                        className="mt-4 seer-button seer-button-secondary"
                     >
                         Retry
                     </button>
@@ -235,23 +237,23 @@ const SubgraphTradesDataLayer = ({
         return (
             <div className="relative">
                 {/* Subgraph Status Bar */}
-                {SHOW_DATA_DEBUG && <div className="flex items-center justify-between px-4 py-2 mb-2 bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-lg border border-futarchyGray62 dark:border-futarchyDarkGray42">
+                {SHOW_DATA_DEBUG && <div className="flex items-center justify-between px-4 py-2 mb-2 bg-seer-surface-raised rounded-surface border border-seer-border">
                     <div className="flex items-center gap-3">
-                        <span className="px-2 py-0.5 text-xs font-medium bg-futarchyTeal4 text-futarchyTeal11 dark:bg-futarchyTeal4/20 dark:text-futarchyTeal7 rounded-full border border-futarchyTeal6 dark:border-futarchyTeal7">
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-seer-accent-soft text-seer-accent-text rounded-control">
                             Subgraph
                         </span>
-                        <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+                        <span className="text-xs text-seer-muted">
                             Updated {formatTimeAgo(lastUpdate)}
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112 tabular-nums">
+                        <span className="text-xs text-seer-muted tabular-nums">
                             {countdown}s
                         </span>
                         <button
                             onClick={handleResync}
                             disabled={isSyncing}
-                            className="flex items-center gap-1 px-2 py-1 text-xs text-futarchyGray11 dark:text-futarchyGray112 hover:text-futarchyViolet9 dark:hover:text-futarchyViolet7 transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 text-xs text-seer-muted hover:text-seer-accent-text transition-colors"
                         >
                             <svg className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -260,7 +262,7 @@ const SubgraphTradesDataLayer = ({
                         </button>
                     </div>
                 </div>}
-                <div className="flex items-center justify-center py-12 text-futarchyGray11 dark:text-futarchyGray112">
+                <div className="flex items-center justify-center py-12 text-sm text-seer-muted">
                     {showMyTrades && !isConnected
                         ? 'Connect wallet to view your trades'
                         : showMyTrades
@@ -275,23 +277,23 @@ const SubgraphTradesDataLayer = ({
     return (
         <div className="relative">
             {/* Subgraph Status Bar */}
-            {SHOW_DATA_DEBUG && <div className="flex items-center justify-between px-4 py-2 mb-2 bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-lg border border-futarchyGray62 dark:border-futarchyDarkGray42">
+            {SHOW_DATA_DEBUG && <div className="flex items-center justify-between px-4 py-2 mb-2 bg-seer-surface-raised rounded-surface border border-seer-border">
                 <div className="flex items-center gap-3">
-                    <span className="px-2 py-0.5 text-xs font-medium bg-futarchyTeal4 text-futarchyTeal11 dark:bg-futarchyTeal4/20 dark:text-futarchyTeal7 rounded-full border border-futarchyTeal6 dark:border-futarchyTeal7">
+                    <span className="px-2 py-0.5 text-xs font-semibold bg-seer-accent-soft text-seer-accent-text rounded-control">
                         Subgraph
                     </span>
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
+                    <span className="text-xs text-seer-muted">
                         Updated {formatTimeAgo(lastUpdate)}
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112 tabular-nums">
+                    <span className="text-xs text-seer-muted tabular-nums">
                         {countdown}s
                     </span>
                     <button
                         onClick={handleResync}
                         disabled={isSyncing}
-                        className="flex items-center gap-1 px-2 py-1 text-xs text-futarchyGray11 dark:text-futarchyGray112 hover:text-futarchyViolet9 dark:hover:text-futarchyViolet7 transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 text-xs text-seer-muted hover:text-seer-accent-text transition-colors"
                     >
                         <svg className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -301,120 +303,74 @@ const SubgraphTradesDataLayer = ({
                 </div>
             </div>}
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block rounded-2xl border border-futarchyGray62 dark:border-futarchyDarkGray42 bg-futarchyGray2 dark:bg-futarchyDarkGray3">
-                <div className="overflow-hidden rounded-xl border border-futarchyGray62 dark:border-futarchyDarkGray42">
-                    <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b-2 border-futarchyGray62 dark:border-futarchyDarkGray42 dark:bg-futarchyDarkGray3 h-[60px]">
-                                    <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-left px-4 w-[180px]">Outcome</th>
-                                    {SHOW_DATA_DEBUG && <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-left px-4 w-[100px]">Type</th>}
-                                    <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-left px-4 w-[180px]">Amount</th>
-                                    <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-right px-4 w-[100px]">Price</th>
-                                    <th className="text-xs text-futarchyGray11 dark:text-futarchyGray112 font-semibold text-right px-4 w-[140px]">Date</th>
-                                </tr>
-                            </thead>
-                        </table>
-                    </div>
-                    <div className="relative">
-                        <div className="overflow-y-auto overscroll-contain scroll-smooth" style={{ height: '400px', scrollbarWidth: 'none', scrollBehavior: 'smooth' }}>
-                            <table className="w-full">
-                                <tbody>
-                                    {sortedTrades.map((trade, index) => {
-                                        const eventSideLower = (trade.outcome.eventSide || '').toLowerCase();
-                                        const isYes = eventSideLower === 'yes';
-                                        const isNo = eventSideLower === 'no';
-                                        const isBuy = trade.outcome.operationSide === 'buy';
+            {/* Desktop table: one surface, hairline rows, the header pinned while the rows scroll. */}
+            <div className="hidden md:block rounded-surface border border-seer-border bg-seer-surface overflow-hidden">
+                <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: '420px' }}>
+                    <table className="w-full text-sm">
+                        <thead className="sticky top-0 z-10 bg-seer-surface">
+                            <tr className="border-b border-seer-border">
+                                <th scope="col" className="h-11 px-4 text-left text-xs font-semibold uppercase tracking-wide text-seer-muted">Outcome</th>
+                                {SHOW_DATA_DEBUG && <th scope="col" className="h-11 px-4 text-left text-xs font-semibold uppercase tracking-wide text-seer-muted">Type</th>}
+                                <th scope="col" className="h-11 px-4 text-left text-xs font-semibold uppercase tracking-wide text-seer-muted">Amount</th>
+                                <th scope="col" className="h-11 px-4 text-right text-xs font-semibold uppercase tracking-wide text-seer-muted">Price</th>
+                                <th scope="col" className="h-11 px-4 text-right text-xs font-semibold uppercase tracking-wide text-seer-muted">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-seer-border">
+                            {sortedTrades.map((trade, index) => {
+                                const eventSideLower = (trade.outcome.eventSide || '').toLowerCase();
+                                const isYes = eventSideLower === 'yes';
+                                const isNo = eventSideLower === 'no';
+                                const isBuy = trade.outcome.operationSide === 'buy';
 
-                                        return (
-                                            <tr
-                                                key={trade.id || index}
-                                                className="border-b border-futarchyGray62 dark:border-futarchyDarkGray42 hover:bg-futarchyGray3 dark:hover:bg-futarchyGray3/20 transition-all duration-500 h-[60px]"
-                                            >
-                                                <td className="px-4 w-[200px]">
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="inline-flex overflow-hidden w-[160px]">
-                                                            <div className={`w-[80px] px-3 py-1 text-sm font-medium text-center rounded-l-full ${isYes
-                                                                ? 'bg-futarchyBlue4 text-futarchyBlue11 border border-futarchyBlue6 dark:bg-transparent dark:text-futarchyBlue9 dark:border-futarchyBlue9'
-                                                                : isNo
-                                                                    ? 'bg-futarchyGold4 text-futarchyGold11 border border-futarchyGold6 dark:bg-transparent dark:text-futarchyGold7 dark:border-futarchyGold7'
-                                                                    : 'bg-futarchyGray4 text-futarchyGray11 border border-futarchyGray6 dark:bg-transparent dark:text-futarchyGray9 dark:border-futarchyGray9'
-                                                                }`}>
-                                                                {trade.outcome.eventSide.toUpperCase()}
-                                                            </div>
-                                                            <div className={`w-[80px] px-3 py-1 text-sm font-medium text-center rounded-r-full ${!isBuy
-                                                                ? 'bg-futarchyTeal3 text-futarchyTeal9 border border-futarchyTeal5 dark:bg-transparent dark:text-futarchyTeal7 dark:border-futarchyTeal7'
-                                                                : 'bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6 dark:bg-transparent dark:text-futarchyCrimson9 dark:border-futarchyCrimson9'
-                                                                }`}>
-                                                                {trade.outcome.operationSide === 'buy' ? 'sell' : 'buy'}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                {SHOW_DATA_DEBUG && <td className="px-4 w-[100px]">
-                                                    <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${trade.poolType === 'PREDICTION'
-                                                        ? 'bg-futarchyViolet4 text-futarchyViolet11 border border-futarchyViolet6 dark:bg-transparent dark:text-futarchyViolet7 dark:border-futarchyViolet7'
-                                                        : trade.poolType === 'CONDITIONAL'
-                                                            ? 'bg-futarchyTeal4 text-futarchyTeal11 border border-futarchyTeal6 dark:bg-transparent dark:text-futarchyTeal7 dark:border-futarchyTeal7'
-                                                            : 'bg-futarchyGray4 text-futarchyGray11 border border-futarchyGray6'
-                                                        }`}>
-                                                        {trade.poolType || 'UNKNOWN'}
-                                                    </span>
-                                                </td>}
-                                                <td className="px-4 w-[180px]">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-xs font-semibold text-futarchyGray12 dark:text-futarchyGray112 whitespace-nowrap flex items-center">
-                                                            {trade.amount.tokenIN.value} {trade.amount.tokenIN.symbol}
-                                                            <span className="text-futarchyTeal7 ml-1">in</span>
-                                                        </span>
-                                                        <span className="text-xs font-semibold text-futarchyGray12 dark:text-futarchyGray112 whitespace-nowrap flex items-center">
-                                                            {trade.amount.tokenOUT.value} {trade.amount.tokenOUT.symbol}
-                                                            <span className="text-futarchyCrimson9 ml-1">out</span>
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 w-[100px] text-right">
-                                                    <span className={`text-xs font-semibold block ${isYes
-                                                        ? 'text-futarchyBlue9'
-                                                        : isNo
-                                                            ? 'text-futarchyGold9'
-                                                            : 'text-futarchyGray12 dark:text-futarchyGray112'
-                                                        }`}>
-                                                        {trade.price}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 w-[220px]">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <span className="text-xs text-futarchyGray12 dark:text-futarchyGray112">
-                                                            {formatDate(trade.date)}
-                                                        </span>
-                                                        {trade.transactionLink && (
-                                                            <a
-                                                                href={trade.transactionLink}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-futarchyGray11 hover:text-futarchyViolet9 dark:text-futarchyGray112 dark:hover:text-futarchyViolet7"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                                                </svg>
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                return (
+                                    <tr key={trade.id || index} className="hover:bg-seer-surface-raised transition-colors">
+                                        <td className="px-4 py-3">
+                                            <span className="inline-flex items-center gap-2">
+                                                <Badge tone={isYes ? 'pass' : isNo ? 'fail' : 'neutral'}>{trade.outcome.eventSide.toUpperCase()}</Badge>
+                                                <span className={`text-[13px] font-semibold ${!isBuy ? 'text-seer-positive' : 'text-seer-negative'}`}>
+                                                    {trade.outcome.operationSide === 'buy' ? 'sell' : 'buy'}
+                                                </span>
+                                            </span>
+                                        </td>
+                                        {SHOW_DATA_DEBUG && <td className="px-4 py-3">
+                                            <Badge tone={trade.poolType === 'PREDICTION' ? 'accent' : 'neutral'}>{trade.poolType || 'UNKNOWN'}</Badge>
+                                        </td>}
+                                        <td className="px-4 py-3">
+                                            <span className="flex flex-col gap-0.5 text-[13px] tabular-nums text-seer-text whitespace-nowrap">
+                                                <span>{trade.amount.tokenIN.value} {trade.amount.tokenIN.symbol} <span className="text-seer-muted">in</span></span>
+                                                <span>{trade.amount.tokenOUT.value} {trade.amount.tokenOUT.symbol} <span className="text-seer-muted">out</span></span>
+                                            </span>
+                                        </td>
+                                        <td className={`px-4 py-3 text-right text-[13px] font-semibold tabular-nums ${isYes ? 'text-pass-text' : isNo ? 'text-fail-text' : 'text-seer-text'}`}>
+                                            {trade.price}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="flex items-center justify-end gap-2 text-[13px] tabular-nums text-seer-muted">
+                                                {formatDate(trade.date)}
+                                                {trade.transactionLink && (
+                                                    <a
+                                                        href={trade.transactionLink}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        aria-label="View transaction"
+                                                        className="text-seer-muted hover:text-seer-accent-text"
+                                                    >
+                                                        <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+                                                    </a>
+                                                )}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            {/* Mobile View */}
-            <div className="md:hidden space-y-2">
+            {/* Phone: one row per trade on the same surface, the side read the same way as above. */}
+            <ul className="md:hidden max-h-[480px] overflow-y-auto overscroll-contain rounded-surface border border-seer-border bg-seer-surface divide-y divide-seer-border">
                 {sortedTrades.map((trade, index) => {
                     const eventSideLower = (trade.outcome.eventSide || '').toLowerCase();
                     const isYes = eventSideLower === 'yes';
@@ -422,49 +378,28 @@ const SubgraphTradesDataLayer = ({
                     const isBuy = trade.outcome.operationSide === 'buy';
 
                     return (
-                        <div
-                            key={trade.id || index}
-                            className="p-3 rounded-lg border border-futarchyGray62 dark:border-futarchyDarkGray42 bg-futarchyGray3 dark:bg-futarchyDarkGray3"
-                        >
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex gap-1">
-                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isYes
-                                        ? 'bg-futarchyBlue4 text-futarchyBlue11 dark:bg-transparent dark:text-futarchyBlue9 border border-futarchyBlue6 dark:border-futarchyBlue9'
-                                        : isNo
-                                            ? 'bg-futarchyGold4 text-futarchyGold11 dark:bg-transparent dark:text-futarchyGold7 border border-futarchyGold6 dark:border-futarchyGold7'
-                                            : 'bg-futarchyGray4 text-futarchyGray11 border border-futarchyGray6'
-                                        }`}>
-                                        {trade.outcome.eventSide.toUpperCase()}
+                        <li key={trade.id || index} className="p-3 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="inline-flex items-center gap-2">
+                                    <Badge tone={isYes ? 'pass' : isNo ? 'fail' : 'neutral'}>{trade.outcome.eventSide.toUpperCase()}</Badge>
+                                    <span className={`text-[13px] font-semibold ${!isBuy ? 'text-seer-positive' : 'text-seer-negative'}`}>
+                                        {trade.outcome.operationSide === 'buy' ? 'sell' : 'buy'}
                                     </span>
-                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${!isBuy
-                                        ? 'bg-futarchyTeal3 text-futarchyTeal9 border border-futarchyTeal5'
-                                        : 'bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6'
-                                        }`}>
-                                        {trade.outcome.operationSide}
-                                    </span>
-                                </div>
-                                <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112">
-                                    {formatDate(trade.date)}
                                 </span>
+                                <span className="text-xs tabular-nums text-seer-muted">{formatDate(trade.date)}</span>
                             </div>
-                            <div className="flex items-center justify-between">
-                                <div className="text-xs">
-                                    <span className="text-futarchyGray12 dark:text-futarchyGray112">
-                                        {trade.amount.tokenIN.value} {trade.amount.tokenIN.symbol}
-                                    </span>
-                                    <span className="text-futarchyGray11 mx-1">→</span>
-                                    <span className="text-futarchyGray12 dark:text-futarchyGray112">
-                                        {trade.amount.tokenOUT.value} {trade.amount.tokenOUT.symbol}
-                                    </span>
-                                </div>
-                                <span className={`text-xs font-semibold ${isYes ? 'text-futarchyBlue9' : isNo ? 'text-futarchyGold9' : ''}`}>
-                                    {trade.price}
+                            <div className="flex items-center justify-between gap-2 text-[13px] tabular-nums">
+                                <span className="text-seer-text">
+                                    {trade.amount.tokenIN.value} {trade.amount.tokenIN.symbol}
+                                    <span className="text-seer-muted mx-1" aria-label="to">→</span>
+                                    {trade.amount.tokenOUT.value} {trade.amount.tokenOUT.symbol}
                                 </span>
+                                <span className={`font-semibold ${isYes ? 'text-pass-text' : isNo ? 'text-fail-text' : 'text-seer-text'}`}>{trade.price}</span>
                             </div>
-                        </div>
+                        </li>
                     );
                 })}
-            </div>
+            </ul>
         </div>
     );
 };

@@ -51,7 +51,7 @@ npm run merge <proposalAddr>                # Merge conditional tokens back to c
 ### Tech Stack
 - **Frontend**: Next.js 14 with React 18 (pages router), static export (`output: 'export'` in `next.config.mjs`, served from `out/`)
 - **Blockchain**: Ethers.js v5 and viem (main app), Wagmi v2, RainbowKit, `@seer-pm/sdk` for swaps; ethers v6 in the swapr CLI
-- **Styling**: Tailwind CSS, CSS Modules
+- **Styling**: Tailwind CSS 3 on the Electric Foundation tokens from `@seer-pm/ui-kit` (see below)
 - **State Management**: React Context API, TanStack Query
 - **Package Manager**: npm (`package-lock.json`; Netlify runs `npm install --legacy-peer-deps`).
 
@@ -137,6 +137,22 @@ docs/                  # Notes and integration write-ups; docs/archive/ holds ol
 4. **GraphQL data**
    - Endpoints derive from `NEXT_PUBLIC_FUTARCHY_API_URL` (`config/subgraphEndpoints.js`)
    - Shared queries in `src/services/`, deduplicated per page load via `requestCache.js`
+
+### Brand and styling
+
+- `@seer-pm/ui-kit` owns colour, radius, font (Open Sans), buttons, fields, the dialog, the lockup
+  and the footer for every Seer site. `_app.js` imports its CSS; `tailwind.config.js` uses its
+  preset, so `bg-seer-surface`, `text-seer-muted`, `rounded-surface` and the rest follow the theme.
+  Change shared values in the kit (`packages/seer-pm-ui-kit` in the seer-pm monorepo), not here.
+- The kit is vendored as `vendor/seer-pm-ui-kit-<version>.tgz` until it is published to npm. After a
+  kit change: `npm pack` it, replace the tarball, update the `file:` version in `package.json`, and
+  `npm install --legacy-peer-deps`.
+- Dark mode is the `dark` class on `<html>` (`contexts/ThemeContext.jsx`), which is also the class
+  the kit's tokens switch on.
+- `tailwind.legacy-palette.js` keeps the original `futarchy*` keys, set to Electric Foundation
+  values. New code uses `seer-*` classes; a redesigned component drops the legacy keys.
+- Pass (YES) is Electric Purple and fail (NO) is gold. The values are validated for colour-vision
+  deficiency in both themes; do not swap in another hue without re-validating.
 
 ### Smart Contract Addresses
 

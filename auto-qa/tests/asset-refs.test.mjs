@@ -11,8 +11,7 @@
  * one from the baseline, the test prompts them to remove it from the
  * baseline (so the count keeps ratcheting down).
  *
- * Excluded callers (Storybook / docs / template):
- *   - src/stories/Configure.mdx
+ * Excluded callers (docs / template):
  *   - src/config/README.md
  *   - src/config/markets-example.js
  */
@@ -28,7 +27,6 @@ const SRC_DIR    = fileURLToPath(new URL('src', REPO_ROOT));
 const PUBLIC_DIR = fileURLToPath(new URL('public', REPO_ROOT));
 
 const EXCLUDED_CALLERS = new Set([
-    'src/stories/Configure.mdx',         // Storybook welcome page (not shipped)
     'src/config/README.md',              // documentation
     'src/config/markets-example.js',     // example template, not imported
 ]);

@@ -1,4 +1,5 @@
 import React from 'react';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { ethers } from 'ethers';
 import { formatWith } from '../../../../utils/precisionFormatter';
 
@@ -149,22 +150,24 @@ export const normalizeTokenAmount = (value) => {
 };
 
 
-export const StatDisplay = ({ label, value, valueClassName = 'text-white', Icon, isLoading }) => (
-    <div className="flex items-center gap-2">
-        {Icon && <Icon className="h-5 w-5 text-white/70" />}
-        <div className="flex flex-col items-start">
-            <span className={`text-sm lg:text-base font-semibold ${valueClassName}`}>
-                {isLoading ? (
-                    <div className="flex items-center gap-2">
-                        <span className="text-white/60">Loading...</span>
-                        <div className="w-3 h-3 border-2 border-white/40 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                ) : (
-                    value
-                )}
-            </span>
-            <span className="text-xs text-white/70">{label}</span>
-        </div>
+// Briefing figures: the label above in muted text, the value below at weight. Icons are optional
+// and stay muted; the label carries the meaning.
+const StatLoading = () => (
+    <span className="inline-flex items-center gap-2 text-seer-muted text-sm font-normal">
+        <span className="w-3 h-3 border-2 border-seer-border border-t-seer-purple rounded-full animate-spin" aria-hidden="true" />
+        Loading
+    </span>
+);
+
+export const StatDisplay = ({ label, value, valueClassName = 'text-seer-text', Icon, isLoading }) => (
+    <div className="flex flex-col gap-1 min-w-0">
+        <span className="flex items-center gap-1.5 text-[13px] text-seer-muted">
+            {Icon && <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
+            {label}
+        </span>
+        <span className={`text-base font-semibold tabular-nums ${valueClassName}`}>
+            {isLoading ? <StatLoading /> : value}
+        </span>
     </div>
 );
 
@@ -183,9 +186,9 @@ export const DualStatDisplay = ({ label, yesValue, noValue, Icon, isLoading, for
                         </div>
                     ) : (
                         <>
-                            <span className="text-futarchyBlue9">{formatValue(yesValue)}</span>
-                            <span className="text-white/50">|</span>
-                            <span className="text-futarchyGold8">{formatValue(noValue)}</span>
+                            <span className="text-pass-text">{formatValue(yesValue)}</span>
+                            <span className="text-seer-muted">|</span>
+                            <span className="text-fail-text">{formatValue(noValue)}</span>
                         </>
                     )}
                 </div>
@@ -221,58 +224,60 @@ export const AggregatedStatDisplay = ({
     const breakdownItems = (tooltipBreakdown && tooltipBreakdown.length > 0
         ? tooltipBreakdown
         : [
-            { label: tooltipLabels.yes, value: yesValue, className: 'text-futarchyBlue9' },
-            { label: tooltipLabels.no, value: noValue, className: 'text-futarchyGold8' }
+            { label: tooltipLabels.yes, value: yesValue, className: 'text-pass-text' },
+            { label: tooltipLabels.no, value: noValue, className: 'text-fail-text' }
         ]
     ).map(item => ({
         label: item.label,
-        className: item.className || 'text-white/80',
+        className: item.className || 'text-seer-text',
         value: formatValue(item.value)
     }));
 
+    // The breakdown opens on hover and on keyboard focus of the info button.
     return (
-        <div className="flex items-center gap-2">
-            {Icon && <Icon className="h-5 w-5 text-white/70" />}
-            <div className="relative group flex flex-col items-start">
-                <span className="text-sm lg:text-base font-semibold text-white">
-                    {isLoading ? (
-                        <div className="flex items-center gap-2">
-                            <span className="text-white/60">Loading...</span>
-                            <div className="w-3 h-3 border-2 border-white/40 border-t-transparent rounded-full animate-spin" />
-                        </div>
-                    ) : unavailable ? (
-                        // The data source failed: say so rather than show 0.
-                        <span className="text-white/60" title="The market data service did not respond">
-                            Data unavailable
+        <div className="relative group flex flex-col gap-1 min-w-0">
+            <span className="flex items-center gap-1.5 text-[13px] text-seer-muted">
+                {Icon && <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                {label}
+            </span>
+            <span className="text-base font-semibold tabular-nums text-seer-text">
+                {isLoading ? (
+                    <StatLoading />
+                ) : unavailable ? (
+                    // The data source failed: say so rather than show 0.
+                    <span className="text-sm font-normal text-seer-muted" title="The market data service did not respond">
+                        Data unavailable
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                        <span>{formattedTotal}</span>
+                        <button
+                            type="button"
+                            className="text-seer-muted hover:text-seer-text rounded-full"
+                            aria-label={`${label} breakdown`}
+                        >
+                            <InformationCircleIcon className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                    </span>
+                )}
+            </span>
+
+            {!isLoading && !unavailable && (
+                <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-xs flex-col gap-1 rounded-surface border border-seer-border bg-seer-surface px-3 py-2 text-xs text-seer-text shadow-lg group-hover:flex group-focus-within:flex">
+                    <span className="font-semibold">Breakdown</span>
+                    {breakdownItems.map((item, index) => (
+                        <span key={`${item.label}-${index}`} className="flex items-center justify-between gap-4">
+                            <span className="text-seer-muted">{item.label}</span>
+                            <span className={`tabular-nums ${item.className}`}>{item.value}</span>
                         </span>
-                    ) : (
-                        <span className="inline-flex items-center gap-1">
-                            <span>{formattedTotal}</span>
-                            <span className="text-xs text-white/40 transition-colors group-hover:text-white/70">
-                                ⓘ
-                            </span>
+                    ))}
+                    {tooltipNote && (
+                        <span className="mt-1 max-w-[16rem] whitespace-normal border-t border-seer-border pt-1 text-seer-muted">
+                            {tooltipNote}
                         </span>
                     )}
-                </span>
-                <span className="text-xs text-white/70">{label}</span>
-
-                {!isLoading && !unavailable && (
-                    <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-xs flex-col gap-1 rounded-md border border-white/10 bg-futarchyDarkGray42/95 px-3 py-2 text-xs text-white/80 shadow-lg backdrop-blur-sm transition group-hover:flex">
-                        <span className="font-semibold text-white/90">Breakdown</span>
-                        {breakdownItems.map((item, index) => (
-                            <span key={`${item.label}-${index}`} className="flex items-center justify-between gap-4">
-                                <span className="text-white/60">{item.label}</span>
-                                <span className={item.className}>{item.value}</span>
-                            </span>
-                        ))}
-                        {tooltipNote && (
-                            <span className="mt-1 max-w-[16rem] whitespace-normal border-t border-white/10 pt-1 text-white/60">
-                                {tooltipNote}
-                            </span>
-                        )}
-                    </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };
