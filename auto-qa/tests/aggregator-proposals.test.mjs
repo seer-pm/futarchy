@@ -123,9 +123,10 @@ test('proposals resolved on-chain are marked resolved despite stale metadata', a
     assert.equal(hook.resolveMarketStatus(p[MAINNET_OPEN], 1_800_000_000).state, 'active');
     assert.equal(p[GNOSIS_OPEN].onChainResolution, null);
 
-    // conditionId + denominator + YES and NO numerators per proposal, on its own chain.
-    assert.equal(rpcCalls.length, 12);
-    assert.equal(rpcCalls.filter((c) => c.chainId === 1).length, 4);
+    // conditionId, numOutcomes, denominator, slot count and the YES and NO
+    // numerators per proposal, on its own chain.
+    assert.equal(rpcCalls.length, 18);
+    assert.equal(rpcCalls.filter((c) => c.chainId === 1).length, 6);
 });
 
 test('a proposal without a close time gets no invented deadline', async () => {
@@ -157,6 +158,6 @@ test('fetchUnsettledResolutions reads the chain only for proposals metadata does
         { proposalAddress: null, chainId: 100, metadata: {} },
     ]);
 
-    assert.equal(rpcCalls.length, 4);
+    assert.equal(rpcCalls.length, 6);
     assert.deepEqual([...resolutions.entries()], [[`100:${GNOSIS_RESOLVED}`, { resolved: true, outcome: 'yes' }]]);
 });
