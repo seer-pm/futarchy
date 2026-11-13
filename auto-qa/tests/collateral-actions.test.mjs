@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { approveIfNeeded, splitCollateral, mergeCollateral } from '../../src/utils/collateralActions.js';
+import { approveIfNeeded, splitCollateral, mergeCollateral, mergeOutcomeTokens } from '../../src/utils/collateralActions.js';
 import { SAFE_TRANSACTION_SENT } from '../../src/utils/txErrors.js';
 
 const ROUTER = '0x00000000000000000000000000000000000000f1';
@@ -214,6 +214,35 @@ test('merge — a reverted merge is an error', async () => {
         balances: { [YES]: 500n, [NO]: 500n }, allowances: { [YES]: 500n, [NO]: 500n }, receiptStatus: 'reverted',
     });
     await assert.rejects(mergeCollateral(mergeArgs({ publicClient, walletClient: fakeWalletClient() })));
+});
+
+test('merge of a categorical proposal — approves every answer and INVALID, and needs all of them', async () => {
+    const A = '0x0000000000000000000000000000000000000ea1';
+    const B = '0x0000000000000000000000000000000000000ea2';
+    const INVALID = '0x0000000000000000000000000000000000000ea9';
+    const args = (overrides) => ({ ...splitArgs(), outcomeTokens: [A, B, INVALID], ...overrides });
+
+    const walletClient = fakeWalletClient();
+    const steps = [];
+    await mergeOutcomeTokens(args({
+        publicClient: fakePublicClient({ balances: { [A]: 500n, [B]: 900n, [INVALID]: 500n }, allowances: { [B]: 500n } }),
+        walletClient,
+        onStep: (step, index) => steps.push(index === undefined ? step : `${step}:${index}`),
+    }));
+    assert.deepEqual(walletClient.writes.map((w) => [w.address, w.functionName, w.args]), [
+        [A, 'approve', [ROUTER, 500n]],
+        [INVALID, 'approve', [ROUTER, 500n]],
+        [ROUTER, 'mergePositions', [PROPOSAL, COLLATERAL, 500n]],
+    ]);
+    assert.deepEqual(steps, ['approval:0', 'approved:0', 'approval:1', 'approved:1', 'approval:2', 'approved:2', 'merge', 'done']);
+
+    // Without enough INVALID tokens nothing is sent.
+    const short = fakeWalletClient();
+    await assert.rejects(
+        mergeOutcomeTokens(args({ publicClient: fakePublicClient({ balances: { [A]: 500n, [B]: 500n, [INVALID]: 499n } }), walletClient: short })),
+        /Insufficient token balance/,
+    );
+    assert.equal(short.writes.length, 0);
 });
 
 test('approveIfNeeded — reports whether an approval was sent', async () => {

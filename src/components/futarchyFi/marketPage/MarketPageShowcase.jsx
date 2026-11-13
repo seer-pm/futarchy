@@ -7,6 +7,7 @@ import { useAccount } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useSnapshotData } from '../../../hooks/useSnapshotData';
 import MarketBalancePanel from './MarketBalancePanel';
+import CategoricalPositionsPanel from './CategoricalPositionsPanel';
 import { useYesNoPoolData } from '../../../hooks/usePoolData';
 import { FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS } from './constants/contracts';
 import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from '../../../constants/addresses';
@@ -27,6 +28,7 @@ import { useTokenImages } from './showcase/useTokenImages';
 import { useLivePoolPrices } from './showcase/useLivePoolPrices';
 import { useLiquiditySummary } from './showcase/useLiquiditySummary';
 import { useMarketBalances } from './showcase/useMarketBalances';
+import { useCategoricalMarket } from './showcase/useCategoricalMarket';
 import { useCollateralFlow } from './showcase/useCollateralFlow';
 import { useMarketData } from './showcase/useMarketData';
 import { useConfirmSwapState } from './showcase/useConfirmSwapState';
@@ -171,6 +173,9 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   const liquiditySummary = useLiquiditySummary({ config, poolData, newYesPrice, newNoPrice, latestPrices });
 
   const balances = useMarketBalances(config, address, isConnected);
+  // N answers plus INVALID: its own positions panel replaces the YES/NO trade,
+  // view and balance panels, which read YES/NO tokens.
+  const categorical = useCategoricalMarket(config, address);
   const { rawBalances, positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const collateral = useCollateralFlow(refetchBalances);
   const {
@@ -314,13 +319,21 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         rate={rate}
                         setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
                         setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
+                        isCategorical={categorical.isCategorical}
                       />
                     </div>
 
                     {/* Right side - Balance Panel */}
                     <div className="md:col-span-1">
                       <div className="sticky top-24 space-y-8">
-                        {(
+                        {categorical.isCategorical ? (
+                          <CategoricalPositionsPanel
+                            categorical={categorical}
+                            config={config}
+                            address={address}
+                            onConnectWallet={handleConnectWallet}
+                          />
+                        ) : (
                           <div className="">
                             <ShowcaseSwapComponent
                               positions={positions}
@@ -347,10 +360,10 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                           </div>
                         )}
 
-                        <YourViewCard subject={marketSubject} />
+                        {!categorical.isCategorical && <YourViewCard subject={marketSubject} />}
 
                         {/* Balance Stats Container */}
-                        <MarketBalancePanel
+                        {!categorical.isCategorical && <MarketBalancePanel
                           positions={positions}
                           address={address}
                           handleOpenCollateralModal={handleOpenCollateralModal}
@@ -359,7 +372,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                           refetchBalances={refetchBalances}
                           proposalId={proposalId}
                           devMode={true}
-                        />
+                        />}
                       </div>
                     </div>
                   </div>

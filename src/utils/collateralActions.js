@@ -116,29 +116,48 @@ export async function splitCollateral({
  * @param {(step: 'yesApproval'|'yesApproved'|'noApproval'|'noApproved'|'merge'|'done') => void} [p.onStep]
  * @returns {Promise<{hash: string, receipt: object}>}
  */
-export async function mergeCollateral({
-    publicClient, walletClient, account, router, proposal, collateralToken, yesToken, noToken, amount,
+export function mergeCollateral({ yesToken, noToken, onStep, ...rest }) {
+    const approvalSteps = [['yesApproval', 'yesApproved'], ['noApproval', 'noApproved']];
+    return mergeOutcomeTokens({
+        ...rest,
+        outcomeTokens: [yesToken, noToken],
+        onStep: onStep && ((step, index) => {
+            if (step === 'approval') onStep(approvalSteps[index][0]);
+            else if (step === 'approved') onStep(approvalSteps[index][1]);
+            else onStep(step);
+        }),
+    });
+}
+
+/**
+ * Merges `amount` of every outcome token of a collateral back into it: YES
+ * and NO for a binary proposal, each answer and INVALID for a categorical one
+ * (utils/proposalOutcomes.js).
+ *
+ * @param {object} p
+ * @param {string[]} p.outcomeTokens wrapped outcome tokens of `collateralToken`, one per condition slot
+ * @param {(step: 'approval'|'approved'|'merge'|'done', index?: number) => void} [p.onStep]
+ *   index is the position in outcomeTokens of the token being approved
+ * @returns {Promise<{hash: string, receipt: object}>}
+ */
+export async function mergeOutcomeTokens({
+    publicClient, walletClient, account, router, proposal, collateralToken, outcomeTokens, amount,
     useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, onStep,
 }) {
     const amountRaw = toBigInt(amount);
-    const [yesBalance, noBalance] = await Promise.all([
-        balanceOf(publicClient, yesToken, account),
-        balanceOf(publicClient, noToken, account),
-    ]);
-    if (yesBalance < amountRaw || noBalance < amountRaw) {
-        throw new Error('Insufficient token balance. You need this amount of both YES and NO tokens.');
+    const balances = await Promise.all(outcomeTokens.map((token) => balanceOf(publicClient, token, account)));
+    if (balances.some((balance) => balance < amountRaw)) {
+        throw new Error('Insufficient token balance. You need this amount of every outcome token.');
     }
 
-    const approve = (token) => approveIfNeeded({
-        publicClient, walletClient, account, token, spender: router, amount: amountRaw,
-        useUnlimitedApproval, isSafe, waitForSafeExecution,
-    });
-    onStep?.('yesApproval');
-    await approve(yesToken);
-    onStep?.('yesApproved');
-    onStep?.('noApproval');
-    await approve(noToken);
-    onStep?.('noApproved');
+    for (const [index, token] of outcomeTokens.entries()) {
+        onStep?.('approval', index);
+        await approveIfNeeded({
+            publicClient, walletClient, account, token, spender: router, amount: amountRaw,
+            useUnlimitedApproval, isSafe, waitForSafeExecution,
+        });
+        onStep?.('approved', index);
+    }
 
     onStep?.('merge');
     const hash = await walletClient.writeContract({

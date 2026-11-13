@@ -31,11 +31,20 @@ const PROPOSAL_ABI = parseAbi([
     'function encodedQuestion() view returns (string)',
 ]);
 const CONDITIONAL_TOKENS_ABI = parseAbi(['function getOutcomeSlotCount(bytes32) view returns (uint256)']);
+const ERC20_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
 
 // Same as utils/onChainResolution.js CONDITIONAL_TOKENS_BY_CHAIN.
 const CONDITIONAL_TOKENS_BY_CHAIN = {
     1: '0xC59b0e4De5F1248C1140964E0fF287B192407E0C',
     100: '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce',
+};
+
+// FutarchyCategoricalRouter per chain: categorical proposals split, merge and
+// redeem through it, binary ones through FutarchyRouter. Not deployed yet; the
+// variables set one for a build.
+export const CATEGORICAL_ROUTER_BY_CHAIN = {
+    1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_ROUTER || null,
+    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || null,
 };
 
 // Reality.eth separator between question, outcomes, category and language.
@@ -175,4 +184,55 @@ export async function fetchProposalOutcomes(proposalAddress, provider, { chainId
             })
             : [],
     };
+}
+
+/**
+ * The outcome slots of a proposal from fetchProposalOutcomes, in slot order:
+ * the answers, then INVALID for a categorical proposal.
+ * @returns {Array<{key: string, label: string, isInvalid: boolean, company: {address: string, name: string|null}, currency: {address: string, name: string|null}}>}
+ */
+export function outcomeRows(proposal) {
+    const rows = proposal.outcomes.map((outcome, index) => ({ key: String(index), isInvalid: false, ...outcome }));
+    if (proposal.invalid) rows.push({ key: 'invalid', label: 'Invalid', isInvalid: true, ...proposal.invalid });
+    return rows;
+}
+
+/**
+ * The slot a resolved categorical proposal pays, from its
+ * fetchOnChainResolutions result: the winning answer, or INVALID.
+ * @returns {ReturnType<typeof outcomeRows>[number]|null} null while unresolved
+ */
+export function winningRow(proposal, resolution) {
+    if (proposal?.kind !== 'categorical' || !resolution?.resolved) return null;
+    const rows = outcomeRows(proposal);
+    if (resolution.outcome === 'invalid') return rows[rows.length - 1];
+    return Number.isInteger(resolution.outcomeIndex) && resolution.outcomeIndex < proposal.outcomes.length
+        ? rows[resolution.outcomeIndex]
+        : null;
+}
+
+/**
+ * Balances of an account in both collaterals and every outcome token of a
+ * proposal, in one batched round.
+ * @returns {Promise<Map<string, bigint>>} keyed by lowercase token address
+ */
+export async function fetchOutcomeBalances(proposal, account, provider) {
+    const tokens = [
+        proposal.companyToken,
+        proposal.currencyToken,
+        ...outcomeRows(proposal).flatMap((row) => [row.company.address, row.currency.address]),
+    ];
+    const values = await Promise.all(tokens.map((token) => read(provider, token, ERC20_ABI, 'balanceOf', [account])));
+    return new Map(tokens.map((token, i) => [token.toLowerCase(), values[i]]));
+}
+
+/**
+ * How much of a collateral the account can get back by merging: merging takes
+ * the same amount of every outcome token of that collateral, INVALID included.
+ * @param {'company'|'currency'} side
+ */
+export function mergeableAmount(proposal, balances, side) {
+    return outcomeRows(proposal)
+        .map((row) => balances.get(row[side].address.toLowerCase()) ?? 0n)
+        .reduce((min, balance) => (balance < min ? balance : min));
 }

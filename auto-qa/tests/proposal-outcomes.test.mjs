@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalWarnings, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { categoricalWarnings, mergeableAmount, outcomeRows, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 
 const SEP = '\u241f';
 const question = (answers) => `Who will win?${SEP}${answers}${SEP}politics${SEP}en_US`;
@@ -73,4 +73,42 @@ test('two tokens with the same name are flagged, including an answer named INVAL
         tokenNames: ['INVALID_PNK', 'OTHER_PNK', 'INVALID_sDAI', 'OTHER_sDAI', 'INVALID_PNK', 'INVALID_sDAI'],
     });
     assert.deepEqual(warnings.map((w) => w.code), ['duplicate-token-names']);
+});
+
+// A categorical proposal from fetchProposalOutcomes: 3 answers plus INVALID.
+const token = (address, name) => ({ address, name });
+const CATEGORICAL = {
+    kind: 'categorical',
+    companyToken: '0xC1', currencyToken: '0xC2',
+    outcomes: ['A', 'B', 'C'].map((label, i) => ({
+        label, company: token(`0xA${i}`, `${label}_PNK`), currency: token(`0xB${i}`, `${label}_sDAI`),
+    })),
+    invalid: { company: token('0xAF', 'INVALID_PNK'), currency: token('0xBF', 'INVALID_sDAI') },
+};
+
+test('outcome rows list the answers in slot order with INVALID last', () => {
+    assert.deepEqual(outcomeRows(CATEGORICAL).map((row) => [row.key, row.label, row.isInvalid, row.company.name]), [
+        ['0', 'A', false, 'A_PNK'], ['1', 'B', false, 'B_PNK'], ['2', 'C', false, 'C_PNK'], ['invalid', 'Invalid', true, 'INVALID_PNK'],
+    ]);
+});
+
+test('the winning row is the answer index, or INVALID; nothing wins before resolution', () => {
+    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: null, outcomeIndex: 2 }).label, 'C');
+    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: null, outcomeIndex: 0 }).label, 'A');
+    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: 'invalid', outcomeIndex: null }).key, 'invalid');
+    assert.equal(winningRow(CATEGORICAL, { resolved: false, outcome: null }), null);
+    assert.equal(winningRow(CATEGORICAL, null), null);
+    // A binary proposal's YES/NO resolution never maps onto these rows.
+    assert.equal(winningRow({ ...CATEGORICAL, kind: 'binary' }, { resolved: true, outcome: 'yes' }), null);
+});
+
+test('mergeable is the smallest balance among every outcome token of a collateral, INVALID included', () => {
+    const balances = new Map([
+        ['0xa0', 10n], ['0xa1', 7n], ['0xa2', 9n], ['0xaf', 3n],
+        ['0xb0', 5n], ['0xb1', 5n], ['0xb2', 5n], ['0xbf', 8n],
+    ]);
+    assert.equal(mergeableAmount(CATEGORICAL, balances, 'company'), 3n);
+    assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 5n);
+    balances.delete('0xb1');
+    assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 0n);
 });
