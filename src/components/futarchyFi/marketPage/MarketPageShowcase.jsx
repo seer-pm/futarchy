@@ -8,6 +8,8 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useSnapshotData } from '../../../hooks/useSnapshotData';
 import MarketBalancePanel from './MarketBalancePanel';
 import CategoricalPositionsPanel from './CategoricalPositionsPanel';
+import CategoricalOutcomesCard from './CategoricalOutcomesCard';
+import CategoricalTradePanel from './CategoricalTradePanel';
 import { useYesNoPoolData } from '../../../hooks/usePoolData';
 import { FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS } from './constants/contracts';
 import { BASE_TOKENS_CONFIG as DEFAULT_BASE_TOKENS_CONFIG } from '../../../constants/addresses';
@@ -176,6 +178,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
   // N answers plus INVALID: its own positions panel replaces the YES/NO trade,
   // view and balance panels, which read YES/NO tokens.
   const categorical = useCategoricalMarket(config, address);
+  // The answer the outcomes card and the trade panel show.
+  const [selectedOutcome, setSelectedOutcome] = useState('0');
   const { rawBalances, positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const collateral = useCollateralFlow(refetchBalances);
   const {
@@ -293,7 +297,14 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                       {/* Title */}
 
 
-                      <MarketChartSection
+                      {categorical.isCategorical ? (
+                        <CategoricalOutcomesCard
+                          categorical={categorical}
+                          config={config}
+                          selectedKey={selectedOutcome}
+                          onSelect={setSelectedOutcome}
+                        />
+                      ) : <MarketChartSection
                         showTripleChart={showTripleChart}
                         showSubgraphChart={showSubgraphChart}
                         config={config}
@@ -307,10 +318,10 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         handleChartFilterClick={handleChartFilterClick}
                         marketHasClosed={marketHasClosed}
                         spot={spot}
-                      />
+                      />}
 
-                      {/* Tabs Section */}
-                      <MarketTabsSection
+                      {/* Tabs Section: trades and positions of the YES/NO tokens */}
+                      {!categorical.isCategorical && <MarketTabsSection
                         tabs={tabs}
                         balances={balances}
                         config={config}
@@ -319,20 +330,29 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         rate={rate}
                         setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
                         setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
-                        isCategorical={categorical.isCategorical}
-                      />
+                      />}
                     </div>
 
                     {/* Right side - Balance Panel */}
                     <div className="md:col-span-1">
                       <div className="sticky top-24 space-y-8">
                         {categorical.isCategorical ? (
+                          <>
+                          <CategoricalTradePanel
+                            categorical={categorical}
+                            config={config}
+                            address={address}
+                            selectedKey={selectedOutcome}
+                            onSelect={setSelectedOutcome}
+                            onConnectWallet={handleConnectWallet}
+                          />
                           <CategoricalPositionsPanel
                             categorical={categorical}
                             config={config}
                             address={address}
                             onConnectWallet={handleConnectWallet}
                           />
+                          </>
                         ) : (
                           <div className="">
                             <ShowcaseSwapComponent

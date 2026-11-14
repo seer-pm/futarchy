@@ -47,6 +47,23 @@ export const CATEGORICAL_ROUTER_BY_CHAIN = {
     100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || null,
 };
 
+// AMM factory each chain's futarchy pools are created on: Swapr (Algebra) on
+// Gnosis, Uniswap V3 on Ethereum at the 1% tier, as in
+// adapters/subgraphConfigAdapter.js fetchProposalFromChain.
+const AMM_BY_CHAIN = {
+    1: { factory: '0x1F98431c8aD98523631AE4a59f267346ea31F984', fee: 10000 },
+    100: { factory: '0xA0864cCA6E114013AB0e27cbd5B6f4c8947da766' },
+};
+const AMM_ABI = parseAbi([
+    'function poolByPair(address, address) view returns (address)',
+    'function getPool(address, address, uint24) view returns (address)',
+    'function token0() view returns (address)',
+    'function liquidity() view returns (uint128)',
+    'function globalState() view returns (uint160 price, int24 tick, uint16 fee, uint16 timepointIndex, uint16 communityFeeToken0, uint16 communityFeeToken1, bool unlocked)',
+    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)',
+]);
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 // Reality.eth separator between question, outcomes, category and language.
 const REALITY_SEPARATOR = '\u241f';
 
@@ -224,6 +241,60 @@ export async function fetchOutcomeBalances(proposal, account, provider) {
     ];
     const values = await Promise.all(tokens.map((token) => read(provider, token, ERC20_ABI, 'balanceOf', [account])));
     return new Map(tokens.map((token, i) => [token.toLowerCase(), values[i]]));
+}
+
+/**
+ * Price of `base` in units of the pool's other token, from the pool's sqrt
+ * price, for two 18-decimal tokens (outcome tokens and the futarchy
+ * collaterals). The pool price is token1 per token0.
+ * @param {bigint} sqrtPriceX96
+ * @returns {number|null} null for an uninitialized pool
+ */
+export function poolPrice(sqrtPriceX96, token0, base) {
+    if (!sqrtPriceX96) return null;
+    const ratio = Number(sqrtPriceX96) / 2 ** 96;
+    const price = ratio * ratio;
+    return token0.toLowerCase() === base.toLowerCase() ? price : 1 / price;
+}
+
+/**
+ * The pools of each answer of a categorical proposal, read from the AMM
+ * factory (the candles indexer only knows binary proposals):
+ *   - conditional: answer's company token / answer's currency token, whose
+ *     price is the company token's price if that answer wins;
+ *   - prediction: answer's currency token / currency token, whose price is
+ *     the chance the market gives that answer.
+ * INVALID has no pools. A pool is null when nobody created it.
+ *
+ * @returns {Promise<Array<{key: string, label: string, company: object, currency: object,
+ *   conditional: {address: string, price: number|null, liquidity: bigint}|null,
+ *   prediction: {address: string, price: number|null, liquidity: bigint}|null}>>}
+ *   price is the company token in currency tokens (conditional) or the
+ *   answer's currency token in currency tokens (prediction)
+ */
+export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = {}) {
+    const amm = AMM_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
+    const findPool = ([tokenA, tokenB]) => (amm.fee
+        ? read(provider, amm.factory, AMM_ABI, 'getPool', [tokenA, tokenB, amm.fee])
+        : read(provider, amm.factory, AMM_ABI, 'poolByPair', [tokenA, tokenB]));
+    const readPool = async (address, base) => {
+        if (address === ZERO_ADDRESS) return null;
+        const [token0, liquidity, state] = await Promise.all([
+            read(provider, address, AMM_ABI, 'token0'),
+            read(provider, address, AMM_ABI, 'liquidity'),
+            read(provider, address, AMM_ABI, amm.fee ? 'slot0' : 'globalState'),
+        ]);
+        return { address, price: poolPrice(state[0], token0, base), liquidity };
+    };
+
+    const answers = outcomeRows(proposal).filter((row) => !row.isInvalid);
+    const pairs = answers.flatMap((row) => [
+        [row.company.address, row.currency.address],
+        [row.currency.address, proposal.currencyToken],
+    ]);
+    const addresses = await Promise.all(pairs.map(findPool));
+    const pools = await Promise.all(addresses.map((address, i) => readPool(address, pairs[i][0])));
+    return answers.map((row, i) => ({ ...row, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
 }
 
 /**

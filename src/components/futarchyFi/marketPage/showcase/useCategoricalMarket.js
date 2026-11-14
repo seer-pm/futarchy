@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getRpcProvider } from '../../../../utils/getBestRpc';
 import { fetchOnChainResolutions, resolutionKey } from '../../../../utils/onChainResolution';
-import { fetchOutcomeBalances, fetchProposalOutcomes } from '../../../../utils/proposalOutcomes';
+import { fetchOutcomeBalances, fetchOutcomePools, fetchProposalOutcomes } from '../../../../utils/proposalOutcomes';
+
+const POOL_REFRESH_MS = 30_000;
 
 /**
- * A categorical proposal's outcomes, resolution and the account's balances.
+ * A categorical proposal's outcomes, their pools, resolution and the
+ * account's balances.
  * For a binary proposal isCategorical is false and the page keeps its YES/NO
  * panels; while the proposal is read it is false too.
  */
@@ -15,6 +18,7 @@ export function useCategoricalMarket(config, address) {
 
   const [proposal, setProposal] = useState(null);
   const [resolution, setResolution] = useState(null);
+  const [pools, setPools] = useState(null);
   const [balances, setBalances] = useState(null);
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState(null);
@@ -43,6 +47,22 @@ export function useCategoricalMarket(config, address) {
   }, [isCategorical, proposalAddress, chainId, conditionalTokens, refreshKey]);
 
   useEffect(() => {
+    if (!isCategorical) return undefined;
+    let cancelled = false;
+    fetchOutcomePools(proposal, getRpcProvider(chainId), { chainId })
+      .then((result) => { if (!cancelled) setPools(result); })
+      .catch((error) => console.warn('[useCategoricalMarket] Could not read the outcome pools:', error?.message));
+    return () => { cancelled = true; };
+  }, [isCategorical, proposal, chainId, refreshKey]);
+
+  // Pool prices move with every trade; re-read them while the page is open.
+  useEffect(() => {
+    if (!isCategorical) return undefined;
+    const timer = setInterval(() => setRefreshKey((key) => key + 1), POOL_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [isCategorical]);
+
+  useEffect(() => {
     if (!isCategorical || !address) {
       setBalances(null);
       return undefined;
@@ -62,5 +82,5 @@ export function useCategoricalMarket(config, address) {
 
   const refetch = useCallback(() => setRefreshKey((key) => key + 1), []);
 
-  return { isCategorical, proposal, resolution, balances, isLoadingBalances, balanceError, refetch };
+  return { isCategorical, proposal, pools, resolution, balances, isLoadingBalances, balanceError, refetch };
 }

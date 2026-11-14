@@ -11,8 +11,7 @@ const MarketTabsSection = ({
   selectedCurrency,
   rate,
   setCurrentTransactionData,
-  setIsConfirmModalOpen,
-  isCategorical = false
+  setIsConfirmModalOpen
 }) => {
   const { marketHasClosed, activeTab, setActiveTab, tradesLimit, setTradesLimit } = tabs;
   const { positions, isLoadingPositions, balanceError, refetchBalances } = balances;
@@ -144,14 +143,7 @@ const MarketTabsSection = ({
           </div>
         )}
         {activeTab === 'redeem-tokens' && (
-          isCategorical ? (
-            // RedeemTokens redeems YES/NO tokens; categorical ones redeem in CategoricalPositionsPanel.
-            <p className="mt-6 text-sm text-futarchyGray11 dark:text-white/70">
-              Redeem the winning outcome tokens from the Positions panel.
-            </p>
-          ) : (
-            <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} onBalancesChanged={refetchBalances} balanceError={balanceError} onRetryBalances={refetchBalances} />
-          )
+          <RedeemTokens config={config} positions={positions} isLoadingPositions={isLoadingPositions} onBalancesChanged={refetchBalances} balanceError={balanceError} onRetryBalances={refetchBalances} />
         )}
       </div>
     </div>

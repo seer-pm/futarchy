@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalWarnings, mergeableAmount, outcomeRows, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 
 const SEP = '\u241f';
 const question = (answers) => `Who will win?${SEP}${answers}${SEP}politics${SEP}en_US`;
@@ -23,7 +23,7 @@ const toString31 = (name) => {
 const tokenData = (name) => concat([toString31(name), toString31(name), pad('0x12', { size: 1 })]);
 
 test('wrappedTokenName reads the name the factories wrap tokens with', () => {
-    assert.equal(wrappedTokenName(tokenData('MILEI_PNK')), 'MILEI_PNK');
+    assert.equal(wrappedTokenName(tokenData('CAND_A_PNK')), 'CAND_A_PNK');
     assert.equal(wrappedTokenName(tokenData('INVALID_sDAI')), 'INVALID_sDAI');
     // 31 bytes is the longest name toString31 accepts.
     const longest = 'A'.repeat(27) + '_PNK';
@@ -33,18 +33,18 @@ test('wrappedTokenName reads the name the factories wrap tokens with', () => {
 
 test('a well-formed categorical proposal has no warnings', () => {
     assert.deepEqual(categoricalWarnings({
-        encodedQuestion: question('"Milei","Massa","Bullrich"'),
-        outcomes: ['Milei', 'Massa', 'Bullrich'],
-        tokenNames: ['MILEI_PNK', 'MASSA_PNK', 'BULL_PNK', 'MILEI_sDAI', 'MASSA_sDAI', 'BULL_sDAI', 'INVALID_PNK', 'INVALID_sDAI'],
+        encodedQuestion: question('"Candidate A","Candidate B","Candidate C"'),
+        outcomes: ['Candidate A', 'Candidate B', 'Candidate C'],
+        tokenNames: ['CAND_A_PNK', 'CAND_B_PNK', 'CAND_C_PNK', 'CAND_A_sDAI', 'CAND_B_sDAI', 'CAND_C_sDAI', 'INVALID_PNK', 'INVALID_sDAI'],
     }), []);
 });
 
 test('an outcome with quotes makes Reality list other answers than the slots', () => {
-    // Two slots on-chain, three answers on Reality: answer 2 (Bullrich) would pay INVALID.
+    // Two slots on-chain, three answers on Reality: answer 2 (Candidate C) would pay INVALID.
     const warnings = categoricalWarnings({
-        encodedQuestion: question('"Milei","Massa","Bullrich"'),
-        outcomes: ['Milei","Massa', 'Bullrich'],
-        tokenNames: ['MILEI_PNK', 'BULL_PNK', 'MILEI_sDAI', 'BULL_sDAI', 'INVALID_PNK', 'INVALID_sDAI'],
+        encodedQuestion: question('"Candidate A","Candidate B","Candidate C"'),
+        outcomes: ['Candidate A","Candidate B', 'Candidate C'],
+        tokenNames: ['CAND_A_PNK', 'CAND_C_PNK', 'CAND_A_sDAI', 'CAND_C_sDAI', 'INVALID_PNK', 'INVALID_sDAI'],
     });
     assert.deepEqual(warnings.map((w) => w.code), ['question-mismatch']);
 });
@@ -111,4 +111,15 @@ test('mergeable is the smallest balance among every outcome token of a collatera
     assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 5n);
     balances.delete('0xb1');
     assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 0n);
+});
+
+test('pool price is the base token in the other token, whichever side of the pool it is', () => {
+    const A = '0x00000000000000000000000000000000000000aA';
+    const B = '0x00000000000000000000000000000000000000Bb';
+    // sqrt(4) * 2^96: 4 of token1 per token0.
+    const sqrtPriceX96 = 2n * 2n ** 96n;
+    assert.equal(poolPrice(sqrtPriceX96, A, A), 4);
+    assert.equal(poolPrice(sqrtPriceX96, A, B), 0.25);
+    assert.equal(poolPrice(sqrtPriceX96, A.toLowerCase(), A), 4);
+    assert.equal(poolPrice(0n, A, A), null);
 });
