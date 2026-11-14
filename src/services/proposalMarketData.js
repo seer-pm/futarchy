@@ -23,8 +23,8 @@ const buildQuery = (proposalId) => `{
     proposal(id: "${proposalId}") {
         id
         marketName
-        companyToken { id }
-        currencyToken { id }
+        companyToken { id symbol }
+        currencyToken { id symbol }
     }
     whitelistedTokens(where: { proposal: "${proposalId}" }, first: 100) {
         id
