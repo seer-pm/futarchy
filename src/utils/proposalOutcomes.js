@@ -91,6 +91,20 @@ export function wrappedTokenName(data) {
 }
 
 /**
+ * An answer as people read it. Creation tools JSON-escape answers
+ * (utils/categoricalProposal.mjs), because Reality inserts them into a JSON
+ * template; text that is not a valid JSON string body is shown as stored.
+ * @param {string} text proposal.outcomes(i)
+ */
+export function realityText(text) {
+    try {
+        return JSON.parse(`"${text}"`);
+    } catch (_) {
+        return text;
+    }
+}
+
+/**
  * Reasons a categorical proposal may not mean what its outcomes say. The
  * factory takes outcome and token names as given (like Seer's markets), so a
  * creator can build a proposal whose Reality question lists other answers
@@ -98,7 +112,7 @@ export function wrappedTokenName(data) {
  *
  * @param {object} p
  * @param {string} p.encodedQuestion proposal.encodedQuestion()
- * @param {string[]} p.outcomes proposal.outcomes(i) for each answer
+ * @param {string[]} p.outcomes realityText(proposal.outcomes(i)) for each answer
  * @param {string[]} p.tokenNames names of every wrapped token
  * @returns {Array<{code: 'question-mismatch'|'duplicate-token-names', message: string}>}
  */
@@ -175,7 +189,7 @@ export async function fetchProposalOutcomes(proposalAddress, provider, { chainId
     const [wrapped, labels, encodedQuestion] = await Promise.all([
         Promise.all(Array.from({ length: tokenCount }, (_, i) => call('wrappedOutcome', [BigInt(i)]))),
         kind === 'categorical'
-            ? Promise.all(Array.from({ length: answers }, (_, i) => call('outcomes', [BigInt(i)])))
+            ? Promise.all(Array.from({ length: answers }, (_, i) => call('outcomes', [BigInt(i)]).then(realityText)))
             : ['Yes', 'No'],
         kind === 'categorical' ? call('encodedQuestion') : null,
     ]);

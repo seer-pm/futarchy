@@ -10,7 +10,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { buildCategoricalProposal, defaultTokenName, MAX_CATEGORICAL_OUTCOMES } from '../../src/utils/categoricalProposal.mjs';
 
 const SEP = '\u241f';
 const question = (answers) => `Who will win?${SEP}${answers}${SEP}politics${SEP}en_US`;
@@ -122,4 +123,59 @@ test('pool price is the base token in the other token, whichever side of the poo
     assert.equal(poolPrice(sqrtPriceX96, A, B), 0.25);
     assert.equal(poolPrice(sqrtPriceX96, A.toLowerCase(), A), 4);
     assert.equal(poolPrice(0n, A, A), null);
+});
+
+// --- creating categorical proposals (utils/categoricalProposal.mjs) ---------
+
+const CREATE = {
+    marketName: 'Who will win the “2027” election?',
+    outcomes: ['Javier Milei', 'Sergio "Massa"', 'Patricia Bullrich'],
+    companyToken: '0x37b60f4e9a31a64ccc0024dce7d0fd07eaa0f7b3',
+    currencyToken: '0xaf204776c7245bF4147c2612BF6e5972Ee483701',
+    companySymbol: 'PNK',
+    currencySymbol: 'sDAI',
+    category: 'politics',
+    language: 'en_US',
+    minBond: '1000000000000000000',
+    openingTime: 1_800_000_000,
+};
+
+test('answers with quotes are escaped on creation and read back as the same answers', () => {
+    const { errors, params } = buildCategoricalProposal(CREATE);
+    assert.deepEqual(errors, []);
+    const [marketName, outcomes, tokenNames] = params;
+    // The question is shown as stored, so it is stored as written.
+    assert.equal(marketName, CREATE.marketName);
+    assert.deepEqual(outcomes, ['Javier Milei', 'Sergio \\"Massa\\"', 'Patricia Bullrich']);
+    assert.deepEqual(tokenNames, ['JAVIER_MILEI', 'SERGIO_MASSA', 'PATRICIA_BULLRICH']);
+    // FutarchyCategoricalFactory.encodeRealityQuestion quotes the stored answers.
+    const encodedQuestion = question(outcomes.map((answer) => `"${answer}"`).join(','));
+    const labels = outcomes.map(realityText);
+    assert.deepEqual(labels, CREATE.outcomes);
+    assert.deepEqual(categoricalWarnings({ encodedQuestion, outcomes: labels, tokenNames: ['A', 'B', 'C'] }), []);
+});
+
+test('token names default from the answers and must fit 31 bytes with each collateral symbol', () => {
+    assert.equal(defaultTokenName('Señor Ñandú-2'), 'SENOR_NANDU_2');
+    // 26 + "_sDAI" = 31 bytes fits; 27 does not.
+    const fits = buildCategoricalProposal({ ...CREATE, outcomes: ['a', 'b'], tokenNames: ['A'.repeat(26), 'B'] });
+    assert.deepEqual(fits.errors, []);
+    const tooLong = buildCategoricalProposal({ ...CREATE, outcomes: ['a', 'b'], tokenNames: ['A'.repeat(27), 'B'] });
+    assert.equal(tooLong.params, null);
+    assert.match(tooLong.errors.join(' '), /_sDAI.*A{27}/);
+});
+
+test('a categorical proposal refuses what would create slots that do not mean their answers', () => {
+    const errorsOf = (input) => buildCategoricalProposal({ ...CREATE, ...input }).errors;
+    assert.equal(errorsOf({ outcomes: ['Only one'] }).length, 1);
+    assert.equal(errorsOf({ outcomes: ['A', 'a'] }).length, 2, 'same answer, so same token name too');
+    assert.equal(errorsOf({ outcomes: ['A', ' '] }).length, 2, 'blank answer and no token name');
+    assert.equal(errorsOf({ outcomes: ['Invalid', 'Other'] }).length, 1, 'INVALID_* are the Invalid outcome tokens');
+    assert.equal(errorsOf({ outcomes: ['A', 'B'], tokenNames: ['SAME', 'same'] }).length, 1);
+    assert.equal(errorsOf({ outcomes: Array.from({ length: MAX_CATEGORICAL_OUTCOMES + 1 }, (_, i) => `A${i}`) }).length, 1);
+    assert.equal(errorsOf({ openingTime: 0 }).length, 1);
+    // What Reality's JSON template or field separator would misread.
+    assert.equal(errorsOf({ marketName: 'Who wins "the" vote?' }).length, 1);
+    assert.equal(errorsOf({ marketName: 'Who wins\\?' }).length, 1);
+    assert.equal(errorsOf({ outcomes: ['A\u241fB', 'C'] }).length, 1);
 });

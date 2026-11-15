@@ -169,6 +169,12 @@ npm run call-pool-apis
 - Creates new futarchy proposal through the factory
 - Returns proposal address
 - Requires `openingTime` (see above)
+- `proposalType: "categorical"` with `outcomes` (and optional `tokenNames`) creates a
+  question with several answers on `FutarchyCategoricalFactory`
+  (`categoricalFactoryAddress` / `CATEGORICAL_FACTORY_ADDRESS`); interactive mode asks
+  for the type. Checks and escaping come from `src/utils/categoricalProposal.mjs`,
+  shared with the app's Create Proposal modal. Its gas is estimated, not fixed
+- `setupPoolsFromFutarchyProposal` only builds Yes/No pools and stops on a categorical proposal
 
 ### automate-futarchy.js
 

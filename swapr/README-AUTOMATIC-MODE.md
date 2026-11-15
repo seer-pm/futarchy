@@ -65,6 +65,18 @@ cp futarchy-config-new-proposal.example.json my-new-proposal.json
 npm run futarchy:auto my-new-proposal.json
 ```
 
+### Questions with several answers (categorical)
+
+A question with N answers, such as an election, needs `"proposalType": "categorical"`
+and an `outcomes` list; see `futarchy-config-categorical.example.json`. It is created on
+`FutarchyCategoricalFactory` (`categoricalFactoryAddress` or `CATEGORICAL_FACTORY_ADDRESS`),
+which adds Invalid as the last outcome. `tokenNames` are optional prefixes: each answer's
+tokens are named `<NAME>_<collateral symbol>` (31 bytes at most), from the answer by default.
+The interactive mode (`npm run futarchy:create`) asks for the question type first.
+
+The six-pool setup below only handles Yes/No proposals: for a categorical proposal the
+script creates it and stops before pool setup.
+
 ## What Happens in Automatic Mode
 
 The script will automatically:

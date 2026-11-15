@@ -11,6 +11,93 @@ import {
     getExplorerTxUrl,
     getExplorerAddressUrl
 } from './constants/chainConfig';
+import {
+    defaultTokenName,
+    estimateCategoricalGas,
+    MAX_CATEGORICAL_OUTCOMES
+} from '../../utils/categoricalProposal.mjs';
+
+// Gas above this needs a mostly empty block (Gnosis blocks hold 17M).
+const CATEGORICAL_GAS_WARNING = 10_000_000;
+
+const inputClass = "w-full px-4 py-3 bg-futarchyGray2 dark:bg-futarchyGray3 border border-futarchyGray6 dark:border-futarchyGray7 rounded-lg text-futarchyGray12 dark:text-white focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all";
+
+const PROPOSAL_TYPES = [
+    { value: 'binary', title: 'Yes / No', hint: 'Will the proposal pass?' },
+    { value: 'categorical', title: 'Choose between options', hint: 'Which of several answers wins?' }
+];
+
+/**
+ * The answers of a categorical question, each with the token name prefix
+ * its outcome tokens get (NAME_GNO, NAME_sDAI). Invalid is added by the
+ * factory.
+ */
+const AnswersInput = ({ outcomes, tokenNames, onChange }) => {
+    const update = (index, field, value) => {
+        const next = { outcomes: [...outcomes], tokenNames: [...tokenNames] };
+        next[field][index] = value;
+        onChange(next);
+    };
+    const remove = (index) => onChange({
+        outcomes: outcomes.filter((_, i) => i !== index),
+        tokenNames: tokenNames.filter((_, i) => i !== index)
+    });
+    const add = () => onChange({ outcomes: [...outcomes, ''], tokenNames: [...tokenNames, ''] });
+    const gas = estimateCategoricalGas(outcomes.length);
+
+    return (
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-futarchyGray11">Answers</label>
+            {outcomes.map((answer, index) => (
+                <div key={index} className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        aria-label={`Answer ${index + 1}`}
+                        className={`${inputClass} flex-[3] !py-2 text-sm`}
+                        value={answer}
+                        onChange={(e) => update(index, 'outcomes', e.target.value)}
+                        placeholder={`Answer ${index + 1}`}
+                    />
+                    <input
+                        type="text"
+                        aria-label={`Token name ${index + 1}`}
+                        className={`${inputClass} flex-[2] !py-2 font-mono text-xs uppercase`}
+                        value={tokenNames[index] || ''}
+                        onChange={(e) => update(index, 'tokenNames', e.target.value.toUpperCase())}
+                        placeholder={defaultTokenName(answer) || 'TOKEN'}
+                    />
+                    <button
+                        type="button"
+                        aria-label={`Remove answer ${index + 1}`}
+                        className="p-2 text-futarchyGray9 hover:text-red-500 disabled:opacity-30 disabled:hover:text-futarchyGray9"
+                        onClick={() => remove(index)}
+                        disabled={outcomes.length <= 2}
+                    >
+                        ✕
+                    </button>
+                </div>
+            ))}
+            <div className="flex items-center justify-between gap-3">
+                <button
+                    type="button"
+                    className="text-sm font-medium text-futarchyBlue11 hover:underline disabled:opacity-40 disabled:no-underline"
+                    onClick={add}
+                    disabled={outcomes.length >= MAX_CATEGORICAL_OUTCOMES}
+                >
+                    + Add answer
+                </button>
+                <span className="text-xs text-futarchyGray9">
+                    Invalid is added as the last outcome.
+                </span>
+            </div>
+            {gas > CATEGORICAL_GAS_WARNING && (
+                <div className="text-xs text-amber-500">
+                    {outcomes.length} answers need about {(gas / 1e6).toFixed(1)}M gas; the transaction may wait for a quiet block.
+                </div>
+            )}
+        </div>
+    );
+};
 
 // Loading Spinner (matching ConfirmSwapModal style)
 const LoadingSpinner = ({ className = "" }) => (
@@ -148,6 +235,7 @@ const CreateProposalModal = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     const chainConfig = CHAIN_CONFIG[formData.chainId];
+    const isCategorical = formData.proposalType === 'categorical';
 
     // Backdrop variants for Framer Motion
     const backdropVariants = {
@@ -220,19 +308,56 @@ const CreateProposalModal = ({ isOpen, onClose }) => {
                                 </div>
                             </div>
 
+                            {/* Question type: picks FutarchyFactory or FutarchyCategoricalFactory */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-futarchyGray11">Question type</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {PROPOSAL_TYPES.map((type) => (
+                                        <button
+                                            key={type.value}
+                                            type="button"
+                                            aria-pressed={formData.proposalType === type.value}
+                                            className={`p-3 rounded-xl border-2 text-left transition-all ${formData.proposalType === type.value
+                                                    ? 'border-futarchyBlue9 bg-futarchyBlue2 dark:bg-futarchyBlue3'
+                                                    : 'border-futarchyGray6 dark:border-futarchyGray7 hover:border-futarchyGray8'
+                                                }`}
+                                            onClick={() => updateField('proposalType', type.value)}
+                                        >
+                                            <div className="font-semibold text-futarchyGray12 dark:text-white">{type.title}</div>
+                                            <div className="text-xs text-futarchyGray9">{type.hint}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                                {isCategorical && !chainConfig?.categoricalFactoryAddress && (
+                                    <div className="text-xs text-amber-500">
+                                        The categorical factory is not deployed on {chainConfig?.name} yet.
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Market Name */}
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-futarchyGray11">
                                     Market Name / Question
                                 </label>
                                 <textarea
-                                    className="w-full px-4 py-3 bg-futarchyGray2 dark:bg-futarchyGray3 border border-futarchyGray6 dark:border-futarchyGray7 rounded-lg text-futarchyGray12 dark:text-white focus:outline-none focus:ring-2 focus:ring-futarchyBlue9 focus:border-transparent transition-all resize-none"
+                                    className={`${inputClass} resize-none`}
                                     value={formData.marketName}
                                     onChange={(e) => updateField('marketName', e.target.value)}
-                                    placeholder="Will proposal X be approved? If unresolved by YYYY-MM-DD, resolves to 'No'."
+                                    placeholder={isCategorical
+                                        ? 'Who will win the election held on YYYY-MM-DD?'
+                                        : "Will proposal X be approved? If unresolved by YYYY-MM-DD, resolves to 'No'."}
                                     rows={3}
                                 />
                             </div>
+
+                            {isCategorical && (
+                                <AnswersInput
+                                    outcomes={formData.outcomes}
+                                    tokenNames={formData.tokenNames}
+                                    onChange={({ outcomes, tokenNames }) => setFormData(prev => ({ ...prev, outcomes, tokenNames }))}
+                                />
+                            )}
 
                             {/* Token Addresses */}
                             <TokenAddressInput
