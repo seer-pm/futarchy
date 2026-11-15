@@ -128,6 +128,31 @@ test('outcome — null while unresolved and when a resolved market records none'
     assert.equal(unknown.labelWithOutcome, 'Resolved');
 });
 
+test('outcome — a categorical market\'s winner is its answer, named on every page, never YES or NO', () => {
+    const chain = { resolved: true, outcome: null, outcomeIndex: 1, answer: 'No' };
+    for (const market of [
+        // list card (useAggregatorProposals / ProposalsPage)
+        { resolution_status: 'unresolved', closeTimestamp: PAST, onChainResolution: chain },
+        // market page marketInfo (useContractConfig → MarketHero)
+        { resolved: true, resolutionStatus: 'resolved', finalOutcome: null, winningAnswer: 'No' },
+    ]) {
+        const status = resolveMarketStatus(market, NOW);
+        assert.equal(status.state, 'resolved');
+        // An answer named "No" must not count as a refused proposal.
+        assert.equal(status.outcome, null);
+        assert.equal(status.answer, 'No');
+        assert.equal(status.outcomeLabel, 'No');
+        assert.equal(status.labelWithOutcome, 'Resolved: No');
+    }
+    assert.equal(describeMarketStatus('resolved', null, 'Milei').labelWithOutcome, 'Resolved: Milei');
+
+    // The registry's outcome still wins, and an unresolved market names no winner.
+    const recorded = resolveMarketStatus({ resolution_outcome: 'invalid', onChainResolution: chain });
+    assert.deepEqual([recorded.outcome, recorded.answer, recorded.labelWithOutcome], ['invalid', null, 'Resolved: INVALID']);
+    const open = resolveMarketStatus({ closeTimestamp: FUTURE, winningAnswer: 'Milei' }, NOW);
+    assert.deepEqual([open.answer, open.labelWithOutcome], [null, 'Active']);
+});
+
 // ---------------------------------------------------------------------------
 // labels
 // ---------------------------------------------------------------------------
@@ -211,6 +236,9 @@ test('needsOnChainResolution — true until both "resolved" and the outcome are 
     assert.equal(needsOnChainResolution({ resolution_status: 'resolved', resolution_outcome: 'no' }), false);
     assert.equal(needsOnChainResolution({ resolution_outcome: 'invalid' }), false);
     assert.equal(needsOnChainResolution({ onChainResolution: { resolved: true, outcome: 'yes' } }), false);
+    // a categorical winner settles it once its name is known
+    assert.equal(needsOnChainResolution({ onChainResolution: { resolved: true, outcome: null, outcomeIndex: 0, answer: 'Milei' } }), false);
+    assert.equal(needsOnChainResolution({ onChainResolution: { resolved: true, outcome: null, outcomeIndex: 0, answer: null } }), true);
 });
 
 // ---------------------------------------------------------------------------

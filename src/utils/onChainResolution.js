@@ -28,6 +28,7 @@ const PAYOUT_DENOMINATOR = '0xdd34de67';  // payoutDenominator(bytes32)
 const PAYOUT_NUMERATORS = '0x0504c814';   // payoutNumerators(bytes32,uint256)
 const NUM_OUTCOMES = '0x8767d64e';        // numOutcomes()
 const OUTCOME_SLOT_COUNT = '0xd42dc0c2';  // getOutcomeSlotCount(bytes32)
+const OUTCOMES = '0xeed2a147';            // outcomes(uint256)
 
 function normalizeChainId(chainId) {
     return Number(chainId) === 1 ? 1 : 100;
@@ -45,16 +46,35 @@ async function ethCall(provider, to, data) {
     return provider.send('eth_call', [{ to, data }, 'latest']);
 }
 
+const uint256 = (value) => value.toString(16).padStart(64, '0');
+
+// An answer from proposal.outcomes(i): the ABI string (offset word, length
+// word, bytes), JSON-unescaped like realityText in utils/proposalOutcomes.js.
+function decodeAnswer(hex) {
+    const body = String(hex ?? '').slice(2);
+    const offset = Number.parseInt(body.slice(0, 64), 16) * 2;
+    const length = Number.parseInt(body.slice(offset, offset + 64), 16);
+    const bytes = body.slice(offset + 64, offset + 64 + length * 2);
+    if (!Number.isInteger(length) || bytes.length !== length * 2) return null;
+    const text = new TextDecoder().decode(Uint8Array.from(bytes.match(/../g) || [], (byte) => parseInt(byte, 16)));
+    try {
+        return JSON.parse(`"${text}"`);
+    } catch (_) {
+        return text;
+    }
+}
+
 /**
  * Check many proposals at once.
  *
  * @param {Array<{proposalAddress: string, chainId?: number|string, conditionalTokens?: string}>} proposals
  * @param {{getProvider?: (chainId: number) => {send: Function}}} [options]
- * @returns {Promise<Map<string, {resolved: boolean, outcome: 'yes'|'no'|'invalid'|null, outcomeIndex?: number|null}>>}
+ * @returns {Promise<Map<string, {resolved: boolean, outcome: 'yes'|'no'|'invalid'|null, outcomeIndex?: number|null, answer?: string|null}>>}
  *   keyed by resolutionKey(chainId, proposalAddress). For a categorical
  *   proposal (utils/proposalOutcomes.js) a winning answer is outcomeIndex,
- *   with outcome null, and INVALID is outcome 'invalid'. A proposal whose
- *   read failed is absent, so callers fall back to whatever metadata says.
+ *   with outcome null and answer its name (null when that read failed), and
+ *   INVALID is outcome 'invalid'. A proposal whose read failed is absent, so
+ *   callers fall back to whatever metadata says.
  */
 export async function fetchOnChainResolutions(proposals, { getProvider = getRpcProvider } = {}) {
     const results = new Map();
@@ -107,7 +127,7 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
         const word = conditionId.slice(2).toLowerCase();
         const provider = providers.get(t.chainId);
         const numerator = (slot) =>
-            ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${slot.toString(16).padStart(64, '0')}`);
+            ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${uint256(slot)}`);
         try {
             const [denominator, slotCount, yesNumerator, noNumerator] = await Promise.all([
                 ethCall(provider, t.conditionalTokens, `${PAYOUT_DENOMINATOR}${word}`),
@@ -137,9 +157,15 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
                 }
                 const winner = paid.indexOf(true);
                 if (winner === -1) return;
-                results.set(t.key, winner === answers
-                    ? { resolved: true, outcome: 'invalid', outcomeIndex: null }
-                    : { resolved: true, outcome: null, outcomeIndex: winner });
+                if (winner === answers) {
+                    results.set(t.key, { resolved: true, outcome: 'invalid', outcomeIndex: null });
+                    return;
+                }
+                // Lists and status labels name the winner; without its name
+                // the proposal still reads as resolved.
+                const answer = await ethCall(provider, t.address, `${OUTCOMES}${uint256(winner)}`)
+                    .then(decodeAnswer, () => null);
+                results.set(t.key, { resolved: true, outcome: null, outcomeIndex: winner, answer });
                 return;
             }
             // Both slots paying out means the question resolved invalid.
@@ -161,7 +187,8 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
  * @param {string} proposalAddress - FutarchyProposal contract address
  * @param {string} conditionalTokensAddress - ConditionalTokens contract address
  * @param {number|string} chainId - Chain the proposal lives on
- * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|'Invalid'|null}|null>} null when the check fails
+ * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|'Invalid'|null, answer: string|null}|null>}
+ *   null when the check fails; answer names a categorical proposal's winner
  */
 export async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress, chainId) {
     const results = await fetchOnChainResolutions([
@@ -175,6 +202,7 @@ export async function fetchOnChainResolution(proposalAddress, conditionalTokensA
     return {
         resolved: result.resolved,
         outcome: { yes: 'Yes', no: 'No', invalid: 'Invalid' }[result.outcome] || null,
+        answer: result.answer ?? null,
     };
 }
 

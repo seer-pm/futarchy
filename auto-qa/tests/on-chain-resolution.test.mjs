@@ -44,6 +44,13 @@ const numOutcomes = {
     [CAT_FIRST]: 3, [CAT_THIRD]: 3, [CAT_INVALID]: 3, [CAT_TWO_SECOND]: 2,
 };
 // conditionId -> [denominator, ...numerator per slot]
+// Answers of the categorical proposals (FutarchyProposal.outcomes); CAT_THIRD's read fails.
+const answers = {
+    // Stored JSON-escaped, as the creation tools write it (utils/categoricalProposal.mjs).
+    [CAT_FIRST]: ['Señora \\"Ñandú\\"', 'Massa', 'Bullrich'],
+    [CAT_INVALID]: ['A', 'B', 'C'],
+    [CAT_TWO_SECOND]: ['Yes', 'No'],
+};
 const payouts = {
     [word(1)]: [1, 1, 0], [word(2)]: [1, 0, 1], [word(3)]: [0, 0, 0], [word(4)]: [1, 1, 0], [word(5)]: [2, 1, 1],
     [word(6)]: [1, 1, 0, 0, 0], [word(7)]: [1, 0, 0, 1, 0], [word(8)]: [1, 0, 0, 0, 1], [word(9)]: [1, 0, 1, 0],
@@ -66,6 +73,11 @@ function fakeProvider(chainId, log) {
                 if (!numOutcomes[to]) throw new Error('execution reverted');
                 return word(numOutcomes[to]);
             }
+            if (data.startsWith('0xeed2a147')) {
+                const answer = answers[to]?.[Number(BigInt(`0x${data.slice(10)}`))];
+                if (answer === undefined) throw new Error('execution reverted');
+                return ethers.utils.defaultAbiCoder.encode(['string'], [answer]);
+            }
             const fn = iface.getFunction(data.slice(0, 10));
             const args = iface.decodeFunctionData(fn, data);
             const [denominator, ...numerators] = payouts[args[0]];
@@ -82,6 +94,7 @@ test('selectors match the ConditionalTokens / FutarchyProposal signatures', () =
     assert.match(source, new RegExp(ethers.utils.id('payoutNumerators(bytes32,uint256)').slice(0, 10)));
     assert.match(source, new RegExp(ethers.utils.id('numOutcomes()').slice(0, 10)));
     assert.match(source, new RegExp(ethers.utils.id('getOutcomeSlotCount(bytes32)').slice(0, 10)));
+    assert.match(source, new RegExp(ethers.utils.id('outcomes(uint256)').slice(0, 10)));
 });
 
 test('reports resolved outcome per proposal and leaves failed reads out', async () => {
@@ -159,17 +172,23 @@ test('both payout slots paying out reads as invalid, never as YES', async () => 
     assert.deepEqual(results.get(resolutionKey(100, INVALID)), { resolved: true, outcome: 'invalid' });
 });
 
-test('categorical proposals report the winning answer index, and their INVALID slot as invalid', async () => {
+test('categorical proposals report the winning answer and its name, and their INVALID slot as invalid', async () => {
     const results = await fetchOnChainResolutions(
         [CAT_FIRST, CAT_THIRD, CAT_INVALID, CAT_TWO_SECOND].map((proposalAddress) => ({ proposalAddress, chainId: 100 })),
         { getProvider: (chainId) => fakeProvider(chainId, []) }
     );
-    assert.deepEqual(results.get(resolutionKey(100, CAT_FIRST)), { resolved: true, outcome: null, outcomeIndex: 0 });
-    // The third answer is past the two slots read with the denominator.
-    assert.deepEqual(results.get(resolutionKey(100, CAT_THIRD)), { resolved: true, outcome: null, outcomeIndex: 2 });
+    // The name is UTF-8, longer than one byte per character, and unescaped.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_FIRST)),
+        { resolved: true, outcome: null, outcomeIndex: 0, answer: 'Señora "Ñandú"' });
+    // The third answer is past the two slots read with the denominator. Its
+    // name read fails: the proposal is still resolved, without a name.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_THIRD)),
+        { resolved: true, outcome: null, outcomeIndex: 2, answer: null });
     assert.deepEqual(results.get(resolutionKey(100, CAT_INVALID)), { resolved: true, outcome: 'invalid', outcomeIndex: null });
-    // Two candidates: slot 1 is the second candidate, not NO, and slot 2 is INVALID.
-    assert.deepEqual(results.get(resolutionKey(100, CAT_TWO_SECOND)), { resolved: true, outcome: null, outcomeIndex: 1 });
+    // Two candidates: slot 1 is the second candidate, not NO, and slot 2 is
+    // INVALID. An answer named "No" stays an answer.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_TWO_SECOND)),
+        { resolved: true, outcome: null, outcomeIndex: 1, answer: 'No' });
 });
 
 // --- resolution time ------------------------------------------------------
