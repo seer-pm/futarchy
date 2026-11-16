@@ -28,7 +28,8 @@ const MarketHero = ({
   liquiditySummary,
   timing,
   snapshot,
-  badgeModals
+  badgeModals,
+  categorical
 }) => {
   const { newYesPrice, newNoPrice, pricesUnavailable } = prices;
   const { poolData, poolDataLoading, poolDataError } = pool;
@@ -52,6 +53,12 @@ const MarketHero = ({
     endTime: config?.marketInfo?.endTime || marketEndTime
   });
   const isResolved = marketStatus.state === 'resolved';
+  // A categorical market has no YES/NO pools: its figures come from the
+  // conditional pool of each answer (useCategoricalMarket).
+  const categoricalTotals = categorical?.isCategorical ? categorical.totals : undefined;
+  const isCategorical = categoricalTotals !== undefined;
+  const impact = isCategorical ? categoricalTotals?.impact ?? null : computeImpactPercent(newYesPrice, newNoPrice);
+  const answerBreakdown = (field) => categoricalTotals?.breakdown.map((row) => ({ label: row.label, value: row[field] }));
 
   return (
     <div ref={attachHeroRef} className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
@@ -89,10 +96,12 @@ const MarketHero = ({
                 label="Impact (spot)"
                 // After resolution the losing side's tokens are worthless, so the
                 // gap between the two pools no longer measures anything.
-                value={isResolved ? '—' : formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
-                valueClassName={isResolved ? 'text-white' : ((computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
+                value={isResolved ? '—' : formatImpactPercent(impact, pricesUnavailable || isCategorical ? '—' : 'N/A')}
+                valueClassName={isResolved ? 'text-white' : ((impact ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
                 Icon={ImpactIcon}
-                isLoading={!isResolved && !pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
+                isLoading={!isResolved && (isCategorical
+                  ? categoricalTotals === null
+                  : !pricesUnavailable && (newYesPrice === null || newNoPrice === null))}
               />
 
               <StatDisplay
@@ -103,7 +112,18 @@ const MarketHero = ({
                 isLoading={configLoading}
               />
 
-              <AggregatedStatDisplay
+              {isCategorical ? (
+                <AggregatedStatDisplay
+                  label={`Volume (Total; ${currencySymbol})`}
+                  yesValue={categoricalTotals?.volume ?? null}
+                  noValue={null}
+                  Icon={VolumeIcon}
+                  isLoading={categoricalTotals === null}
+                  formatFunction={formatVolume}
+                  tooltipBreakdown={answerBreakdown('volume')}
+                  normalize={false}
+                />
+              ) : <AggregatedStatDisplay
                 label={`Volume (Total; ${currencySymbol})`}
                 yesValue={poolData?.yesPool?.volume ?? null}
                 noValue={poolData?.noPool?.volume ?? null}
@@ -113,9 +133,21 @@ const MarketHero = ({
                 tooltipLabels={{ yes: 'YES Volume', no: 'NO Volume' }}
                 normalize={poolData?.source !== 'subgraph'}
                 unavailable={!!poolDataError}
-              />
+              />}
 
-              <AggregatedStatDisplay
+              {isCategorical ? (
+                <AggregatedStatDisplay
+                  label="TVL"
+                  yesValue={categoricalTotals?.tvl ?? null}
+                  noValue={null}
+                  Icon={LiquidityIcon}
+                  isLoading={categoricalTotals === null}
+                  formatFunction={formatLiquidity}
+                  tooltipBreakdown={answerBreakdown('tvl')}
+                  tooltipNote="Total value locked in the conditional pool of each answer, its company token valued at the pool price. Prediction pools are not counted."
+                  normalize={false}
+                />
+              ) : <AggregatedStatDisplay
                 label="TVL"
                 yesValue={liquiditySummary.yes?.total ?? null}
                 noValue={liquiditySummary.no?.total ?? null}
@@ -127,7 +159,7 @@ const MarketHero = ({
                 tooltipNote="Total value locked in the YES/NO pools across all price ranges. This is not tradable depth: liquidity parked far from the current price doesn't absorb trades, so check the price impact in the trade panel before sizing a trade."
                 normalize={poolData?.source !== 'subgraph'}
                 unavailable={!!poolDataError}
-              />
+              />}
 
               <StatDisplay
                 label={(() => {

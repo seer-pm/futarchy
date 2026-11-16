@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 import { buildCategoricalProposal, defaultTokenName, MAX_CATEGORICAL_OUTCOMES } from '../../src/utils/categoricalProposal.mjs';
 
 const SEP = '\u241f';
@@ -178,4 +178,24 @@ test('a categorical proposal refuses what would create slots that do not mean th
     assert.equal(errorsOf({ marketName: 'Who wins "the" vote?' }).length, 1);
     assert.equal(errorsOf({ marketName: 'Who wins\\?' }).length, 1);
     assert.equal(errorsOf({ outcomes: ['A\u241fB', 'C'] }).length, 1);
+});
+
+test('categorical header totals add up each answer\'s conditional pool and measure impact across answers', () => {
+    const e18 = 10n ** 18n;
+    const pool = (address, price, base, quote) => ({ address, price, liquidity: 1n, reserves: { base: base * e18, quote: quote * e18 } });
+    const pools = [
+        { label: 'A', conditional: pool('0xAAaa', 2, 3n, 4n), prediction: pool('0x01', 0.5, 1n, 1n) },
+        { label: 'B', conditional: pool('0xBBbb', 1.5, 2n, 1n), prediction: null },
+        { label: 'C', conditional: null, prediction: null },
+    ];
+    // TVL: currency at face value plus company tokens at the pool price; prediction pools left out.
+    const totals = categoricalTotals(pools, new Map([['0xaaaa', 7], ['0x01', 100]]));
+    assert.equal(totals.tvl, 4 + 3 * 2 + 1 + 2 * 1.5);
+    assert.equal(totals.volume, 7);
+    assert.equal(totals.impact, 25);
+    assert.deepEqual(totals.breakdown.map((row) => [row.label, row.volume]), [['A', 7], ['B', 0]]);
+    // Without the indexer the volume is unknown, not zero.
+    assert.equal(categoricalTotals(pools, null).volume, null);
+    // One priced answer has nothing to compare with.
+    assert.equal(categoricalTotals(pools.slice(0, 1), null).impact, null);
 });

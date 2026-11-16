@@ -19,7 +19,8 @@
  * share one POST, so a proposal costs three POSTs whatever its N.
  */
 
-import { decodeFunctionResult, encodeFunctionData, hexToString, parseAbi, sliceHex } from 'viem';
+import { decodeFunctionResult, encodeFunctionData, formatUnits, hexToString, parseAbi, sliceHex } from 'viem';
+import { computeImpactPercent } from './marketPageUtils.mjs';
 
 const PROPOSAL_ABI = parseAbi([
     'function conditionId() view returns (bytes32)',
@@ -274,7 +275,7 @@ export function poolPrice(sqrtPriceX96, token0, base) {
 
 /**
  * The pools of each answer of a categorical proposal, read from the AMM
- * factory (the candles indexer only knows binary proposals):
+ * factory, so they show before the candles indexer has the proposal:
  *   - conditional: answer's company token / answer's currency token, whose
  *     price is the company token's price if that answer wins;
  *   - prediction: answer's currency token / currency token, whose price is
@@ -282,24 +283,32 @@ export function poolPrice(sqrtPriceX96, token0, base) {
  * INVALID has no pools. A pool is null when nobody created it.
  *
  * @returns {Promise<Array<{key: string, label: string, company: object, currency: object,
- *   conditional: {address: string, price: number|null, liquidity: bigint}|null,
- *   prediction: {address: string, price: number|null, liquidity: bigint}|null}>>}
+ *   conditional: {address: string, price: number|null, liquidity: bigint, reserves: {base: bigint, quote: bigint}}|null,
+ *   prediction: {address: string, price: number|null, liquidity: bigint, reserves: {base: bigint, quote: bigint}}|null}>>}
  *   price is the company token in currency tokens (conditional) or the
- *   answer's currency token in currency tokens (prediction)
+ *   answer's currency token in currency tokens (prediction); reserves are the
+ *   pool's balances of the priced token (base) and the other one (quote)
  */
 export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = {}) {
     const amm = AMM_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
     const findPool = ([tokenA, tokenB]) => (amm.fee
         ? read(provider, amm.factory, AMM_ABI, 'getPool', [tokenA, tokenB, amm.fee])
         : read(provider, amm.factory, AMM_ABI, 'poolByPair', [tokenA, tokenB]));
-    const readPool = async (address, base) => {
+    const readPool = async (address, [base, quote]) => {
         if (address === ZERO_ADDRESS) return null;
-        const [token0, liquidity, state] = await Promise.all([
+        const [token0, liquidity, state, baseReserve, quoteReserve] = await Promise.all([
             read(provider, address, AMM_ABI, 'token0'),
             read(provider, address, AMM_ABI, 'liquidity'),
             read(provider, address, AMM_ABI, amm.fee ? 'slot0' : 'globalState'),
+            read(provider, base, ERC20_ABI, 'balanceOf', [address]),
+            read(provider, quote, ERC20_ABI, 'balanceOf', [address]),
         ]);
-        return { address, price: poolPrice(state[0], token0, base), liquidity };
+        return {
+            address,
+            price: poolPrice(state[0], token0, base),
+            liquidity,
+            reserves: { base: baseReserve, quote: quoteReserve },
+        };
     };
 
     const answers = outcomeRows(proposal).filter((row) => !row.isInvalid);
@@ -308,8 +317,41 @@ export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = 
         [row.currency.address, proposal.currencyToken],
     ]);
     const addresses = await Promise.all(pairs.map(findPool));
-    const pools = await Promise.all(addresses.map((address, i) => readPool(address, pairs[i][0])));
+    const pools = await Promise.all(addresses.map((address, i) => readPool(address, pairs[i])));
     return answers.map((row, i) => ({ ...row, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
+}
+
+/**
+ * The market page header's figures for a categorical proposal, measured as
+ * for a binary one over each answer's conditional pool. Prediction pools only
+ * price the chances and are left out, as they are for YES/NO.
+ *   - tvl: what the pool holds, the answer's currency token at face value and
+ *     its company token at the pool price;
+ *   - volume: currency traded, from the candles indexer;
+ *   - impact: the gap between the highest and the lowest price, in percent of
+ *     the highest. With two answers it is the binary impact without its sign.
+ * @param {Awaited<ReturnType<typeof fetchOutcomePools>>} pools
+ * @param {Map<string, number>|null} volumeByPool currency volume by lowercase
+ *   pool address; null when the indexer could not be read
+ * @returns {{tvl: number, volume: number|null, impact: number|null,
+ *   breakdown: Array<{label: string, tvl: number, volume: number|null}>}}
+ */
+export function categoricalTotals(pools, volumeByPool) {
+    const breakdown = pools.filter((row) => row.conditional).map((row) => {
+        const { address, price, reserves } = row.conditional;
+        return {
+            label: row.label,
+            tvl: Number(formatUnits(reserves.quote, 18)) + Number(formatUnits(reserves.base, 18)) * (price ?? 0),
+            volume: volumeByPool ? (volumeByPool.get(address.toLowerCase()) ?? 0) : null,
+        };
+    });
+    const prices = pools.map((row) => row.conditional?.price).filter((price) => typeof price === 'number');
+    return {
+        tvl: breakdown.reduce((total, row) => total + row.tvl, 0),
+        volume: volumeByPool ? breakdown.reduce((total, row) => total + row.volume, 0) : null,
+        impact: prices.length >= 2 ? computeImpactPercent(Math.max(...prices), Math.min(...prices)) : null,
+        breakdown,
+    };
 }
 
 /**

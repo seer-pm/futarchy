@@ -263,6 +263,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
       timing={timing}
       snapshot={snapshot}
       badgeModals={badgeModals}
+      categorical={categorical}
     />
   );
 

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getRpcProvider } from '../../../../utils/getBestRpc';
 import { fetchOnChainResolutions, resolutionKey } from '../../../../utils/onChainResolution';
-import { fetchOutcomeBalances, fetchOutcomePools, fetchProposalOutcomes } from '../../../../utils/proposalOutcomes';
+import { categoricalTotals, fetchOutcomeBalances, fetchOutcomePools, fetchProposalOutcomes } from '../../../../utils/proposalOutcomes';
+import { fetchProposalMarketData } from '../../../../services/proposalMarketData';
 
 const POOL_REFRESH_MS = 30_000;
 
@@ -22,6 +23,7 @@ export function useCategoricalMarket(config, address) {
   const [balances, setBalances] = useState(null);
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState(null);
+  const [volumeByPool, setVolumeByPool] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -55,6 +57,25 @@ export function useCategoricalMarket(config, address) {
     return () => { cancelled = true; };
   }, [isCategorical, proposal, chainId, refreshKey]);
 
+  // Traded volume is only in the candles indexer: per pool, the side in the
+  // answer's currency token. Pool IDs may carry a chain prefix ("100-0x…").
+  useEffect(() => {
+    if (!isCategorical) return undefined;
+    let cancelled = false;
+    fetchProposalMarketData(chainId, proposalAddress)
+      .then((data) => {
+        if (cancelled || !data) return;
+        setVolumeByPool(new Map(data.pools.map((pool) => [
+          pool.id.replace(/^\d+-/, '').toLowerCase(),
+          parseFloat(pool.token0?.role === 'ANSWER_CURRENCY' ? pool.volumeToken0 : pool.volumeToken1) || 0,
+        ])));
+      })
+      .catch((error) => console.warn('[useCategoricalMarket] Could not read the pool volumes:', error?.message));
+    return () => { cancelled = true; };
+  }, [isCategorical, proposalAddress, chainId]);
+
+  const totals = useMemo(() => (pools ? categoricalTotals(pools, volumeByPool) : null), [pools, volumeByPool]);
+
   // Pool prices move with every trade; re-read them while the page is open.
   useEffect(() => {
     if (!isCategorical) return undefined;
@@ -82,5 +103,5 @@ export function useCategoricalMarket(config, address) {
 
   const refetch = useCallback(() => setRefreshKey((key) => key + 1), []);
 
-  return { isCategorical, proposal, pools, resolution, balances, isLoadingBalances, balanceError, refetch };
+  return { isCategorical, proposal, pools, totals, resolution, balances, isLoadingBalances, balanceError, refetch };
 }
