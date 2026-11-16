@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { categoricalPoolList, categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 import { buildCategoricalProposal, defaultTokenName, MAX_CATEGORICAL_OUTCOMES } from '../../src/utils/categoricalProposal.mjs';
 
 const SEP = '\u241f';
@@ -198,4 +198,19 @@ test('categorical header totals add up each answer\'s conditional pool and measu
     assert.equal(categoricalTotals(pools, null).volume, null);
     // One priced answer has nothing to compare with.
     assert.equal(categoricalTotals(pools.slice(0, 1), null).impact, null);
+});
+
+test('categorical pool list has a conditional and a prediction pool per answer, priced token first, none for INVALID', () => {
+    const token = (address, name) => ({ address, name });
+    const pools = [
+        { key: '0', label: 'A', company: token('0xA1', 'A_WETH'), currency: token('0xA2', 'A_sDAI'), conditional: { address: '0xPA' }, prediction: null },
+        { key: '1', label: 'B', company: token('0xB1', null), currency: token('0xB2', 'B_sDAI'), conditional: null, prediction: { address: '0xPB' } },
+    ];
+    const list = categoricalPoolList(pools, token('0xC', 'sDAI'));
+    assert.deepEqual(list.map((p) => [p.key, `${p.token0.name}/${p.token1.name}`, p.address]), [
+        ['0-conditional', 'A_WETH/A_sDAI', '0xPA'],
+        ['0-prediction', 'A_sDAI/sDAI', null],
+        ['1-conditional', 'B company/B_sDAI', null],
+        ['1-prediction', 'B_sDAI/sDAI', '0xPB'],
+    ]);
 });

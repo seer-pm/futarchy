@@ -425,6 +425,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
             config={config}
             configLoading={configLoading}
             refetchConfig={refetchConfig}
+            categorical={categorical}
           />
 
           <MarketDebugPanels

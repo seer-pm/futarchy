@@ -286,8 +286,12 @@ const MarketHero = ({
                     onClick: () => setIsAddLiquidityModalOpen(true)
                   });
 
-                  // Create Pool badge - show when pools are missing (subgraph mode)
-                  if (!config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address) {
+                  // Create Pool badge - show when pools are missing (subgraph mode);
+                  // a categorical market needs two pools per answer
+                  const poolsMissing = categorical?.isCategorical
+                    ? (categorical.pools ?? []).some((row) => !row.conditional || !row.prediction)
+                    : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address;
+                  if (poolsMissing) {
                     badges.push({
                       text: '+ Create Pool',
                       colorScheme: 'violet',

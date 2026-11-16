@@ -322,6 +322,40 @@ export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = 
 }
 
 /**
+ * Every pool a categorical proposal trades in, two per answer and none for
+ * INVALID, with the address of the ones that exist:
+ *   - conditional: answer's company token / answer's currency token;
+ *   - prediction: answer's currency token / the currency collateral.
+ * token0/token1 are in that order, so a pool's initial price is token1 per
+ * token0: the company token's price, or the answer's chance.
+ * @param {Awaited<ReturnType<typeof fetchOutcomePools>>} pools
+ * @param {{address: string, name: string}} currency the currency collateral
+ * @returns {Array<{key: string, kind: 'conditional'|'prediction', answer: string,
+ *   token0: {address: string, name: string}, token1: {address: string, name: string}, address: string|null}>}
+ */
+export function categoricalPoolList(pools, currency) {
+    const named = (token, fallback) => ({ address: token.address, name: token.name || fallback });
+    return pools.flatMap((row) => [
+        {
+            key: `${row.key}-conditional`,
+            kind: 'conditional',
+            answer: row.label,
+            token0: named(row.company, `${row.label} company`),
+            token1: named(row.currency, `${row.label} currency`),
+            address: row.conditional?.address ?? null,
+        },
+        {
+            key: `${row.key}-prediction`,
+            kind: 'prediction',
+            answer: row.label,
+            token0: named(row.currency, `${row.label} currency`),
+            token1: currency,
+            address: row.prediction?.address ?? null,
+        },
+    ]);
+}
+
+/**
  * The market page header's figures for a categorical proposal, measured as
  * for a binary one over each answer's conditional pool. Prediction pools only
  * price the chances and are left out, as they are for YES/NO.
