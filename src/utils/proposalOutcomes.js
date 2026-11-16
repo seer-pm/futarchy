@@ -40,11 +40,12 @@ const CONDITIONAL_TOKENS_BY_CHAIN = {
 };
 
 // FutarchyCategoricalRouter per chain: categorical proposals split, merge and
-// redeem through it, binary ones through FutarchyRouter. Not deployed yet; the
-// variables set one for a build.
+// redeem through it, binary ones through FutarchyRouter. Deployed on Gnosis
+// (seer-pm/demo contracts/deployments/gnosis), not on Ethereum yet; the
+// variables override the address for a build.
 export const CATEGORICAL_ROUTER_BY_CHAIN = {
     1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_ROUTER || null,
-    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || null,
+    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || '0x9afE4500ed1A29A5aCCAE65B87B5cd3eA9e6d433',
 };
 
 // AMM factory each chain's futarchy pools are created on: Swapr (Algebra) on
