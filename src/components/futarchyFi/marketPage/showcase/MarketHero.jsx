@@ -12,6 +12,8 @@ import { SnapshotWidget } from './SnapshotWidget';
 
 const DEFAULT_TWAP_DESCRIPTION = "The Futarchy Test is considered passed if the time-weighted average price (TWAP) of the \u201cpass\u201d (yes) outcome over the final 24 hours of the Issuance KIP\u2019s voting period is greater than or equal to that of the \u201cfail\u201d (no) outcome. If not, the proposal fails the futarchy test, regardless of the Kleros DAO vote result.";
 
+const CATEGORICAL_TWAP_DESCRIPTION = "Each answer's conditional pool prices the company token if that answer wins. The answer whose pool has the highest time-weighted average price (TWAP) over the window leads the futarchy test.";
+
 const STATUS_BADGE_COLORS = { active: 'emerald', awaiting_resolution: 'orange', resolved: 'gray' };
 const OUTCOME_BADGE_COLORS = { yes: 'blue', no: 'gold' };
 
@@ -350,7 +352,7 @@ const MarketHero = ({
               <TwapCountdown
                 twapStartTimestamp={config.marketInfo.twapStartTimestamp}
                 twapDurationHours={config.marketInfo.twapDurationHours || 24}
-                twapDescription={config.marketInfo.twapDescription || DEFAULT_TWAP_DESCRIPTION}
+                twapDescription={config.marketInfo.twapDescription || (categorical?.isCategorical ? CATEGORICAL_TWAP_DESCRIPTION : DEFAULT_TWAP_DESCRIPTION)}
                 isScrolled={isScrolled}
                 yesPoolConfig={config.POOL_CONFIG_YES}
                 noPoolConfig={config.POOL_CONFIG_NO}
@@ -358,6 +360,9 @@ const MarketHero = ({
                 invertTwapPoolNo={config.marketInfo.invertTwapPoolNo || config.marketInfo.invertTwapPoolNO || false}
                 yesCompanyTokenAddress={config.metadata?.companyTokens?.yes?.wrappedCollateralTokenAddress || null}
                 noCompanyTokenAddress={config.metadata?.companyTokens?.no?.wrappedCollateralTokenAddress || null}
+                answers={categorical?.isCategorical
+                  ? (categorical.pools ?? []).map((row) => ({ label: row.label, poolConfig: row.conditional, companyTokenAddress: row.company.address }))
+                  : null}
               />
             )}
           </div>
