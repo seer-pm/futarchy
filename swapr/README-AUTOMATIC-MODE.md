@@ -75,7 +75,14 @@ tokens are named `<NAME>_<collateral symbol>` (31 bytes at most), from the answe
 The interactive mode (`npm run futarchy:create`) asks for the question type first.
 
 The six-pool setup below only handles Yes/No proposals: for a categorical proposal the
-script creates it and stops before pool setup.
+script creates it and stops before pool setup. `categorical-pools.js` then creates and
+funds two pools per answer (conditional `ANSWER_<company>/ANSWER_<currency>` at the spot
+price, prediction `ANSWER_<currency>/<currency>`); Invalid gets none. It prints the plan
+and only sends with `--send`, and skips pools that already have liquidity:
+
+```bash
+npm run categorical:pools -- <proposal> --spot 1429 --split-company 0.0007 --split-currency 2 --prediction 0.9 --send
+```
 
 ## What Happens in Automatic Mode
 

@@ -174,7 +174,8 @@ npm run call-pool-apis
   (`categoricalFactoryAddress` / `CATEGORICAL_FACTORY_ADDRESS`); interactive mode asks
   for the type. Checks and escaping come from `src/utils/categoricalProposal.mjs`,
   shared with the app's Create Proposal modal. Its gas is estimated, not fixed
-- `setupPoolsFromFutarchyProposal` only builds Yes/No pools and stops on a categorical proposal
+- `setupPoolsFromFutarchyProposal` only builds Yes/No pools and stops on a categorical proposal;
+  `categorical-pools.js` (`npm run categorical:pools`) builds a categorical proposal's pools
 
 ### automate-futarchy.js
 

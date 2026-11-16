@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+// Creates and funds the Swapr (Algebra) pools of a categorical proposal
+// (FutarchyCategoricalFactory) on Gnosis. setupFutarchyPoolsAuto in
+// algebra-cli.js only builds the YES/NO pools, so categorical proposals use
+// this script. Per answer it makes the two pools the market page reads
+// (src/utils/proposalOutcomes.js fetchOutcomePools):
+//   - conditional: ANSWER_<company> / ANSWER_<currency>, at --spot
+//   - prediction:  ANSWER_<currency> / <currency>, at --probability
+// INVALID gets no pools: its tokens stay in the wallet, for merging or for
+// redeeming if the question resolves Invalid.
+//
+// Usage:
+//   node categorical-pools.js <proposal> --spot <currency per company> [options]
+//     --split-company <n>   split n of the company collateral first
+//     --split-currency <n>  split n of the currency collateral first
+//     --prediction <n>      answer currency tokens per prediction pool (default 1)
+//     --probability <p>     starting chance of every answer (default 1/answers)
+//     --send                send the transactions; without it the script only prints the plan
+// Each conditional pool gets all the answer's company tokens the wallet holds,
+// with spot times that many of the answer's currency tokens. Existing pools
+// with liquidity are skipped, so a run that stopped halfway can be repeated.
+// Reads PRIVATE_KEY and RPC_URL from .env, like algebra-cli.js.
+require('dotenv').config();
+const { ethers } = require('ethers');
+
+const RPC_URL = process.env.RPC_URL || 'https://rpc.gnosischain.com';
+const CATEGORICAL_ROUTER = process.env.CATEGORICAL_ROUTER_ADDRESS || '0x9afE4500ed1A29A5aCCAE65B87B5cd3eA9e6d433';
+const CONDITIONAL_TOKENS = '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce';
+const POSITION_MGR = '0x91fd594c46d8b01e62dbdebed2401dde01817834';
+const ALGEBRA_FACTORY = '0xA0864cCA6E114013AB0e27cbd5B6f4c8947da766';
+const MAX_TICK = 887272;
+
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(`--${name}`);
+const option = (name, fallback) => {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback;
+};
+const proposalAddress = args[0];
+const spot = Number(option('spot'));
+if (!ethers.isAddress(proposalAddress) || !(spot > 0)) {
+  console.error('Usage: node categorical-pools.js <proposal> --spot <currency per company> [--split-company n] [--split-currency n] [--prediction n] [--probability p] [--send]');
+  process.exit(1);
+}
+if (!process.env.PRIVATE_KEY) throw new Error('Add PRIVATE_KEY to .env');
+
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+const SEND = flag('send');
+
+const erc20 = (address) => new ethers.Contract(address, [
+  'function balanceOf(address) view returns (uint256)',
+  'function allowance(address,address) view returns (uint256)',
+  'function approve(address,uint256) returns (bool)',
+  'function symbol() view returns (string)',
+], wallet);
+const proposal = new ethers.Contract(proposalAddress, [
+  'function numOutcomes() view returns (uint256)',
+  'function outcomes(uint256) view returns (string)',
+  'function wrappedOutcome(uint256) view returns (address, bytes)',
+  'function collateralToken1() view returns (address)',
+  'function collateralToken2() view returns (address)',
+  'function conditionId() view returns (bytes32)',
+], provider);
+const router = new ethers.Contract(CATEGORICAL_ROUTER, ['function splitPosition(address,address,uint256)'], wallet);
+const positionManager = new ethers.Contract(POSITION_MGR, [
+  'function createAndInitializePoolIfNecessary(address,address,uint160) returns (address)',
+  'function mint((address token0,address token1,int24 tickLower,int24 tickUpper,uint256 amount0Desired,uint256 amount1Desired,uint256 amount0Min,uint256 amount1Min,address recipient,uint256 deadline)) returns (uint256,uint128,uint256,uint256)',
+], wallet);
+const factory = new ethers.Contract(ALGEBRA_FACTORY, ['function poolByPair(address,address) view returns (address)'], provider);
+const pool = (address) => new ethers.Contract(address, ['function liquidity() view returns (uint128)', 'function tickSpacing() view returns (int24)'], provider);
+
+const fmt = (wei) => ethers.formatEther(wei);
+const parse = (value) => ethers.parseEther(String(value));
+// Decimal amount times a ratio, in wei, without going through a float of the wei amount.
+const times = (wei, ratio) => (wei * parse(ratio.toFixed(18))) / 10n ** 18n;
+const deadline = () => Math.floor(Date.now() / 1000) + 1200;
+const sqrt = (value) => {
+  if (value < 2n) return value;
+  let x = value, y = (x + 1n) / 2n;
+  while (y < x) { x = y; y = (x + value / x) / 2n; }
+  return x;
+};
+// sqrtPriceX96 of a pool that holds amount0 of token0 and amount1 of token1.
+const sqrtPriceX96 = (amount0, amount1) => sqrt((amount1 << 192n) / amount0);
+
+// Fees: GAS_PRICE_GWEI from .env when set, as in algebra-cli.js. Otherwise a
+// 1 gwei tip: the tip ethers v6 asks the node for can be close to zero, and
+// rpc.gnosischain.com refuses such transactions ("txpool is full").
+const MIN_TIP = ethers.parseUnits('1', 'gwei');
+async function feeOptions() {
+  if (process.env.GAS_PRICE_GWEI && process.env.GAS_PRICE_GWEI !== 'auto') {
+    return { gasPrice: ethers.parseUnits(process.env.GAS_PRICE_GWEI, 'gwei') };
+  }
+  const block = await provider.getBlock('latest');
+  return { maxPriorityFeePerGas: MIN_TIP, maxFeePerGas: block.baseFeePerGas * 2n + MIN_TIP };
+}
+
+// Gas limit at twice the estimate: Algebra swaps and mints have run out of gas
+// on-chain at the estimate.
+async function send(label, contract, method, params, overrides = {}) {
+  const estimate = await contract[method].estimateGas(...params, overrides);
+  const tx = await contract[method](...params, { ...overrides, ...(await feeOptions()), gasLimit: estimate * 2n });
+  const receipt = await tx.wait();
+  console.log(`  ${label}: ${tx.hash} status ${receipt.status}`);
+  if (receipt.status !== 1) throw new Error(`${label} failed`);
+}
+
+// Exact approvals, as the rest of the CLI does by default.
+async function approve(token, spender, amount) {
+  const contract = erc20(token);
+  if (await contract.allowance(wallet.address, spender) >= amount) return;
+  await send(`approve ${await contract.symbol()}`, contract, 'approve', [spender, amount]);
+}
+
+async function main() {
+  const n = Number(await proposal.numOutcomes());
+  const ctf = new ethers.Contract(CONDITIONAL_TOKENS, ['function getOutcomeSlotCount(bytes32) view returns (uint256)'], provider);
+  const slots = Number(await ctf.getOutcomeSlotCount(await proposal.conditionId()));
+  if (slots !== n + 1) throw new Error(`${proposalAddress} is not a categorical proposal (${slots} slots for ${n} outcomes)`);
+
+  const company = await proposal.collateralToken1();
+  const currency = await proposal.collateralToken2();
+  const [companySymbol, currencySymbol] = await Promise.all([erc20(company).symbol(), erc20(currency).symbol()]);
+  const prediction = parse(option('prediction', '1'));
+  const probability = Number(option('probability', 1 / n));
+  const splitCompany = parse(option('split-company', '0'));
+  const splitCurrency = parse(option('split-currency', '0'));
+
+  const answers = [];
+  for (let i = 0; i < n; i++) {
+    const [companyToken] = await proposal.wrappedOutcome(i);
+    const [currencyToken] = await proposal.wrappedOutcome(n + i);
+    answers.push({ label: await proposal.outcomes(i), company: companyToken, currency: currencyToken });
+  }
+
+  console.log(`${n} answers, ${companySymbol}/${currencySymbol}, spot ${spot} ${currencySymbol} per ${companySymbol}, prediction ${fmt(prediction)} at ${probability}`);
+  console.log(`wallet ${wallet.address}: ${fmt(await erc20(company).balanceOf(wallet.address))} ${companySymbol}, ${fmt(await erc20(currency).balanceOf(wallet.address))} ${currencySymbol}`);
+
+  // Every pool's tokens, checked before anything is sent. Splits add to every answer.
+  const plan = [];
+  for (const answer of answers) {
+    const companyHeld = await erc20(answer.company).balanceOf(wallet.address) + splitCompany;
+    const currencyHeld = await erc20(answer.currency).balanceOf(wallet.address) + splitCurrency;
+    const conditional = { label: `${answer.label} conditional`, tokenA: answer.company, amountA: companyHeld, tokenB: answer.currency, amountB: times(companyHeld, spot) };
+    const predictionPool = { label: `${answer.label} prediction`, tokenA: answer.currency, amountA: prediction, tokenB: currency, amountB: times(prediction, probability) };
+    let currencyNeeded = 0n;
+    for (const p of [conditional, predictionPool]) {
+      const address = await factory.poolByPair(p.tokenA, p.tokenB);
+      p.skip = address !== ethers.ZeroAddress && await pool(address).liquidity() > 0n;
+      console.log(`  ${p.label}: ${p.skip ? `${address} has liquidity, skipped` : `${fmt(p.amountA)} / ${fmt(p.amountB)}`}`);
+      if (!p.skip && p === conditional && companyHeld === 0n) throw new Error(`no ${answer.label} company tokens for its conditional pool; split some with --split-company`);
+      if (!p.skip) currencyNeeded += p === conditional ? p.amountB : p.amountA;
+      if (!p.skip) plan.push(p);
+    }
+    if (currencyNeeded > currencyHeld) throw new Error(`${answer.label} needs ${fmt(currencyNeeded)} of its currency token and will hold ${fmt(currencyHeld)}; split more with --split-currency`);
+  }
+  const currencyForPredictions = plan.filter((p) => p.tokenB === currency).reduce((sum, p) => sum + p.amountB, 0n);
+  if (splitCurrency + currencyForPredictions > await erc20(currency).balanceOf(wallet.address)) throw new Error(`not enough ${currencySymbol}`);
+  if (splitCompany > await erc20(company).balanceOf(wallet.address)) throw new Error(`not enough ${companySymbol}`);
+  if (!SEND) { console.log('Plan only; add --send to send it.'); return; }
+
+  if (splitCompany > 0n) {
+    await approve(company, CATEGORICAL_ROUTER, splitCompany);
+    await send(`split ${fmt(splitCompany)} ${companySymbol}`, router, 'splitPosition', [proposalAddress, company, splitCompany]);
+  }
+  if (splitCurrency > 0n) {
+    await approve(currency, CATEGORICAL_ROUTER, splitCurrency);
+    await send(`split ${fmt(splitCurrency)} ${currencySymbol}`, router, 'splitPosition', [proposalAddress, currency, splitCurrency]);
+  }
+
+  for (const p of plan) {
+    const [token0, token1, amount0, amount1] = p.tokenA.toLowerCase() < p.tokenB.toLowerCase()
+      ? [p.tokenA, p.tokenB, p.amountA, p.amountB] : [p.tokenB, p.tokenA, p.amountB, p.amountA];
+    await approve(token0, POSITION_MGR, amount0);
+    await approve(token1, POSITION_MGR, amount1);
+    // Does nothing to the price of a pool that already exists without liquidity.
+    await send(`create ${p.label}`, positionManager, 'createAndInitializePoolIfNecessary', [token0, token1, sqrtPriceX96(amount0, amount1)]);
+    const address = await factory.poolByPair(token0, token1);
+    let spacing = 60;
+    try { spacing = Number(await pool(address).tickSpacing()); } catch {}
+    await send(`mint ${p.label}`, positionManager, 'mint', [{
+      token0, token1,
+      tickLower: Math.ceil(-MAX_TICK / spacing) * spacing,
+      tickUpper: Math.floor(MAX_TICK / spacing) * spacing,
+      amount0Desired: amount0, amount1Desired: amount1, amount0Min: 0, amount1Min: 0,
+      recipient: wallet.address, deadline: deadline(),
+    }]);
+    console.log(`  ${p.label}: ${address}`);
+  }
+  console.log('Done.');
+}
+
+main().catch((error) => { console.error("ERROR", error.shortMessage || error.reason || error.message); if (process.env.DEBUG) console.error(error); process.exit(1); });
