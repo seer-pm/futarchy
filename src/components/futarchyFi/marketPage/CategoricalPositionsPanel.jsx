@@ -25,7 +25,7 @@ const parseAmount = (value) => {
 
 const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transition-colors ${active
   ? 'bg-futarchyGray12 text-white dark:bg-white dark:text-black'
-  : 'bg-futarchyGray4 dark:bg-futarchyGray8 text-futarchyGray11 dark:text-futarchyGray12 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7'}`;
+  : 'bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray11 dark:text-white/80 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray6'}`;
 
 const buttonClass = 'w-full py-3 px-4 rounded-xl font-semibold text-sm border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -140,7 +140,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
         {!address ? (
           <div className="flex flex-col items-center gap-3 py-4">
             <p className="text-sm text-futarchyGray11 dark:text-white/70">Connect a wallet to see your positions</p>
-            <button onClick={onConnectWallet} className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 text-futarchyGray12 dark:text-white border border-futarchyGray6">
+            <button onClick={onConnectWallet} className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray12 dark:text-white border border-futarchyGray6">
               Connect Wallet
             </button>
           </div>
@@ -148,7 +148,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
           <div className="flex flex-col items-center gap-3 py-4 text-center">
             <p className="text-sm font-semibold text-futarchyGray12 dark:text-white">Couldn&apos;t load balances</p>
             <p className="text-xs text-futarchyGray11 dark:text-futarchyGray112">{balanceError}</p>
-            <button onClick={refetch} className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyGray8 text-futarchyGray12 dark:text-white border border-futarchyGray6">Try Again</button>
+            <button onClick={refetch} className="px-4 py-2 rounded-lg text-xs font-semibold bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray12 dark:text-white border border-futarchyGray6">Try Again</button>
           </div>
         ) : !balances ? (
           <p className="py-4 text-center text-sm text-futarchyGray11 dark:text-white/70">{isLoadingBalances ? 'Loading balances…' : ''}</p>

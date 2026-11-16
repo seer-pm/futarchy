@@ -61,7 +61,13 @@ const MarketHero = ({
           }`}>
           <div className={`lg:col-span-2 min-w-0 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
             }`}>
-            <h1 className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base' : 'text-sm lg:text-xl'
+            {/* The collapsed hero has a fixed height, so a long title (a
+                categorical question with its answers) is cut to two lines */}
+            <h1
+              title={isScrolled && !marketData.isLoading && !marketData.error
+                ? [marketData.display_title_0, marketData.display_title_1].filter(Boolean).join(' ')
+                : undefined}
+              className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base lg:line-clamp-2' : 'text-sm lg:text-xl'
               }`}>
               {marketData.isLoading && (
                 <span className="block h-5 lg:h-6 w-3/4 max-w-xl rounded bg-white/10 animate-pulse" aria-label="Loading market title" />

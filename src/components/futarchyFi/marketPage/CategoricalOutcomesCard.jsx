@@ -24,7 +24,7 @@ const CategoricalOutcomesCard = ({ categorical, config, selectedKey, onSelect })
   const [metric, setMetric] = useState('price');
   const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transition-colors ${active
     ? 'bg-futarchyGray12 text-white dark:bg-white dark:text-black'
-    : 'bg-futarchyGray4 dark:bg-futarchyGray8 text-futarchyGray11 dark:text-futarchyGray12 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7'}`;
+    : 'bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray11 dark:text-white/80 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray6'}`;
 
   return (
     <div className="bg-futarchyGray3 dark:bg-futarchyDarkGray3 rounded-3xl border-2 border-futarchyGray62 dark:border-futarchyGray11/70 overflow-hidden">
@@ -65,7 +65,7 @@ const CategoricalOutcomesCard = ({ categorical, config, selectedKey, onSelect })
               aria-pressed={selected}
               className={`flex flex-col gap-2 rounded-xl px-3 py-3 text-left border-2 transition-colors ${selected
                 ? 'border-futarchyViolet9 bg-futarchyViolet3 dark:bg-futarchyViolet11/20'
-                : 'border-transparent hover:bg-futarchyGray4 dark:hover:bg-futarchyGray8/40'}`}
+                : 'border-transparent hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray42'}`}
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold text-futarchyGray12 dark:text-white">
@@ -79,7 +79,7 @@ const CategoricalOutcomesCard = ({ categorical, config, selectedKey, onSelect })
                   {price === null ? 'No pool' : `${formatPrice(price)} ${currency}`}
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-futarchyGray5 dark:bg-futarchyGray8 overflow-hidden">
+              <div className="h-2 rounded-full bg-futarchyGray5 dark:bg-futarchyGray6 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${best === i ? 'bg-futarchyViolet9' : 'bg-futarchyGray11/60'}`}
                   style={{

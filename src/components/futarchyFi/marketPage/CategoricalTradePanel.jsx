@@ -29,7 +29,7 @@ const parseAmount = (value) => {
 
 const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transition-colors ${active
   ? 'bg-futarchyGray12 text-white dark:bg-white dark:text-black'
-  : 'bg-futarchyGray4 dark:bg-futarchyGray8 text-futarchyGray11 dark:text-futarchyGray12 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray7'}`;
+  : 'bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray11 dark:text-white/80 hover:bg-futarchyGray5 dark:hover:bg-futarchyGray6'}`;
 
 const buttonClass = 'w-full py-3 px-4 rounded-xl font-semibold text-sm border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed';
 
