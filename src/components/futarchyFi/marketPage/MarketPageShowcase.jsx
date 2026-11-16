@@ -321,8 +321,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         spot={spot}
                       />}
 
-                      {/* Tabs Section: trades and positions of the YES/NO tokens */}
-                      {!categorical.isCategorical && <MarketTabsSection
+                      {/* Tabs Section: trades and positions, per answer for a categorical proposal */}
+                      <MarketTabsSection
                         tabs={tabs}
                         balances={balances}
                         config={config}
@@ -331,7 +331,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         rate={rate}
                         setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
                         setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
-                      />}
+                        categorical={categorical}
+                      />
                     </div>
 
                     {/* Right side - Balance Panel */}
@@ -347,6 +348,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             onSelect={setSelectedOutcome}
                             onConnectWallet={handleConnectWallet}
                           />
+                          {/* Positions stay in the right column, as MarketBalancePanel does for YES/NO */}
                           <CategoricalPositionsPanel
                             categorical={categorical}
                             config={config}

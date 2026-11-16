@@ -18,6 +18,7 @@ import { useAccount } from 'wagmi';
 import { fetchFormattedTrades, fetchPoolsForProposal } from '../../../utils/subgraphTradesClient';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
 import { SHOW_DATA_DEBUG } from '../../../config/featureFlags';
+import { answerColor } from './CategoricalHistoryChart';
 
 const REFRESH_INTERVAL = 45000; // 45 seconds
 
@@ -25,7 +26,10 @@ const SubgraphTradesDataLayer = ({
     config,
     tokenImages = { company: null, currency: null },
     showMyTrades = false,
-    limit = 30
+    limit = 30,
+    // Categorical proposals: answer of each outcome token (answerByToken);
+    // trades then show their answer instead of YES/NO
+    answers = null
 }) => {
     const [trades, setTrades] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -194,6 +198,14 @@ const SubgraphTradesDataLayer = ({
         return `${minutes}m ago`;
     };
 
+    // The answer a trade's pool belongs to, from either of its tokens. Token
+    // IDs may carry a chain prefix ("100-0x…").
+    const answerOf = (trade) => {
+        if (!answers) return null;
+        const key = (token) => token?.address?.replace(/^\d+-/, '').toLowerCase();
+        return answers.get(key(trade.amount.tokenIN)) ?? answers.get(key(trade.amount.tokenOUT)) ?? null;
+    };
+
     // ALWAYS sort trades by date descending (newest first) before rendering
     // This ensures correct order regardless of how the API returns them
     const sortedTrades = useMemo(() => {
@@ -326,6 +338,8 @@ const SubgraphTradesDataLayer = ({
                                         const isYes = eventSideLower === 'yes';
                                         const isNo = eventSideLower === 'no';
                                         const isBuy = trade.outcome.operationSide === 'buy';
+                                        const answer = answerOf(trade);
+                                        const answerStyle = answer ? { color: answerColor(answer.index), borderColor: answerColor(answer.index) } : undefined;
 
                                         return (
                                             <tr
@@ -334,16 +348,20 @@ const SubgraphTradesDataLayer = ({
                                             >
                                                 <td className="px-4 w-[200px]">
                                                     <div className="flex flex-col gap-1">
-                                                        <div className="inline-flex overflow-hidden w-[160px]">
-                                                            <div className={`w-[80px] px-3 py-1 text-sm font-medium text-center rounded-l-full ${isYes
+                                                        <div className={`inline-flex overflow-hidden ${answer ? 'max-w-[200px]' : 'w-[160px]'}`}>
+                                                            {answer ? (
+                                                                <div className="max-w-[120px] truncate px-3 py-1 text-sm font-medium text-center rounded-l-full border" style={answerStyle} title={answer.label}>
+                                                                    {answer.label}
+                                                                </div>
+                                                            ) : <div className={`w-[80px] px-3 py-1 text-sm font-medium text-center rounded-l-full ${isYes
                                                                 ? 'bg-futarchyBlue4 text-futarchyBlue11 border border-futarchyBlue6 dark:bg-transparent dark:text-futarchyBlue9 dark:border-futarchyBlue9'
                                                                 : isNo
                                                                     ? 'bg-futarchyGold4 text-futarchyGold11 border border-futarchyGold6 dark:bg-transparent dark:text-futarchyGold7 dark:border-futarchyGold7'
                                                                     : 'bg-futarchyGray4 text-futarchyGray11 border border-futarchyGray6 dark:bg-transparent dark:text-futarchyGray9 dark:border-futarchyGray9'
                                                                 }`}>
                                                                 {trade.outcome.eventSide.toUpperCase()}
-                                                            </div>
-                                                            <div className={`w-[80px] px-3 py-1 text-sm font-medium text-center rounded-r-full ${!isBuy
+                                                            </div>}
+                                                            <div className={`shrink-0 w-[80px] px-3 py-1 text-sm font-medium text-center rounded-r-full ${!isBuy
                                                                 ? 'bg-futarchyTeal3 text-futarchyTeal9 border border-futarchyTeal5 dark:bg-transparent dark:text-futarchyTeal7 dark:border-futarchyTeal7'
                                                                 : 'bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6 dark:bg-transparent dark:text-futarchyCrimson9 dark:border-futarchyCrimson9'
                                                                 }`}>
@@ -375,7 +393,7 @@ const SubgraphTradesDataLayer = ({
                                                     </div>
                                                 </td>
                                                 <td className="px-4 w-[100px] text-right">
-                                                    <span className={`text-xs font-semibold block ${isYes
+                                                    <span style={answer ? { color: answerColor(answer.index) } : undefined} className={`text-xs font-semibold block ${isYes
                                                         ? 'text-futarchyBlue9'
                                                         : isNo
                                                             ? 'text-futarchyGold9'
@@ -420,6 +438,7 @@ const SubgraphTradesDataLayer = ({
                     const isYes = eventSideLower === 'yes';
                     const isNo = eventSideLower === 'no';
                     const isBuy = trade.outcome.operationSide === 'buy';
+                    const answer = answerOf(trade);
 
                     return (
                         <div
@@ -428,14 +447,18 @@ const SubgraphTradesDataLayer = ({
                         >
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex gap-1">
-                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isYes
+                                    {answer ? (
+                                        <span className="max-w-[160px] truncate px-2 py-0.5 text-xs font-medium rounded-full border" style={{ color: answerColor(answer.index), borderColor: answerColor(answer.index) }} title={answer.label}>
+                                            {answer.label}
+                                        </span>
+                                    ) : <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isYes
                                         ? 'bg-futarchyBlue4 text-futarchyBlue11 dark:bg-transparent dark:text-futarchyBlue9 border border-futarchyBlue6 dark:border-futarchyBlue9'
                                         : isNo
                                             ? 'bg-futarchyGold4 text-futarchyGold11 dark:bg-transparent dark:text-futarchyGold7 border border-futarchyGold6 dark:border-futarchyGold7'
                                             : 'bg-futarchyGray4 text-futarchyGray11 border border-futarchyGray6'
                                         }`}>
                                         {trade.outcome.eventSide.toUpperCase()}
-                                    </span>
+                                    </span>}
                                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${!isBuy
                                         ? 'bg-futarchyTeal3 text-futarchyTeal9 border border-futarchyTeal5'
                                         : 'bg-futarchyCrimson4 text-futarchyCrimson11 border border-futarchyCrimson6'
@@ -457,7 +480,7 @@ const SubgraphTradesDataLayer = ({
                                         {trade.amount.tokenOUT.value} {trade.amount.tokenOUT.symbol}
                                     </span>
                                 </div>
-                                <span className={`text-xs font-semibold ${isYes ? 'text-futarchyBlue9' : isNo ? 'text-futarchyGold9' : ''}`}>
+                                <span style={answer ? { color: answerColor(answer.index) } : undefined} className={`text-xs font-semibold ${isYes ? 'text-futarchyBlue9' : isNo ? 'text-futarchyGold9' : ''}`}>
                                     {trade.price}
                                 </span>
                             </div>

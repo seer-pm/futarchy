@@ -231,6 +231,19 @@ export function outcomeRows(proposal) {
 }
 
 /**
+ * The answer each outcome token of a categorical proposal belongs to, for
+ * labelling trades: the indexer's pools carry no answer that every
+ * deployment of it serves, but their tokens are the proposal's.
+ * @returns {Map<string, {index: number, label: string}>} keyed by lowercase
+ *   token address, company and currency token of every answer; INVALID has
+ *   no pools and is left out
+ */
+export function answerByToken(proposal) {
+    return new Map(proposal.outcomes.flatMap((outcome, index) => [outcome.company, outcome.currency]
+        .map((token) => [token.address.toLowerCase(), { index, label: outcome.label }])));
+}
+
+/**
  * The slot a resolved categorical proposal pays, from its
  * fetchOnChainResolutions result: the winning answer, or INVALID.
  * @returns {ReturnType<typeof outcomeRows>[number]|null} null while unresolved

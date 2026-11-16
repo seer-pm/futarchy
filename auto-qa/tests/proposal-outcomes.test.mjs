@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { categoricalPoolList, categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { answerByToken, categoricalPoolList, categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 import { buildCategoricalProposal, defaultTokenName, MAX_CATEGORICAL_OUTCOMES } from '../../src/utils/categoricalProposal.mjs';
 
 const SEP = '\u241f';
@@ -213,4 +213,21 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
         ['1-conditional', 'B company/B_sDAI', null],
         ['1-prediction', 'B_sDAI/sDAI', '0xPB'],
     ]);
+});
+
+test('trades find their answer by either outcome token, whatever its case; INVALID and the collaterals have none', () => {
+    const token = (address) => ({ address, name: null });
+    const proposal = {
+        outcomes: [
+            { label: 'A', company: token('0xA1'), currency: token('0xa2') },
+            { label: 'B', company: token('0xB1'), currency: token('0xB2') },
+        ],
+        invalid: { company: token('0xC1'), currency: token('0xC2') },
+    };
+    const answers = answerByToken(proposal);
+    assert.deepEqual(answers.get('0xa1'), { index: 0, label: 'A' });
+    assert.deepEqual(answers.get('0xa2'), { index: 0, label: 'A' });
+    assert.deepEqual(answers.get('0xb2'), { index: 1, label: 'B' });
+    assert.equal(answers.get('0xc1'), undefined);
+    assert.equal(answers.size, 4);
 });
