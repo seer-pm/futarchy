@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatUnits, parseUnits } from 'viem';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import FutarchyCartridge from 'futarchy-sdk/executors/FutarchyCartridge';
+import { useAtomicBatch } from '../../../hooks/useAtomicBatch';
 import { useRequiredChain } from '../../../hooks/useChainValidation';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { mergeOutcomeTokens, splitCollateral } from '../../../utils/collateralActions';
@@ -43,6 +44,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const isSafeConnection = useSafeConnection();
+  const batch = useAtomicBatch();
   const requiredChain = useRequiredChain(config?.chainId);
 
   const [action, setAction] = useState('split');
@@ -85,11 +87,12 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
     }
   };
 
-  const common = { publicClient, walletClient, account, router, proposal: config.MARKET_ADDRESS };
+  const common = { publicClient, walletClient, account, router, proposal: config.MARKET_ADDRESS, batch };
 
   const handleSplit = () => run(`Split ${amount} ${symbols[side]}`, ({ isSafe, report }) => splitCollateral({
     ...common, isSafe, collateralToken: collateral[side], amount: amountRaw, symbol: symbols[side],
     onStep: (step) => {
+      if (step === 'batch') report(`Approving and splitting ${symbols[side]} in one transaction…`);
       if (step === 'approval') report(`Approving ${symbols[side]}…`);
       if (step === 'split') report(`Splitting ${symbols[side]} into ${rows.length} outcome tokens…`);
     },
@@ -99,6 +102,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
     ...common, isSafe, collateralToken: collateral[side], amount: amountRaw,
     outcomeTokens: rows.map((row) => row[side].address),
     onStep: (step, index) => {
+      if (step === 'batch') report(`Approving ${rows.length} outcome tokens and merging into ${symbols[side]} in one transaction…`);
       if (step === 'approval') report(`Approving ${rows[index][side].name} (${index + 1} of ${rows.length})…`);
       if (step === 'merge') report(`Merging into ${symbols[side]}…`);
     },

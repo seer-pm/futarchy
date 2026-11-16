@@ -12,10 +12,16 @@
  * `waitForSafeExecution` the functions wait for the Safe to execute it;
  * without, they throw SAFE_TRANSACTION_SENT after queueing so the caller can
  * tell the user it was sent to their Safe.
+ *
+ * Batch: with `batch` (the wallet supports atomic batches, utils/batchCalls.js)
+ * the approvals and the split or merge go out as one transaction, reported
+ * as the single step 'batch'. Without it, or when the wallet declines the
+ * batch, each is its own transaction as before.
  */
 
-import { erc20Abi, parseAbi } from 'viem';
+import { encodeFunctionData, erc20Abi, parseAbi } from 'viem';
 import { approvalAmountFor } from './approvalAmount.js';
+import { sendBatch, shouldBatch } from './batchCalls.js';
 import { SAFE_TRANSACTION_SENT, assertReceiptSucceeded } from './txErrors.js';
 import { waitForSafeTxReceipt } from './waitForSafeTxReceipt.js';
 
@@ -39,6 +45,59 @@ const confirm = async ({ hash, publicClient, walletClient, isSafe, waitForSafeEx
 const balanceOf = (publicClient, token, account) =>
     publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [account] });
 
+const allowanceIsShort = async (publicClient, account, token, spender, needed) =>
+    await publicClient.readContract({
+        address: token, abi: erc20Abi, functionName: 'allowance', args: [account, spender],
+    }) < needed;
+
+const approveArgs = (spender, needed, useUnlimitedApproval) =>
+    [spender, toBigInt(approvalAmountFor(needed.toString(), useUnlimitedApproval))];
+
+/** The approve call for `token` when its allowance to `spender` is short, for a batch. */
+export async function approvalCalls({ publicClient, account, token, spender, amount, useUnlimitedApproval = false }) {
+    const needed = toBigInt(amount);
+    if (!await allowanceIsShort(publicClient, account, token, spender, needed)) return [];
+    return [{
+        to: token,
+        data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: approveArgs(spender, needed, useUnlimitedApproval) }),
+    }];
+}
+
+const routerCall = (router, functionName, proposal, collateralToken, amount) => ({
+    to: router,
+    data: encodeFunctionData({ abi: ROUTER_ABI, functionName, args: [proposal, collateralToken, amount] }),
+});
+
+const assertSplitBalance = async (publicClient, collateralToken, account, amount, symbol) => {
+    if (await balanceOf(publicClient, collateralToken, account) < amount) {
+        throw new Error(`Insufficient ${symbol} balance`);
+    }
+};
+
+/**
+ * The calls of a split, for a batch: the collateral approval if the
+ * allowance is short, then the split. Throws when the balance is short.
+ */
+export async function splitCalls({
+    publicClient, account, router, proposal, collateralToken, amount, symbol = 'token', useUnlimitedApproval = false,
+}) {
+    const amountRaw = toBigInt(amount);
+    await assertSplitBalance(publicClient, collateralToken, account, amountRaw, symbol);
+    return [
+        ...await approvalCalls({ publicClient, account, token: collateralToken, spender: router, amount: amountRaw, useUnlimitedApproval }),
+        routerCall(router, 'splitPosition', proposal, collateralToken, amountRaw),
+    ];
+}
+
+// Sends `calls` as one batch. Returns null when the wallet declined to batch.
+const sendAsBatch = async ({ walletClient, account, calls, onStep }) => {
+    onStep?.('batch');
+    const receipt = await sendBatch({ walletClient, account, calls });
+    if (!receipt) return null;
+    onStep?.('done');
+    return { hash: receipt.transactionHash, receipt };
+};
+
 /**
  * Approves `spender` for `amount` of `token` if the allowance is short.
  * @returns {Promise<boolean>} whether an approval was sent
@@ -48,16 +107,13 @@ export async function approveIfNeeded({
     useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false,
 }) {
     const needed = toBigInt(amount);
-    const allowance = await publicClient.readContract({
-        address: token, abi: erc20Abi, functionName: 'allowance', args: [account, spender],
-    });
-    if (allowance >= needed) return false;
+    if (!await allowanceIsShort(publicClient, account, token, spender, needed)) return false;
 
     const hash = await walletClient.writeContract({
         address: token,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [spender, toBigInt(approvalAmountFor(needed.toString(), useUnlimitedApproval))],
+        args: approveArgs(spender, needed, useUnlimitedApproval),
         account,
         chain: walletClient.chain,
     });
@@ -74,16 +130,22 @@ export async function approveIfNeeded({
  * @param {string} p.collateralToken token to split
  * @param {bigint|string} p.amount raw units
  * @param {string} [p.symbol] for the insufficient-balance message
- * @param {(step: 'approval'|'approved'|'split'|'done') => void} [p.onStep]
+ * @param {boolean} [p.batch] the wallet supports atomic batches (hooks/useAtomicBatch.js)
+ * @param {(step: 'batch'|'approval'|'approved'|'split'|'done') => void} [p.onStep]
+ *   'batch': approval and split were sent together, the next step is 'done'
  * @returns {Promise<{hash: string, receipt: object}>}
  */
 export async function splitCollateral({
     publicClient, walletClient, account, router, proposal, collateralToken, amount, symbol = 'token',
-    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, onStep,
+    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, batch = false, onStep,
 }) {
     const amountRaw = toBigInt(amount);
-    if (await balanceOf(publicClient, collateralToken, account) < amountRaw) {
-        throw new Error(`Insufficient ${symbol} balance`);
+    if (shouldBatch({ batch, isSafe, account, walletClient })) {
+        const calls = await splitCalls({ publicClient, account, router, proposal, collateralToken, amount: amountRaw, symbol, useUnlimitedApproval });
+        const sent = await sendAsBatch({ walletClient, account, calls, onStep });
+        if (sent) return sent;
+    } else {
+        await assertSplitBalance(publicClient, collateralToken, account, amountRaw, symbol);
     }
 
     onStep?.('approval');
@@ -113,7 +175,7 @@ export async function splitCollateral({
  * @param {object} p
  * @param {string} p.yesToken wrapped YES outcome token of `collateralToken`
  * @param {string} p.noToken wrapped NO outcome token of `collateralToken`
- * @param {(step: 'yesApproval'|'yesApproved'|'noApproval'|'noApproved'|'merge'|'done') => void} [p.onStep]
+ * @param {(step: 'batch'|'yesApproval'|'yesApproved'|'noApproval'|'noApproved'|'merge'|'done') => void} [p.onStep]
  * @returns {Promise<{hash: string, receipt: object}>}
  */
 export function mergeCollateral({ yesToken, noToken, onStep, ...rest }) {
@@ -136,18 +198,29 @@ export function mergeCollateral({ yesToken, noToken, onStep, ...rest }) {
  *
  * @param {object} p
  * @param {string[]} p.outcomeTokens wrapped outcome tokens of `collateralToken`, one per condition slot
- * @param {(step: 'approval'|'approved'|'merge'|'done', index?: number) => void} [p.onStep]
- *   index is the position in outcomeTokens of the token being approved
+ * @param {boolean} [p.batch] the wallet supports atomic batches (hooks/useAtomicBatch.js)
+ * @param {(step: 'batch'|'approval'|'approved'|'merge'|'done', index?: number) => void} [p.onStep]
+ *   index is the position in outcomeTokens of the token being approved;
+ *   'batch': approvals and merge were sent together, the next step is 'done'
  * @returns {Promise<{hash: string, receipt: object}>}
  */
 export async function mergeOutcomeTokens({
     publicClient, walletClient, account, router, proposal, collateralToken, outcomeTokens, amount,
-    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, onStep,
+    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, batch = false, onStep,
 }) {
     const amountRaw = toBigInt(amount);
     const balances = await Promise.all(outcomeTokens.map((token) => balanceOf(publicClient, token, account)));
     if (balances.some((balance) => balance < amountRaw)) {
         throw new Error('Insufficient token balance. You need this amount of every outcome token.');
+    }
+
+    if (shouldBatch({ batch, isSafe, account, walletClient })) {
+        const approvals = await Promise.all(outcomeTokens.map((token) => approvalCalls({
+            publicClient, account, token, spender: router, amount: amountRaw, useUnlimitedApproval,
+        })));
+        const calls = [...approvals.flat(), routerCall(router, 'mergePositions', proposal, collateralToken, amountRaw)];
+        const sent = await sendAsBatch({ walletClient, account, calls, onStep });
+        if (sent) return sent;
     }
 
     for (const [index, token] of outcomeTokens.entries()) {

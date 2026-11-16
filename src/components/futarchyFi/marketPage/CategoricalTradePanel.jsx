@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formatUnits, parseUnits } from 'viem';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useAtomicBatch } from '../../../hooks/useAtomicBatch';
 import { useRequiredChain } from '../../../hooks/useChainValidation';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { tradeOutcome } from '../../../utils/outcomeTrade';
@@ -49,6 +50,7 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const isSafeConnection = useSafeConnection();
+  const batch = useAtomicBatch();
   const requiredChain = useRequiredChain(config?.chainId);
 
   const [action, setAction] = useState('buy');
@@ -122,7 +124,9 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
         tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountRaw,
         trade: quote.trade, quotedAt: quote.quotedAt, slippageBps,
         isSafe: isSafeConnection(walletClient),
+        batch,
         onStep: (step) => {
+          if (step === 'batch') report(`${split > 0n ? `Splitting ${collateralSymbol} and swapping` : 'Swapping'} ${tokenIn.name} for ${tokenOut.name} in one transaction…`);
           if (step === 'split') report(`Splitting ${format(split)} ${collateralSymbol} into outcome tokens…`);
           if (step === 'approval') report(`Approving ${tokenIn.name}…`);
           if (step === 'swap') report(`Swapping ${tokenIn.name} for ${tokenOut.name}…`);

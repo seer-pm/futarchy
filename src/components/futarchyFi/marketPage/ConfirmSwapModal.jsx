@@ -21,10 +21,20 @@ import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { waitForSafeTxReceipt } from '../../../utils/waitForSafeTxReceipt';
 import { isSafeTransactionSent, isUserRejection, describeTxError, TX_CANCELLED_MESSAGE, SWAP_REVERT_HINT, PRICE_MOVED_WHILE_SIGNING, describeQuoteError } from '../../../utils/txErrors';
 import { minReceiveFromQuote, compareQuotes, slippagePctToBps, slippageBpsForMinimum, executionPriceFor } from '../../../utils/swapQuoteMath';
-import { quoteSeerSwap, executeSeerSwap, getSeerPublicClient, SEER_ROUTE_NAMES, SEER_DEFAULT_SWAP_ROUTER } from '../../../utils/seerSwap';
+import { quoteSeerSwap, executeSeerSwap, getSeerPublicClient, seerSwapCalls, SEER_ROUTE_NAMES, SEER_DEFAULT_SWAP_ROUTER } from '../../../utils/seerSwap';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
-import { splitCollateral } from '../../../utils/collateralActions';
+import { splitCalls, splitCollateral } from '../../../utils/collateralActions';
+import { sendBatch, shouldBatch } from '../../../utils/batchCalls';
+import { useAtomicBatch } from '../../../hooks/useAtomicBatch';
 
+
+// The one step of a trade sent as an atomic batch (utils/batchCalls.js)
+const getBatchStepsData = (summary) => ({
+    1: {
+        title: 'Sending in one transaction',
+        substeps: [{ id: 1, text: summary, completed: false }]
+    }
+});
 
 // Mock steps data with substeps
 export const STEPS_DATA = {
@@ -355,6 +365,8 @@ const ConfirmSwapModal = memo(({
     const [debugData, setDebugData] = useState(null);
     const [transactionResultHash, setTransactionResultHash] = useState(null);
     const [orderStatus, setOrderStatus] = useState(null);
+    // What the batched transaction does, while one is being sent
+    const [batchSummary, setBatchSummary] = useState(null);
 
 
     // ---> ADD State for final executed amount <---
@@ -479,6 +491,7 @@ const ConfirmSwapModal = memo(({
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
     const isSafeConnection = useSafeConnection();
+    const batch = useAtomicBatch();
 
     // Add debugging for connection state
     useEffect(() => {
@@ -647,7 +660,7 @@ const ConfirmSwapModal = memo(({
     // dialog's per-chain summary rows.
     const swapChainId = config?.chainId ?? chain?.id;
     const selectedSwapMethod = swapChainId === 1 ? 'uniswapSdk' : 'algebra';
-    const stepsData = useMemo(() => getStepsData(), []);
+    const stepsData = useMemo(() => (batchSummary ? getBatchStepsData(batchSummary) : getStepsData()), [batchSummary]);
     // The swap route, quotes and token addresses all come from this market's chain
     const requiredChain = useRequiredChain(config?.chainId);
 
@@ -864,6 +877,25 @@ const ConfirmSwapModal = memo(({
         });
     };
 
+    // Router, proposal, token and raw amount of the collateral split a trade needs
+    const collateralSplit = (tokenType, amount) => {
+        const baseToken = tokenType === 'currency'
+            ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency
+            : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company;
+        // Decimal first: a very small number may arrive in exponent form
+        const amountInWei = ethers.utils.parseUnits(
+            amount.toString().includes('e') ? new Decimal(amount).toString() : amount.toString(),
+            baseToken.decimals
+        );
+        return {
+            router: FUTARCHY_ROUTER_ADDRESS,
+            proposal: transactionData?.marketAddress || MARKET_ADDRESS,
+            collateralToken: baseToken.address,
+            amount: amountInWei.toString(),
+            symbol: baseToken.symbol,
+        };
+    };
+
     // Splits the missing collateral into YES/NO tokens before the swap
     // (step 1 of the dialog). The transactions are in utils/collateralActions.
     const handleCollateralAction = async (tokenType, amount) => {
@@ -878,25 +910,11 @@ const ConfirmSwapModal = memo(({
                 return false;
             }
 
-            const baseToken = tokenType === 'currency'
-                ? (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).currency
-                : (BASE_TOKENS_CONFIG || DEFAULT_BASE_TOKENS_CONFIG).company;
-
-            // Decimal first: a very small number may arrive in exponent form
-            const amountInWei = ethers.utils.parseUnits(
-                amount.toString().includes('e') ? new Decimal(amount).toString() : amount.toString(),
-                baseToken.decimals
-            );
-
             await splitCollateral({
                 publicClient,
                 walletClient,
                 account,
-                router: FUTARCHY_ROUTER_ADDRESS,
-                proposal: transactionData?.marketAddress || MARKET_ADDRESS,
-                collateralToken: baseToken.address,
-                amount: amountInWei.toString(),
-                symbol: baseToken.symbol,
+                ...collateralSplit(tokenType, amount),
                 useUnlimitedApproval,
                 isSafe: isSafeConnection(walletClient),
                 waitForSafeExecution: useBlockExplorer,
@@ -1092,6 +1110,7 @@ const ConfirmSwapModal = memo(({
         setIsProcessing(true);
         setOrderStatus('submitted');
         setTransactionResultHash(null);
+        setBatchSummary(null);
         setProcessingStep('processing');
         setCurrentSubstep({ step: 1, substep: 1 });
         setCompletedSubsteps({
@@ -1177,10 +1196,38 @@ const ConfirmSwapModal = memo(({
             const needsCollateral = transactionData.action === 'Buy' ||
                 (checkSellCollateral && transactionData.action === 'Sell') ?
                 parseFloat(additionalCollateralNeeded) > 0 : false;
+            const collateralType = transactionData.action === 'Buy' ? 'currency' : 'company';
+
+            // A wallet with atomic batches signs the split, the approvals and
+            // the swap once. If it declines the batch, nothing was sent and the
+            // steps below run one transaction at a time.
+            if (shouldBatch({ batch, isSafe: isSafeConnection(walletClient), account, walletClient })) {
+                const calls = [
+                    ...(needsCollateral ? await splitCalls({
+                        publicClient, account, ...collateralSplit(collateralType, additionalCollateralNeeded), useUnlimitedApproval,
+                    }) : []),
+                    ...await seerSwapCalls({ trade: quotedTrade, account, useUnlimitedApproval, requote: requoteForSend, quotedAt }),
+                ];
+                setBatchSummary(`${needsCollateral ? 'Split collateral and swap' : 'Swap'} (${calls.length} calls), confirmed once`);
+                setProcessingStep(1);
+                setCurrentSubstep({ step: 1, substep: 1 });
+                setExpandedSteps({ 1: true });
+                const receipt = await sendBatch({ walletClient, account, calls });
+                if (receipt) {
+                    setTransactionResultHash(receipt.transactionHash);
+                    setOrderStatus('fulfilled');
+                    setProcessingStep('completed');
+                    setIsProcessing(false);
+                    onTransactionComplete?.(); // Refresh balances; the modal stays open
+                    return;
+                }
+                setBatchSummary(null);
+                setCurrentSubstep({ step: 1, substep: 1 });
+            }
 
             if (needsCollateral) {
                 console.log('[ConfirmSwapCow Debug - Toggle] Handling Collateral Step');
-                const collateralSuccess = await handleCollateralAction(transactionData.action === 'Buy' ? 'currency' : 'company', additionalCollateralNeeded);
+                const collateralSuccess = await handleCollateralAction(collateralType, additionalCollateralNeeded);
                 if (!collateralSuccess) {
                     // Error handled within handleCollateralAction, just stop
                     setIsProcessing(false);
