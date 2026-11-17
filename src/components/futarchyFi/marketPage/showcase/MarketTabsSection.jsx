@@ -2,6 +2,8 @@ import RedeemTokens from '../redeemTokens/RedeemTokens';
 import PositionsTable from '../PositionsTable';
 import SubgraphTradesDataLayer from '../SubgraphTradesDataLayer';
 import { TradeHistoryTable } from './TradeHistoryTable';
+import { useMemo } from 'react';
+import { answerByToken } from '../../../../utils/proposalOutcomes';
 
 const MarketTabsSection = ({
   tabs,
@@ -11,9 +13,20 @@ const MarketTabsSection = ({
   selectedCurrency,
   rate,
   setCurrentTransactionData,
-  setIsConfirmModalOpen
+  setIsConfirmModalOpen,
+  categorical
 }) => {
-  const { marketHasClosed, activeTab, setActiveTab, tradesLimit, setTradesLimit } = tabs;
+  const { tradesLimit, setTradesLimit, setActiveTab } = tabs;
+  // A categorical proposal (useCategoricalMarket) shows its trades, labelled
+  // by answer, before and after resolution. Its positions, split, merge and
+  // redeem live in CategoricalPositionsPanel in the right column, so it has
+  // no Position or Redeem Tokens tab.
+  const isCategorical = !!categorical?.isCategorical;
+  const marketHasClosed = isCategorical ? false : tabs.marketHasClosed;
+  const activeTab = isCategorical && !['recent-trades-sdk', 'my-trades-sdk'].includes(tabs.activeTab)
+    ? 'recent-trades-sdk'
+    : tabs.activeTab;
+  const answers = useMemo(() => (isCategorical ? answerByToken(categorical.proposal) : null), [isCategorical, categorical?.proposal]);
   const { positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const { sdaiRate, isLoadingRate, rateError } = rate;
 
@@ -57,7 +70,7 @@ const MarketTabsSection = ({
             </button>
 
             {/* Position button - third */}
-            <button
+            {!isCategorical && <button
               onClick={() => setActiveTab('position')}
               className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'position'
                 ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
@@ -65,7 +78,7 @@ const MarketTabsSection = ({
                 }`}
             >
               Position
-            </button>
+            </button>}
           </>
         )}
       </div>
@@ -129,6 +142,7 @@ const MarketTabsSection = ({
               config={config}
               showMyTrades={false}
               limit={tradesLimit}
+              answers={answers}
             />
           </div>
         )}
@@ -139,6 +153,7 @@ const MarketTabsSection = ({
               config={config}
               showMyTrades={true}
               limit={tradesLimit}
+              answers={answers}
             />
           </div>
         )}

@@ -4,8 +4,9 @@ import { useAccount, usePublicClient } from 'wagmi';
 import { ethers } from 'ethers';
 import { getUserPositions } from '../../../utils/uniswapV3Helper';
 import { getEthersProvider } from '../../../utils/ethersAdapters';
+import { categoricalPoolList } from '../../../utils/proposalOutcomes';
 
-const AddLiquidityModal = ({ isOpen, onClose, config }) => {
+const AddLiquidityModal = ({ isOpen, onClose, config, categorical }) => {
     const { address, isConnected } = useAccount();
     // Positions are read on the market's chain. Without the chainId this was
     // the wallet's chain, so a wallet on another network scanned the wrong
@@ -82,7 +83,24 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
 
     if (!isOpen || !config) return null;
 
-    const conditionalPools = [
+    // A categorical market has two pools per answer instead of YES/NO, read
+    // from the AMM by useCategoricalMarket; null while they load.
+    const isCategorical = !!categorical?.isCategorical;
+    const categoricalPools = isCategorical && categorical.pools
+        ? categoricalPoolList(categorical.pools, {
+            address: categorical.proposal.currencyToken,
+            name: config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency',
+        }).map((pool) => ({
+            kind: pool.kind,
+            name: `${pool.token0.name} / ${pool.token1.name}`,
+            tokenA: pool.token0.address,
+            tokenB: pool.token1.address,
+            exists: pool.address !== null,
+        }))
+        : null;
+    const isLoadingCategoricalPools = isCategorical && !categoricalPools;
+
+    const conditionalPools = isCategorical ? (categoricalPools ?? []).filter((pool) => pool.kind === 'conditional') : [
         {
             name: `YES ${config.BASE_TOKENS_CONFIG?.company?.symbol || 'Company'} / YES ${config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency'}`,
             tokenA: config.MERGE_CONFIG?.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress,
@@ -95,7 +113,7 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
         }
     ].filter(p => p.tokenA && p.tokenB);
 
-    const predictionPools = [
+    const predictionPools = isCategorical ? (categoricalPools ?? []).filter((pool) => pool.kind === 'prediction') : [
         {
             name: `YES ${config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency'} / ${config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency'}`,
             tokenA: config.MERGE_CONFIG?.currencyPositions?.yes?.wrap?.wrappedCollateralTokenAddress,
@@ -108,7 +126,7 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
         }
     ].filter(p => p.tokenA && p.tokenB);
 
-    const tokenPools = [
+    const tokenPools = isCategorical ? [] : [
         {
             name: `YES ${config.BASE_TOKENS_CONFIG?.company?.symbol || 'Company'} / ${config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency'}`,
             tokenA: config.MERGE_CONFIG?.companyPositions?.yes?.wrap?.wrappedCollateralTokenAddress,
@@ -166,13 +184,24 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                 {/* Add Liquidity Links */}
                 {pools.length > 0 && (
                     <div className="space-y-2 mb-4">
-                        {pools.map((pool, index) => (
+                        {pools.map((pool, index) => pool.exists === false ? (
+                            // Liquidity goes into an existing pool: point to Create Pool instead
+                            <div
+                                key={index}
+                                className="p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 rounded-lg border border-dashed border-futarchyGray6 dark:border-futarchyGray112/20"
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-futarchyGray11 dark:text-futarchyGray112 font-medium">{pool.name}</span>
+                                    <span className="text-xs text-futarchyGray11 dark:text-futarchyGray112 whitespace-nowrap">Not created</span>
+                                </div>
+                            </div>
+                        ) : (
                             <a
                                 key={index}
                                 href={createLiquidityUrl(pool.tokenA, pool.tokenB)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray5 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 transition-colors"
+                                className="block p-3 bg-futarchyGray3 dark:bg-futarchyDarkGray4 hover:bg-futarchyGray4 dark:hover:bg-futarchyDarkGray42 rounded-lg border border-futarchyGray6 dark:border-futarchyGray112/20 transition-colors"
                             >
                                 <div className="flex items-center justify-between">
                                     <span className="text-futarchyGray12 dark:text-futarchyGray3 font-medium">{pool.name}</span>
@@ -258,6 +287,10 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                             }
                         </div>
 
+                        {isLoadingCategoricalPools && (
+                            <div className="text-center py-2 text-xs text-futarchyGray11 animate-pulse">Loading the pools of each answer...</div>
+                        )}
+
                         {config?.chainId === 1 && isLoadingPositions && (
                             <div className="text-center py-2 text-xs text-futarchyGray11 animate-pulse">Scanning for your positions...</div>
                         )}
@@ -274,7 +307,7 @@ const AddLiquidityModal = ({ isOpen, onClose, config }) => {
                                 Automatic scanning is disabled to prevent timeouts.
                                 <br />Please ensure you are connected to the correct wallet.
                             </div>
-                        ) : conditionalPools.length === 0 && predictionPools.length === 0 && tokenPools.length === 0 ? (
+                        ) : !isLoadingCategoricalPools && conditionalPools.length === 0 && predictionPools.length === 0 && tokenPools.length === 0 ? (
                             <div className="text-center text-futarchyGray11 dark:text-futarchyGray112 py-8">
                                 No liquidity pools available for this market.
                             </div>

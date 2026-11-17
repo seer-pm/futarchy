@@ -71,7 +71,8 @@ export function normalizeRealityQuestionUrl(url, fallbackChainId = null) {
     return buildRealityQuestionUrl(chainId, question[1], question[2]);
 }
 
-const isCompanyRole = (role) => role === 'YES_COMPANY' || role === 'NO_COMPANY' || role === 'COMPANY';
+// ANSWER_COMPANY: the company token of a categorical proposal's answer.
+const isCompanyRole = (role) => role === 'YES_COMPANY' || role === 'NO_COMPANY' || role === 'COMPANY' || role === 'ANSWER_COMPANY';
 
 /**
  * Execution price of a conditional-pool swap, in currency per company token,

@@ -173,8 +173,9 @@ export function convertSwapToTradeFormat(swap, chainId) {
     const tInRole = swap.tokenIn?.role || '';
     const tOutRole = swap.tokenOut?.role || '';
 
-    // Helper to check if role is Company/Outcome
-    const isCompanyRole = (r) => r === 'YES_COMPANY' || r === 'NO_COMPANY' || r === 'COMPANY';
+    // Helper to check if role is Company/Outcome; a categorical proposal's
+    // answers carry ANSWER_COMPANY instead of YES_/NO_COMPANY
+    const isCompanyRole = (r) => r === 'YES_COMPANY' || r === 'NO_COMPANY' || r === 'COMPANY' || r === 'ANSWER_COMPANY';
 
     let isBuy = false;
 

@@ -26,9 +26,9 @@ export const CONDITIONAL_TOKENS_BY_CHAIN = {
 const CONDITION_ID = '0x2ddc7de7';        // conditionId()
 const PAYOUT_DENOMINATOR = '0xdd34de67';  // payoutDenominator(bytes32)
 const PAYOUT_NUMERATORS = '0x0504c814';   // payoutNumerators(bytes32,uint256)
-
-const ZERO_WORD = '0'.repeat(64);
-const SLOT_ONE_WORD = '0'.repeat(63) + '1';
+const NUM_OUTCOMES = '0x8767d64e';        // numOutcomes()
+const OUTCOME_SLOT_COUNT = '0xd42dc0c2';  // getOutcomeSlotCount(bytes32)
+const OUTCOMES = '0xeed2a147';            // outcomes(uint256)
 
 function normalizeChainId(chainId) {
     return Number(chainId) === 1 ? 1 : 100;
@@ -46,14 +46,35 @@ async function ethCall(provider, to, data) {
     return provider.send('eth_call', [{ to, data }, 'latest']);
 }
 
+const uint256 = (value) => value.toString(16).padStart(64, '0');
+
+// An answer from proposal.outcomes(i): the ABI string (offset word, length
+// word, bytes), JSON-unescaped like realityText in utils/proposalOutcomes.js.
+function decodeAnswer(hex) {
+    const body = String(hex ?? '').slice(2);
+    const offset = Number.parseInt(body.slice(0, 64), 16) * 2;
+    const length = Number.parseInt(body.slice(offset, offset + 64), 16);
+    const bytes = body.slice(offset + 64, offset + 64 + length * 2);
+    if (!Number.isInteger(length) || bytes.length !== length * 2) return null;
+    const text = new TextDecoder().decode(Uint8Array.from(bytes.match(/../g) || [], (byte) => parseInt(byte, 16)));
+    try {
+        return JSON.parse(`"${text}"`);
+    } catch (_) {
+        return text;
+    }
+}
+
 /**
  * Check many proposals at once.
  *
  * @param {Array<{proposalAddress: string, chainId?: number|string, conditionalTokens?: string}>} proposals
  * @param {{getProvider?: (chainId: number) => {send: Function}}} [options]
- * @returns {Promise<Map<string, {resolved: boolean, outcome: 'yes'|'no'|null}>>}
- *   keyed by resolutionKey(chainId, proposalAddress). A proposal whose read
- *   failed is absent, so callers fall back to whatever metadata says.
+ * @returns {Promise<Map<string, {resolved: boolean, outcome: 'yes'|'no'|'invalid'|null, outcomeIndex?: number|null, answer?: string|null}>>}
+ *   keyed by resolutionKey(chainId, proposalAddress). For a categorical
+ *   proposal (utils/proposalOutcomes.js) a winning answer is outcomeIndex,
+ *   with outcome null and answer its name (null when that read failed), and
+ *   INVALID is outcome 'invalid'. A proposal whose read failed is absent, so
+ *   callers fall back to whatever metadata says.
  */
 export async function fetchOnChainResolutions(proposals, { getProvider = getRpcProvider } = {}) {
     const results = new Map();
@@ -85,28 +106,66 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
         return results;
     }
 
-    // Round 1: conditionId() for every proposal — one batched POST per chain.
-    const conditionIds = await Promise.all(targets.map((t) =>
-        ethCall(providers.get(t.chainId), t.address, CONDITION_ID).catch(() => null)
-    ));
+    // Round 1: conditionId() and numOutcomes() for every proposal — one
+    // batched POST per chain.
+    const [conditionIds, outcomeCounts] = await Promise.all([
+        Promise.all(targets.map((t) =>
+            ethCall(providers.get(t.chainId), t.address, CONDITION_ID).catch(() => null)
+        )),
+        Promise.all(targets.map((t) =>
+            ethCall(providers.get(t.chainId), t.address, NUM_OUTCOMES).catch(() => null)
+        )),
+    ]);
 
     // Round 2: payout state for every condition — one batched POST per chain.
-    // Numerator slot 0 is YES for futarchy proposals; reading it alongside the
-    // denominator saves a third round for the resolved ones.
+    // Slot 0 is YES and slot 1 is NO for binary proposals, and the first two
+    // answers for categorical ones; reading them alongside the denominator
+    // saves another round for most resolved proposals.
     await Promise.all(targets.map(async (t, i) => {
         const conditionId = conditionIds[i];
         if (!isWord(conditionId)) return;
         const word = conditionId.slice(2).toLowerCase();
         const provider = providers.get(t.chainId);
+        const numerator = (slot) =>
+            ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${uint256(slot)}`);
         try {
-            const [denominator, yesNumerator, noNumerator] = await Promise.all([
+            const [denominator, slotCount, yesNumerator, noNumerator] = await Promise.all([
                 ethCall(provider, t.conditionalTokens, `${PAYOUT_DENOMINATOR}${word}`),
-                ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${ZERO_WORD}`),
-                ethCall(provider, t.conditionalTokens, `${PAYOUT_NUMERATORS}${word}${SLOT_ONE_WORD}`),
+                // Only categorical proposals need it; a failed read reads as binary.
+                ethCall(provider, t.conditionalTokens, `${OUTCOME_SLOT_COUNT}${word}`).catch(() => null),
+                numerator(0),
+                numerator(1),
             ]);
             if (!isWord(denominator) || !isWord(yesNumerator) || !isWord(noNumerator)) return;
             if (BigInt(denominator) === 0n) {
                 results.set(t.key, { resolved: false, outcome: null });
+                return;
+            }
+            // A categorical proposal (FutarchyCategoricalFactory) has one slot
+            // per answer plus INVALID last; binary ones have 2 slots and
+            // numOutcomes() = 4. Its oracle pays exactly one slot.
+            const slots = isWord(slotCount) ? Number(BigInt(slotCount)) : 0;
+            const answers = isWord(outcomeCounts[i]) ? Number(BigInt(outcomeCounts[i])) : null;
+            if (answers !== null && slots === answers + 1) {
+                const paid = [BigInt(yesNumerator) > 0n, BigInt(noNumerator) > 0n];
+                if (!paid[0] && !paid[1]) {
+                    const rest = await Promise.all(
+                        Array.from({ length: slots - 2 }, (_, k) => numerator(k + 2))
+                    );
+                    if (!rest.every(isWord)) return;
+                    paid.push(...rest.map((value) => BigInt(value) > 0n));
+                }
+                const winner = paid.indexOf(true);
+                if (winner === -1) return;
+                if (winner === answers) {
+                    results.set(t.key, { resolved: true, outcome: 'invalid', outcomeIndex: null });
+                    return;
+                }
+                // Lists and status labels name the winner; without its name
+                // the proposal still reads as resolved.
+                const answer = await ethCall(provider, t.address, `${OUTCOMES}${uint256(winner)}`)
+                    .then(decodeAnswer, () => null);
+                results.set(t.key, { resolved: true, outcome: null, outcomeIndex: winner, answer });
                 return;
             }
             // Both slots paying out means the question resolved invalid.
@@ -128,7 +187,8 @@ export async function fetchOnChainResolutions(proposals, { getProvider = getRpcP
  * @param {string} proposalAddress - FutarchyProposal contract address
  * @param {string} conditionalTokensAddress - ConditionalTokens contract address
  * @param {number|string} chainId - Chain the proposal lives on
- * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|'Invalid'|null}|null>} null when the check fails
+ * @returns {Promise<{resolved: boolean, outcome: 'Yes'|'No'|'Invalid'|null, answer: string|null}|null>}
+ *   null when the check fails; answer names a categorical proposal's winner
  */
 export async function fetchOnChainResolution(proposalAddress, conditionalTokensAddress, chainId) {
     const results = await fetchOnChainResolutions([
@@ -142,6 +202,7 @@ export async function fetchOnChainResolution(proposalAddress, conditionalTokensA
     return {
         resolved: result.resolved,
         outcome: { yes: 'Yes', no: 'No', invalid: 'Invalid' }[result.outcome] || null,
+        answer: result.answer ?? null,
     };
 }
 

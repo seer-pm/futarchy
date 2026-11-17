@@ -27,19 +27,40 @@ const OPEN = '0x0000000000000000000000000000000000000a03';
 const MAINNET = '0x0000000000000000000000000000000000000b01';
 const BROKEN = '0x0000000000000000000000000000000000000c01';
 const INVALID = '0x0000000000000000000000000000000000000a04';
+// Categorical proposals (FutarchyCategoricalFactory): 3 answers + INVALID slot.
+const CAT_FIRST = '0x0000000000000000000000000000000000000d01';
+const CAT_THIRD = '0x0000000000000000000000000000000000000d02';
+const CAT_INVALID = '0x0000000000000000000000000000000000000d03';
+const CAT_TWO_SECOND = '0x0000000000000000000000000000000000000d04';
 
 // Chain state: proposal -> conditionId, conditionId -> [denominator, yesNumerator, noNumerator]
 const conditionIds = {
     [RESOLVED_YES]: word(1), [RESOLVED_NO]: word(2), [OPEN]: word(3), [MAINNET]: word(4), [INVALID]: word(5),
+    [CAT_FIRST]: word(6), [CAT_THIRD]: word(7), [CAT_INVALID]: word(8), [CAT_TWO_SECOND]: word(9),
+};
+// numOutcomes(): 4 for binary proposals (Yes-/No- per collateral), N answers for categorical.
+const numOutcomes = {
+    [RESOLVED_YES]: 4, [RESOLVED_NO]: 4, [OPEN]: 4, [MAINNET]: 4, [INVALID]: 4,
+    [CAT_FIRST]: 3, [CAT_THIRD]: 3, [CAT_INVALID]: 3, [CAT_TWO_SECOND]: 2,
+};
+// conditionId -> [denominator, ...numerator per slot]
+// Answers of the categorical proposals (FutarchyProposal.outcomes); CAT_THIRD's read fails.
+const answers = {
+    // Stored JSON-escaped, as the creation tools write it (utils/categoricalProposal.mjs).
+    [CAT_FIRST]: ['Señora \\"Ñandú\\"', 'Massa', 'Bullrich'],
+    [CAT_INVALID]: ['A', 'B', 'C'],
+    [CAT_TWO_SECOND]: ['Yes', 'No'],
 };
 const payouts = {
     [word(1)]: [1, 1, 0], [word(2)]: [1, 0, 1], [word(3)]: [0, 0, 0], [word(4)]: [1, 1, 0], [word(5)]: [2, 1, 1],
+    [word(6)]: [1, 1, 0, 0, 0], [word(7)]: [1, 0, 0, 1, 0], [word(8)]: [1, 0, 0, 0, 1], [word(9)]: [1, 0, 1, 0],
 };
 
 function fakeProvider(chainId, log) {
     const iface = new ethers.utils.Interface([
         'function payoutDenominator(bytes32) view returns (uint256)',
         'function payoutNumerators(bytes32, uint256) view returns (uint256)',
+        'function getOutcomeSlotCount(bytes32) view returns (uint256)',
     ]);
     return {
         async send(method, [{ to, data }]) {
@@ -48,11 +69,21 @@ function fakeProvider(chainId, log) {
                 if (!conditionIds[to]) throw new Error('execution reverted');
                 return conditionIds[to];
             }
+            if (data === '0x8767d64e') {
+                if (!numOutcomes[to]) throw new Error('execution reverted');
+                return word(numOutcomes[to]);
+            }
+            if (data.startsWith('0xeed2a147')) {
+                const answer = answers[to]?.[Number(BigInt(`0x${data.slice(10)}`))];
+                if (answer === undefined) throw new Error('execution reverted');
+                return ethers.utils.defaultAbiCoder.encode(['string'], [answer]);
+            }
             const fn = iface.getFunction(data.slice(0, 10));
             const args = iface.decodeFunctionData(fn, data);
-            const [denominator, yes, no] = payouts[args[0]];
+            const [denominator, ...numerators] = payouts[args[0]];
             if (fn.name === 'payoutDenominator') return word(denominator);
-            return word(Number(args[1]) === 0 ? yes : no);
+            if (fn.name === 'getOutcomeSlotCount') return word(numerators.length);
+            return word(numerators[Number(args[1])] ?? 0);
         },
     };
 }
@@ -61,6 +92,9 @@ test('selectors match the ConditionalTokens / FutarchyProposal signatures', () =
     assert.match(source, new RegExp(ethers.utils.id('conditionId()').slice(0, 10)));
     assert.match(source, new RegExp(ethers.utils.id('payoutDenominator(bytes32)').slice(0, 10)));
     assert.match(source, new RegExp(ethers.utils.id('payoutNumerators(bytes32,uint256)').slice(0, 10)));
+    assert.match(source, new RegExp(ethers.utils.id('numOutcomes()').slice(0, 10)));
+    assert.match(source, new RegExp(ethers.utils.id('getOutcomeSlotCount(bytes32)').slice(0, 10)));
+    assert.match(source, new RegExp(ethers.utils.id('outcomes(uint256)').slice(0, 10)));
 });
 
 test('reports resolved outcome per proposal and leaves failed reads out', async () => {
@@ -80,7 +114,8 @@ test('reports resolved outcome per proposal and leaves failed reads out', async 
     assert.equal(results.has(resolutionKey(100, BROKEN)), false, 'a failed read must not claim a state');
 
     // Each chain reads its own ConditionalTokens deployment.
-    const payoutReads = log.filter((call) => call.data !== '0x2ddc7de7');
+    const proposalReads = new Set(['0x2ddc7de7', '0x8767d64e']);
+    const payoutReads = log.filter((call) => !proposalReads.has(call.data));
     assert.ok(payoutReads.filter((c) => c.chainId === 1)
         .every((c) => c.to === CONDITIONAL_TOKENS_BY_CHAIN[1].toLowerCase()));
     assert.ok(payoutReads.filter((c) => c.chainId === 100)
@@ -109,7 +144,7 @@ test('issues every read of a round in the same tick so the batch provider shares
         await Promise.resolve();
     }
     const rounds = new Set(ticks);
-    assert.equal(ticks.length, 12, '3 conditionId + 3 x (denominator, YES numerator, NO numerator)');
+    assert.equal(ticks.length, 18, '3 x (conditionId, numOutcomes) + 3 x (denominator, slot count, slot 0, slot 1)');
     assert.equal(rounds.size, 2, `expected two rounds of calls, got ticks ${ticks.join(',')}`);
 });
 
@@ -135,6 +170,25 @@ test('both payout slots paying out reads as invalid, never as YES', async () => 
         { getProvider: (chainId) => fakeProvider(chainId, []) }
     );
     assert.deepEqual(results.get(resolutionKey(100, INVALID)), { resolved: true, outcome: 'invalid' });
+});
+
+test('categorical proposals report the winning answer and its name, and their INVALID slot as invalid', async () => {
+    const results = await fetchOnChainResolutions(
+        [CAT_FIRST, CAT_THIRD, CAT_INVALID, CAT_TWO_SECOND].map((proposalAddress) => ({ proposalAddress, chainId: 100 })),
+        { getProvider: (chainId) => fakeProvider(chainId, []) }
+    );
+    // The name is UTF-8, longer than one byte per character, and unescaped.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_FIRST)),
+        { resolved: true, outcome: null, outcomeIndex: 0, answer: 'Señora "Ñandú"' });
+    // The third answer is past the two slots read with the denominator. Its
+    // name read fails: the proposal is still resolved, without a name.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_THIRD)),
+        { resolved: true, outcome: null, outcomeIndex: 2, answer: null });
+    assert.deepEqual(results.get(resolutionKey(100, CAT_INVALID)), { resolved: true, outcome: 'invalid', outcomeIndex: null });
+    // Two candidates: slot 1 is the second candidate, not NO, and slot 2 is
+    // INVALID. An answer named "No" stays an answer.
+    assert.deepEqual(results.get(resolutionKey(100, CAT_TWO_SECOND)),
+        { resolved: true, outcome: null, outcomeIndex: 1, answer: 'No' });
 });
 
 // --- resolution time ------------------------------------------------------

@@ -53,10 +53,12 @@ function normalizeOutcome(value) {
  *
  * @param {'active'|'awaiting_resolution'|'resolved'} state
  * @param {'yes'|'no'|'invalid'|null} [outcome]
+ * @param {string|null} [answer] the winning answer of a categorical market,
+ *   named when outcome is null
  */
-export function describeMarketStatus(state, outcome = null) {
+export function describeMarketStatus(state, outcome = null, answer = null) {
     const { label, shortLabel } = STATE_LABELS[state];
-    const outcomeLabel = state === 'resolved' && outcome ? OUTCOME_LABELS[outcome] : null;
+    const outcomeLabel = state === 'resolved' ? (OUTCOME_LABELS[outcome] ?? (answer || null)) : null;
     return {
         label,
         shortLabel,
@@ -72,7 +74,9 @@ export function describeMarketStatus(state, outcome = null) {
  * `_registryMetadata` (market page) or `metadata` (list cards):
  *   - resolution_status / resolution_outcome (also resolutionStatus,
  *     resolutionOutcome, finalOutcome): what the registry recorded
- *   - onChainResolution: { resolved, outcome } from utils/onChainResolution.js
+ *   - onChainResolution: { resolved, outcome, answer } from utils/onChainResolution.js
+ *   - winningAnswer: the winning answer of a categorical market, as the
+ *     market page's marketInfo carries it (onChainResolution.answer otherwise)
  *   - closeTimestamp / endTime (also end_time, endDate, closeDate), in
  *     seconds, milliseconds or as a date string
  *
@@ -85,15 +89,18 @@ export function describeMarketStatus(state, outcome = null) {
  * @returns {{
  *   state: 'active'|'awaiting_resolution'|'resolved',
  *   outcome: 'yes'|'no'|'invalid'|null,
- *   outcomeLabel: 'YES'|'NO'|'INVALID'|null,
+ *   answer: string|null,
+ *   outcomeLabel: string|null,
  *   label: string,
  *   shortLabel: string,
  *   labelWithOutcome: string,
  *   closeTime: number|null,
  *   showCountdown: boolean,
- * }} outcome is null while unresolved and when a resolved market's outcome is
- *   unknown; labelWithOutcome is "Resolved: YES" when it is known, else label;
- *   closeTime is in Unix seconds.
+ * }} outcome is null while unresolved, for a categorical market's winning
+ *   answer, and when a resolved market's outcome is unknown; answer is that
+ *   winning answer's name; outcomeLabel is "YES", "NO", "INVALID" or the
+ *   answer; labelWithOutcome is "Resolved: YES" or "Resolved: <answer>" when
+ *   it is known, else label; closeTime is in Unix seconds.
  */
 export function resolveMarketStatus(market = {}, nowSeconds = Date.now() / 1000) {
     const sources = [market, market?._registryMetadata, market?.metadata].filter(Boolean);
@@ -123,11 +130,16 @@ export function resolveMarketStatus(market = {}, nowSeconds = Date.now() / 1000)
     const outcome = state === 'resolved'
         ? (normalizeOutcome(recordedOutcome) ?? normalizeOutcome(onChain?.outcome))
         : null;
+    // A categorical market's winner is one of its answers, not YES or NO.
+    const answer = state === 'resolved' && outcome === null
+        ? ([onChain?.answer, ...sources.map((s) => s.winningAnswer)].find(isPresent) ?? null)
+        : null;
 
     return {
         state,
         outcome,
-        ...describeMarketStatus(state, outcome),
+        answer,
+        ...describeMarketStatus(state, outcome, answer),
         closeTime,
         showCountdown: state === 'active' && closeTime !== null,
     };
@@ -135,11 +147,12 @@ export function resolveMarketStatus(market = {}, nowSeconds = Date.now() / 1000)
 
 /**
  * Whether the on-chain payout state is still worth reading for a market:
- * true until what is already known gives both "resolved" and its outcome.
+ * true until what is already known gives both "resolved" and its outcome or
+ * winning answer.
  */
 export function needsOnChainResolution(market = {}) {
-    const { state, outcome } = resolveMarketStatus(market);
-    return state !== 'resolved' || outcome === null;
+    const { state, outcome, answer } = resolveMarketStatus(market);
+    return state !== 'resolved' || (outcome === null && answer === null);
 }
 
 export function isProposalActive(metadata = {}, nowSeconds = Math.floor(Date.now() / 1000)) {

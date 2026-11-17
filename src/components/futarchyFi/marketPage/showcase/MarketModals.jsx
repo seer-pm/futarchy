@@ -29,7 +29,8 @@ const MarketModals = ({
   proposalId,
   config,
   configLoading,
-  refetchConfig
+  refetchConfig,
+  categorical
 }) => {
   const {
     isCollateralModalOpen,
@@ -158,11 +159,13 @@ const MarketModals = ({
         isOpen={isAddLiquidityModalOpen}
         onClose={() => setIsAddLiquidityModalOpen(false)}
         config={config}
+        categorical={categorical}
       />
       <CreatePoolModal
         isOpen={isCreatePoolModalOpen}
         onClose={() => setIsCreatePoolModalOpen(false)}
         config={config}
+        categorical={categorical}
         onPoolCreated={refetchConfig}
       />
       {isEditProposalModalOpen && (

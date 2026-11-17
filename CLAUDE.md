@@ -129,12 +129,19 @@ docs/                  # Notes and integration write-ups; docs/archive/ holds ol
      an operation needs; `MaxUint256` only when the user opts in to unlimited
      approval in the dialog
 
-3. **RPC Resilience**
+3. **Batched transactions (EIP-5792 / EIP-7702)**
+   - When the wallet reports the `atomic` capability on the chain
+     (`hooks/useAtomicBatch.js`), split, merge and trades (with their automatic
+     split and approvals) go out as one `wallet_sendCalls` (`utils/batchCalls.js`)
+   - Otherwise, for a Safe, or when the wallet declines the batch (e.g. a rejected
+     smart-account upgrade), the same helpers send one transaction per step
+
+4. **RPC Resilience**
    - Endpoint list in `config/rpcEndpoints.js`, shared by `providers.jsx`, `getBestRpc.js` and `seerSwap.js`
    - RPC rotation in `utils/getAlgebraPoolPrice.js`
    - `utils/retryWithBackoff.js` exists but nothing in `src/` imports it
 
-4. **GraphQL data**
+5. **GraphQL data**
    - Endpoints derive from `NEXT_PUBLIC_FUTARCHY_API_URL` (`config/subgraphEndpoints.js`)
    - Shared queries in `src/services/`, deduplicated per page load via `requestCache.js`
 

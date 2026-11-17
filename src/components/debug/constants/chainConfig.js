@@ -10,6 +10,8 @@ export const CHAIN_CONFIG = {
         name: 'Ethereum',
         rpcUrl: 'https://eth-mainnet.public.blastapi.io',
         factoryAddress: '0xf9369c0F7a84CAC3b7Ef78c837cF7313309D3678',
+        // FutarchyCategoricalFactory (N answers + Invalid); not deployed yet.
+        categoricalFactoryAddress: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || null,
         adapterAddress: '0xAc9Bf8EbA6Bd31f8E8c76f8E8B2AAd0BD93f98Dc',
         positionManager: '0xC36442b4a4522E871399CD717aBDD847Ab11FE88',
         poolFactory: '0x1F98431c8aD98523631AE4a59f267346ea31F984',
@@ -33,6 +35,9 @@ export const CHAIN_CONFIG = {
         name: 'Gnosis',
         rpcUrl: 'https://rpc.gnosischain.com',
         factoryAddress: '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345',
+        // FutarchyCategoricalFactory (N answers + Invalid), seer-pm/demo
+        // contracts/deployments/gnosis. The variable overrides it for a build.
+        categoricalFactoryAddress: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x1f24Ad0BEb1cD3e6C4026F6A749F96fa1B9E498c',
         adapterAddress: '0x7495a583ba85875d59407781b4958ED6e0E1228f',
         positionManager: '0x91fd594c46d8b01e62dbdebed2401dde01817834',
         poolFactory: null, // Algebra uses different mechanism
