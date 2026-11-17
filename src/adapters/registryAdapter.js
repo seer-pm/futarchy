@@ -3,11 +3,8 @@
  * Queries futarchy-complete-new for ProposalEntity metadata
  */
 
-import { AGGREGATOR_SUBGRAPH_URL as REGISTRY_SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { AGGREGATOR_SUBGRAPH_URL as REGISTRY_SUBGRAPH_URL, DEFAULT_AGGREGATOR } from '../config/subgraphEndpoints';
 import { cachedOnce } from '../services/requestCache';
-
-// Default Aggregator address (Futarchy Finance production)
-const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
 
 /**
  * Fetch ProposalMetadata from Registry by proposalAddress (trading contract)

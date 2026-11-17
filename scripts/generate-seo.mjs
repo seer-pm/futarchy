@@ -42,7 +42,7 @@ import path from 'path';
 // ─────────────────────────────────────────────────────────────────────
 const REGISTRY_GRAPHQL_URL =
   process.env.REGISTRY_GRAPHQL_URL || 'https://api.futarchy.seer.pm/registry/graphql';
-const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
+const DEFAULT_AGGREGATOR = (process.env.NEXT_PUBLIC_FUTARCHY_AGGREGATOR || '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1').toLowerCase();
 const SITE_ORIGIN = 'https://futarchy.seer.pm';
 const DEFAULT_IMAGE = '/assets/og-default.png';
 
