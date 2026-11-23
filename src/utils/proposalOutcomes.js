@@ -48,7 +48,7 @@ const CONDITIONAL_TOKENS_BY_CHAIN = {
 // variables override the address for a build.
 export const CATEGORICAL_ROUTER_BY_CHAIN = {
     1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_ROUTER || null,
-    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || '0x9afE4500ed1A29A5aCCAE65B87B5cd3eA9e6d433',
+    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || '0x97Fa06A3067bC5faB00D28A30aC7E8555742a023',
 };
 
 // AMM factory each chain's futarchy pools are created on: Swapr (Algebra) on

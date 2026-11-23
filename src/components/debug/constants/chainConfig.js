@@ -37,7 +37,7 @@ export const CHAIN_CONFIG = {
         factoryAddress: '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345',
         // FutarchyCategoricalFactory (N answers + Invalid), seer-pm/demo
         // contracts/deployments/gnosis. The variable overrides it for a build.
-        categoricalFactoryAddress: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x1f24Ad0BEb1cD3e6C4026F6A749F96fa1B9E498c',
+        categoricalFactoryAddress: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295',
         adapterAddress: '0x7495a583ba85875d59407781b4958ED6e0E1228f',
         positionManager: '0x91fd594c46d8b01e62dbdebed2401dde01817834',
         poolFactory: null, // Algebra uses different mechanism

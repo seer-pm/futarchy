@@ -31,7 +31,7 @@ import { fetchOutcomePools, fetchProposalOutcomes } from './proposalOutcomes.js'
 // ones chained to a family's answers.
 export const CATEGORICAL_FACTORY_BY_CHAIN = {
     1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || null,
-    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x1f24Ad0BEb1cD3e6C4026F6A749F96fa1B9E498c',
+    100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295',
 };
 
 const FACTORY_ABI = parseAbi([

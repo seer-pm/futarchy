@@ -29,7 +29,7 @@ require('dotenv').config();
 const { ethers } = require('ethers');
 
 const RPC_URL = process.env.RPC_URL || 'https://rpc.gnosischain.com';
-const CATEGORICAL_ROUTER = process.env.CATEGORICAL_ROUTER_ADDRESS || '0x9afE4500ed1A29A5aCCAE65B87B5cd3eA9e6d433';
+const CATEGORICAL_ROUTER = process.env.CATEGORICAL_ROUTER_ADDRESS || '0x97Fa06A3067bC5faB00D28A30aC7E8555742a023';
 const CONDITIONAL_TOKENS = '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce';
 const POSITION_MGR = '0x91fd594c46d8b01e62dbdebed2401dde01817834';
 const ALGEBRA_FACTORY = '0xA0864cCA6E114013AB0e27cbd5B6f4c8947da766';

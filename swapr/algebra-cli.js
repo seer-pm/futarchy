@@ -200,7 +200,7 @@ const DEFAULT_LANGUAGE = 'en';
 const DEFAULT_FACTORY_ADDRESS = '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345';
 // FutarchyCategoricalFactory (questions with N answers plus Invalid) on Gnosis.
 // CATEGORICAL_FACTORY_ADDRESS in .env or categoricalFactoryAddress in the config override it.
-const DEFAULT_CATEGORICAL_FACTORY_ADDRESS = process.env.CATEGORICAL_FACTORY_ADDRESS || '0x1f24Ad0BEb1cD3e6C4026F6A749F96fa1B9E498c';
+const DEFAULT_CATEGORICAL_FACTORY_ADDRESS = process.env.CATEGORICAL_FACTORY_ADDRESS || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295';
 const CONDITIONAL_TOKENS_ADDRESS = '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce'; // Gnosis
 // Shared with the app's Create Proposal modal: escaping, token names, limits.
 const loadCategoricalProposal = () => import('../src/utils/categoricalProposal.mjs');
