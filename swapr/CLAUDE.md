@@ -176,6 +176,11 @@ npm run call-pool-apis
   shared with the app's Create Proposal modal. Its gas is estimated, not fixed
 - `setupPoolsFromFutarchyProposal` only builds Yes/No pools and stops on a categorical proposal;
   `categorical-pools.js` (`npm run categorical:pools`) builds a categorical proposal's pools
+- A categorical question can follow up an answer of another proposal (`parentMarket`,
+  `parentOutcome` in the config; interactive mode asks), such as its "Other": its tokens
+  are split from that answer's tokens and the market page shows both as one market
+  (`src/utils/proposalFamily.js`). `categorical-pools.js` then splits the parent
+  answer's tokens and quotes the prediction pools in its currency token
 
 ### automate-futarchy.js
 

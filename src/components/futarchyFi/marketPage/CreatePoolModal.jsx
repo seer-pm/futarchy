@@ -148,8 +148,8 @@ export default function CreatePoolModal({ isOpen, onClose, config, categorical, 
     // A categorical market has two pools per answer instead of YES/NO, read
     // from the AMM by useCategoricalMarket; null while they load.
     const categoricalPools = useMemo(() => {
-        if (!categorical?.isCategorical || !categorical.pools) return null;
-        return categoricalPoolList(categorical.pools, {
+        if (!categorical?.isCategorical || !categorical.allPools) return null;
+        return categoricalPoolList(categorical.allPools, {
             address: categorical.proposal.currencyToken,
             name: config?.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency',
         });

@@ -86,8 +86,8 @@ const AddLiquidityModal = ({ isOpen, onClose, config, categorical }) => {
     // A categorical market has two pools per answer instead of YES/NO, read
     // from the AMM by useCategoricalMarket; null while they load.
     const isCategorical = !!categorical?.isCategorical;
-    const categoricalPools = isCategorical && categorical.pools
-        ? categoricalPoolList(categorical.pools, {
+    const categoricalPools = isCategorical && categorical.allPools
+        ? categoricalPoolList(categorical.allPools, {
             address: categorical.proposal.currencyToken,
             name: config.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency',
         }).map((pool) => ({

@@ -55,7 +55,7 @@ const CategoricalOutcomesCard = ({ categorical, config, selectedKey, onSelect })
           <p className="py-6 text-center text-sm text-futarchyGray11 dark:text-white/70">Loading prices…</p>
         ) : pools.map((row, i) => {
           const price = row.conditional?.price ?? null;
-          const chance = row.prediction?.price ?? null;
+          const chance = row.chance;
           const selected = row.key === selectedKey;
           return (
             <button

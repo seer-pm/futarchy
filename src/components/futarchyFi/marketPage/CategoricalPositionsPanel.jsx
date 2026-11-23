@@ -5,9 +5,10 @@ import FutarchyCartridge from 'futarchy-sdk/executors/FutarchyCartridge';
 import { useAtomicBatch } from '../../../hooks/useAtomicBatch';
 import { useRequiredChain } from '../../../hooks/useChainValidation';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
-import { mergeOutcomeTokens, splitCollateral } from '../../../utils/collateralActions';
+import { mergeThrough, splitThrough } from '../../../utils/collateralActions';
 import { formatWith } from '../../../utils/precisionFormatter';
-import { CATEGORICAL_ROUTER_BY_CHAIN, mergeableAmount, outcomeRows, winningRow } from '../../../utils/proposalOutcomes';
+import { familyLeaves, familyMergeable, familyMergePlan, familyRedeemPlan, familySlots, familySplitPlan } from '../../../utils/proposalFamily';
+import { CATEGORICAL_ROUTER_BY_CHAIN } from '../../../utils/proposalOutcomes';
 import { describeRedeemError } from '../../../utils/redeemPlan';
 
 // Outcome tokens are wrapped with 18 decimals by both futarchy factories.
@@ -31,12 +32,15 @@ const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transitio
 const buttonClass = 'w-full py-3 px-4 rounded-xl font-semibold text-sm border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed';
 
 /**
- * Positions of a categorical futarchy proposal (N answers plus INVALID):
- * the balance of every outcome token, split and merge over all of them, and
- * redemption of the slot that won. Binary proposals use MarketBalancePanel.
+ * Positions of a categorical futarchy market (N answers plus INVALID, and the
+ * follow-up questions chained to its answers, utils/proposalFamily.js): the
+ * balance of every outcome token, split and merge over all of them, and
+ * redemption of what won. A split goes down to the market's answers, through
+ * every follow-up question; a merge takes them back up. Binary proposals use
+ * MarketBalancePanel.
  */
 const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWallet }) => {
-  const { proposal, resolution, balances, isLoadingBalances, balanceError, refetch } = categorical;
+  const { proposal, family, resolution, balances, isLoadingBalances, balanceError, refetch } = categorical;
   const chainId = Number(config?.chainId) || 100;
   const router = CATEGORICAL_ROUTER_BY_CHAIN[chainId];
 
@@ -52,8 +56,10 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState({ busy: false, message: null, error: null });
 
-  const rows = useMemo(() => outcomeRows(proposal), [proposal]);
-  const winner = winningRow(proposal, resolution);
+  const rows = useMemo(() => familySlots(family), [family]);
+  // What a split gives: the market's answers and every question's INVALID.
+  const answerCount = useMemo(() => familyLeaves(family).length + rows.filter((row) => row.isInvalid).length, [family, rows]);
+  const winner = resolution?.winner ?? null;
   const symbols = {
     company: config?.BASE_TOKENS_CONFIG?.company?.symbol || proposal.invalid.company.name?.replace(/^INVALID_/, ''),
     currency: config?.BASE_TOKENS_CONFIG?.currency?.symbol || proposal.invalid.currency.name?.replace(/^INVALID_/, ''),
@@ -61,7 +67,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   const collateral = { company: proposal.companyToken, currency: proposal.currencyToken };
   const balanceOf = (token) => balances?.get(token.toLowerCase()) ?? 0n;
   const mergeable = balances
-    ? { company: mergeableAmount(proposal, balances, 'company'), currency: mergeableAmount(proposal, balances, 'currency') }
+    ? { company: familyMergeable(family, balances, 'company'), currency: familyMergeable(family, balances, 'currency') }
     : null;
   const maxAmount = action === 'split' ? balanceOf(collateral[side]) : mergeable?.[side] ?? 0n;
   const amountRaw = parseAmount(amount);
@@ -87,41 +93,53 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
     }
   };
 
-  const common = { publicClient, walletClient, account, router, proposal: config.MARKET_ADDRESS, batch };
+  const common = { publicClient, walletClient, account, router, batch };
+  const questions = family.root.children.size > 0;
 
-  const handleSplit = () => run(`Split ${amount} ${symbols[side]}`, ({ isSafe, report }) => splitCollateral({
-    ...common, isSafe, collateralToken: collateral[side], amount: amountRaw, symbol: symbols[side],
-    onStep: (step) => {
-      if (step === 'batch') report(`Approving and splitting ${symbols[side]} in one transaction…`);
-      if (step === 'approval') report(`Approving ${symbols[side]}…`);
-      if (step === 'split') report(`Splitting ${symbols[side]} into ${rows.length} outcome tokens…`);
-    },
-  }));
+  const handleSplit = () => run(`Split ${amount} ${symbols[side]}`, ({ isSafe, report }) => {
+    const steps = familySplitPlan(family, side, amountRaw);
+    return splitThrough({
+      ...common, isSafe, steps, symbol: symbols[side],
+      onStep: (step, index) => {
+        if (step === 'batch') report(`Approving and splitting ${symbols[side]} in one transaction…`);
+        if (step === 'split') report(steps.length > 1
+          ? `Splitting into the answers of question ${index + 1} of ${steps.length}…`
+          : `Splitting ${symbols[side]} into ${answerCount} outcome tokens…`);
+      },
+    });
+  });
 
-  const handleMerge = () => run(`Merge ${amount} ${symbols[side]}`, ({ isSafe, report }) => mergeOutcomeTokens({
-    ...common, isSafe, collateralToken: collateral[side], amount: amountRaw,
-    outcomeTokens: rows.map((row) => row[side].address),
-    onStep: (step, index) => {
-      if (step === 'batch') report(`Approving ${rows.length} outcome tokens and merging into ${symbols[side]} in one transaction…`);
-      if (step === 'approval') report(`Approving ${rows[index][side].name} (${index + 1} of ${rows.length})…`);
-      if (step === 'merge') report(`Merging into ${symbols[side]}…`);
-    },
-  }));
+  const handleMerge = () => run(`Merge ${amount} ${symbols[side]}`, ({ isSafe, report }) => {
+    const steps = familyMergePlan(family, side, amountRaw, balances);
+    return mergeThrough({
+      ...common, isSafe, steps,
+      onStep: (step, index) => {
+        if (step === 'batch') report(`Approving the outcome tokens and merging into ${symbols[side]} in one transaction…`);
+        if (step === 'merge') report(steps.length > 1 ? `Merging question ${steps.length - index} of ${steps.length}…` : `Merging into ${symbols[side]}…`);
+      },
+    });
+  });
 
-  const redeemAmounts = winner ? { company: balanceOf(winner.company.address), currency: balanceOf(winner.currency.address) } : null;
-  const handleRedeem = () => run(`Redeem ${winner.label}`, async ({ report }) => {
+  // Deepest question first: its winning tokens pay the answer above it.
+  const redeemSteps = resolution ? familyRedeemPlan(resolution, balances) : [];
+  const redeemTotal = redeemSteps.length > 0 ? redeemSteps[redeemSteps.length - 1].amounts : null;
+  const redeemsCollateral = redeemSteps.length > 0 && redeemSteps[redeemSteps.length - 1].node.parent === null;
+  const handleRedeem = () => run(`Redeem ${winner?.label ?? 'winnings'}`, async ({ report }) => {
     const cartridge = new FutarchyCartridge(router, { isSafeConnection });
-    for await (const update of cartridge.completeRedeemOutcomes({
-      proposal: config.MARKET_ADDRESS,
-      token1Address: winner.company.address,
-      token2Address: winner.currency.address,
-      amount1: formatUnits(redeemAmounts.company, DECIMALS),
-      amount2: formatUnits(redeemAmounts.currency, DECIMALS),
-      exactApproval: true,
-    }, { publicClient, walletClient, account })) {
-      if (update.status === 'error') throw new Error(update.error || update.message);
-      if (update.step?.startsWith('approving')) report('Approving the winning tokens…');
-      if (update.step === 'redeem' || update.step === 'redeeming') report('Redeeming…');
+    for (const [index, redeem] of redeemSteps.entries()) {
+      for await (const update of cartridge.completeRedeemOutcomes({
+        proposal: redeem.proposal,
+        token1Address: redeem.company.address,
+        token2Address: redeem.currency.address,
+        amount1: formatUnits(redeem.amounts.company, DECIMALS),
+        amount2: formatUnits(redeem.amounts.currency, DECIMALS),
+        exactApproval: true,
+      }, { publicClient, walletClient, account })) {
+        if (update.status === 'error') throw new Error(update.error || update.message);
+        const of = redeemSteps.length > 1 ? ` (${index + 1} of ${redeemSteps.length})` : '';
+        if (update.step?.startsWith('approving')) report(`Approving the winning tokens${of}…`);
+        if (update.step === 'redeem' || update.step === 'redeeming') report(`Redeeming${of}…`);
+      }
     }
   });
 
@@ -130,13 +148,13 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
       <div className="flex h-16 py-3 px-4 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70 items-center justify-between">
         <h3 className="text-futarchyGray12 dark:text-white text-sm font-semibold">Positions</h3>
         <span className="text-xs text-futarchyGray11 dark:text-white/70">
-          {proposal.outcomes.length} outcomes + Invalid
+          {questions ? `${familyLeaves(family).length} outcomes over ${rows.filter((row) => row.isInvalid).length} questions` : `${proposal.outcomes.length} outcomes + Invalid`}
         </span>
       </div>
 
       <div className="flex flex-col gap-4 p-4">
-        {proposal.warnings.map((warning) => (
-          <div key={warning.code} role="alert" className="px-3 py-2 rounded-lg text-xs border border-futarchyGold7 bg-futarchyGold3 text-futarchyGold11 dark:bg-futarchyGold11/20 dark:text-futarchyGold7">
+        {[...family.warnings, ...rows.filter((row) => row.isInvalid).flatMap((row) => row.node.proposal.warnings)].map((warning, i) => (
+          <div key={`${warning.code}-${i}`} role="alert" className="px-3 py-2 rounded-lg text-xs border border-futarchyGold7 bg-futarchyGold3 text-futarchyGold11 dark:bg-futarchyGold11/20 dark:text-futarchyGold7">
             <span className="font-semibold">Check this market. </span>{warning.message}
           </div>
         ))}
@@ -172,10 +190,15 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
                   return (
                     <tr
                       key={row.key}
-                      className={`border-t border-futarchyGray62 dark:border-futarchyGray112/40 ${row.isInvalid ? 'text-futarchyGray11 dark:text-white/60' : 'text-futarchyGray12 dark:text-white'} ${won ? 'bg-futarchyGreen3 dark:bg-futarchyGreen11/20' : ''}`}
+                      className={`border-t border-futarchyGray62 dark:border-futarchyGray112/40 ${row.isInvalid || row.chained ? 'text-futarchyGray11 dark:text-white/60' : 'text-futarchyGray12 dark:text-white'} ${won ? 'bg-futarchyGreen3 dark:bg-futarchyGreen11/20' : ''}`}
                     >
-                      <td className="py-2 pr-2">
-                        <span className={row.isInvalid ? 'italic' : 'font-medium'}>{row.label}</span>
+                      <td className="py-2 pr-2" style={row.depth > 0 ? { paddingLeft: `${row.depth}rem` } : undefined}>
+                        <span
+                          className={row.isInvalid ? 'italic' : 'font-medium'}
+                          title={row.chained ? 'A follow-up question splits these tokens into its answers' : undefined}
+                        >
+                          {row.label}{row.chained && ' \u2192'}
+                        </span>
                         {won && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-futarchyGreen9 text-white">Won</span>}
                       </td>
                       <td className="py-2 text-right tabular-nums" title={row.company.name || undefined}>{format(balanceOf(row.company.address))}</td>
@@ -199,20 +222,29 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
             <p className="text-xs text-futarchyGray11 dark:text-white/70">
               Invalid tokens pay your collateral back if Reality answers Invalid, which undoes every trade. They have
               no pool: keep them, merging needs them.
+              {questions && ' Answers marked \u2192 are split again by a follow-up question, whose tokens are shown below them.'}
             </p>
 
             {!router ? (
               <p className="text-xs text-futarchyGray11 dark:text-white/70">
                 Split, merge and redeem are not available: the categorical futarchy router is not deployed on this chain yet.
               </p>
-            ) : resolution?.resolved ? (
+            ) : resolution?.resolved || resolution?.pending ? (
               <div className="flex flex-col gap-2">
-                <p className="text-sm text-futarchyGray12 dark:text-white">
-                  Resolved: <span className="font-semibold">{winner?.label ?? 'unknown'}</span>
-                </p>
-                {winner && (redeemAmounts.company > 0n || redeemAmounts.currency > 0n) ? (
+                {resolution.resolved ? (
+                  <p className="text-sm text-futarchyGray12 dark:text-white">
+                    Resolved: <span className="font-semibold">{winner?.label ?? 'unknown'}</span>
+                  </p>
+                ) : (
+                  <p className="text-sm text-futarchyGray12 dark:text-white">
+                    <span className="font-semibold">{resolution.paid.map(({ node, index }) => node.proposal.outcomes[index]?.label ?? 'Invalid').join(' \u2192 ')}</span>
+                    {' '}won. Its follow-up question is not resolved yet: its tokens can be redeemed once it is.
+                  </p>
+                )}
+                {redeemTotal ? (
                   <button className={buttonClass} disabled={status.busy} onClick={handleRedeem}>
-                    Redeem {format(redeemAmounts.company)} {symbols.company} + {format(redeemAmounts.currency)} {symbols.currency}
+                    Redeem {format(redeemTotal.company)} {redeemsCollateral ? symbols.company : redeemSteps[redeemSteps.length - 1].company.name}
+                    {' + '}{format(redeemTotal.currency)} {redeemsCollateral ? symbols.currency : redeemSteps[redeemSteps.length - 1].currency.name}
                   </button>
                 ) : (
                   <p className="text-xs text-futarchyGray11 dark:text-white/70">You hold no {winner?.label ?? 'winning'} tokens to redeem.</p>
@@ -252,8 +284,8 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
                   onClick={action === 'split' ? handleSplit : handleMerge}
                 >
                   {action === 'split'
-                    ? `Split ${symbols[side]} into ${rows.length} outcome tokens`
-                    : `Merge ${rows.length} outcome tokens into ${symbols[side]}`}
+                    ? `Split ${symbols[side]} into ${answerCount} outcome tokens`
+                    : `Merge ${answerCount} outcome tokens into ${symbols[side]}`}
                 </button>
               </div>
             )}

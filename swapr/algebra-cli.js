@@ -1929,6 +1929,9 @@ async function createNewProposal(autoMode = false, config = null) {
   // Yes/No questions go to FutarchyFactory; questions with several answers
   // (categorical) to FutarchyCategoricalFactory, with Invalid added last.
   let categorical = false, outcomes = [], tokenNames = [];
+  // A categorical question can follow up an answer of another proposal (such
+  // as its "Other"): parentMarket and parentOutcome, empty for none.
+  let parentMarket = '', parentOutcome = '';
   
   if (autoMode) {
     console.log('🤖 AUTO MODE: Using values from config for proposal creation...');
@@ -1943,6 +1946,8 @@ async function createNewProposal(autoMode = false, config = null) {
     if (categorical) {
       outcomes = Array.isArray(config.outcomes) ? config.outcomes : [];
       tokenNames = Array.isArray(config.tokenNames) ? config.tokenNames : [];
+      parentMarket = config.parentMarket || '';
+      parentOutcome = config.parentOutcome ?? '';
       if (!factoryAddress) {
         console.error('❌ A categorical proposal needs the FutarchyCategoricalFactory address:');
         console.error('   set "categoricalFactoryAddress" in the config or CATEGORICAL_FACTORY_ADDRESS in .env.');
@@ -1982,6 +1987,7 @@ async function createNewProposal(autoMode = false, config = null) {
     console.log(`  Question Type: ${categorical ? `categorical (${outcomes.length} answers + Invalid)` : 'Yes/No'}`);
     console.log(`  Factory Address: ${factoryAddress}`);
     if (categorical) console.log(`  Answers: ${outcomes.map((answer) => JSON.stringify(answer)).join(', ')}`);
+    if (parentMarket) console.log(`  Follows up: answer ${parentOutcome} of ${parentMarket}`);
     console.log(`  Company Token: ${companyTokenAddr}`);
     console.log(`  Currency Token: ${currencyTokenAddr}`);
     console.log(`  Market Name: ${marketName}`);
@@ -2023,6 +2029,8 @@ async function createNewProposal(autoMode = false, config = null) {
         outcomes.push(answer);
         tokenNames.push(await ask(`  Token name for "${answer}" (becomes NAME_<collateral symbol>):`, defaultTokenName(answer)));
       }
+      parentMarket = await ask('Proposal whose answer this question follows up, such as its "Other" (empty for none):', '');
+      if (parentMarket) parentOutcome = await ask('  Index of that answer (0 is the first):');
     }
     
     // Token addresses with defaults
@@ -2052,7 +2060,7 @@ async function createNewProposal(autoMode = false, config = null) {
       marketName, outcomes, tokenNames,
       companyToken: companyTokenAddr, currencyToken: currencyTokenAddr,
       companySymbol: companyToken.symbol, currencySymbol: currencyToken.symbol,
-      category, language, minBond, openingTime,
+      category, language, minBond, openingTime, parentMarket, parentOutcome,
     });
     if (built.errors.length > 0) {
       built.errors.forEach((error) => console.error(`❌ ${error}`));

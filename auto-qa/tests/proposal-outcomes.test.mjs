@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stringToHex, concat, pad } from 'viem';
-import { answerByToken, categoricalPoolList, categoricalTotals, categoricalWarnings, mergeableAmount, outcomeRows, poolPrice, realityText, winningRow, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
+import { answerByToken, categoricalPoolList, categoricalTotals, categoricalWarnings, outcomeRows, poolPrice, realityText, wrappedTokenName } from '../../src/utils/proposalOutcomes.js';
 import { buildCategoricalProposal, defaultTokenName, MAX_CATEGORICAL_OUTCOMES } from '../../src/utils/categoricalProposal.mjs';
 
 const SEP = '\u241f';
@@ -93,27 +93,6 @@ test('outcome rows list the answers in slot order with INVALID last', () => {
     ]);
 });
 
-test('the winning row is the answer index, or INVALID; nothing wins before resolution', () => {
-    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: null, outcomeIndex: 2 }).label, 'C');
-    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: null, outcomeIndex: 0 }).label, 'A');
-    assert.equal(winningRow(CATEGORICAL, { resolved: true, outcome: 'invalid', outcomeIndex: null }).key, 'invalid');
-    assert.equal(winningRow(CATEGORICAL, { resolved: false, outcome: null }), null);
-    assert.equal(winningRow(CATEGORICAL, null), null);
-    // A binary proposal's YES/NO resolution never maps onto these rows.
-    assert.equal(winningRow({ ...CATEGORICAL, kind: 'binary' }, { resolved: true, outcome: 'yes' }), null);
-});
-
-test('mergeable is the smallest balance among every outcome token of a collateral, INVALID included', () => {
-    const balances = new Map([
-        ['0xa0', 10n], ['0xa1', 7n], ['0xa2', 9n], ['0xaf', 3n],
-        ['0xb0', 5n], ['0xb1', 5n], ['0xb2', 5n], ['0xbf', 8n],
-    ]);
-    assert.equal(mergeableAmount(CATEGORICAL, balances, 'company'), 3n);
-    assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 5n);
-    balances.delete('0xb1');
-    assert.equal(mergeableAmount(CATEGORICAL, balances, 'currency'), 0n);
-});
-
 test('pool price is the base token in the other token, whichever side of the pool it is', () => {
     const A = '0x00000000000000000000000000000000000000aA';
     const B = '0x00000000000000000000000000000000000000Bb';
@@ -180,6 +159,15 @@ test('a categorical proposal refuses what would create slots that do not mean th
     assert.equal(errorsOf({ outcomes: ['A\u241fB', 'C'] }).length, 1);
 });
 
+test('a follow-up proposal names the parent and its answer; without one both are zero', () => {
+    const parent = '0x162778Ce142335c96FB1a186D0C9A1766a57E9CD';
+    assert.deepEqual(buildCategoricalProposal(CREATE).params.slice(9), ['0x0000000000000000000000000000000000000000', 0]);
+    assert.deepEqual(buildCategoricalProposal({ ...CREATE, parentMarket: parent, parentOutcome: '3' }).params.slice(9), [parent, 3]);
+    // The answer must be chosen: an empty one would silently follow up answer 0.
+    assert.equal(buildCategoricalProposal({ ...CREATE, parentMarket: parent, parentOutcome: '' }).params, null);
+    assert.equal(buildCategoricalProposal({ ...CREATE, parentMarket: '0x1234' }).params, null);
+});
+
 test('categorical header totals add up each answer\'s conditional pool and measure impact across answers', () => {
     const e18 = 10n ** 18n;
     const pool = (address, price, base, quote) => ({ address, price, liquidity: 1n, reserves: { base: base * e18, quote: quote * e18 } });
@@ -205,6 +193,8 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
     const pools = [
         { key: '0', label: 'A', company: token('0xA1', 'A_WETH'), currency: token('0xA2', 'A_sDAI'), conditional: { address: '0xPA' }, prediction: null },
         { key: '1', label: 'B', company: token('0xB1', null), currency: token('0xB2', 'B_sDAI'), conditional: null, prediction: { address: '0xPB' } },
+        // An answer of a follow-up question: its chance is quoted in the parent answer's currency token.
+        { key: '2', label: 'D', company: token('0xD1', 'D_WETH'), currency: token('0xD2', 'D_sDAI'), quote: token('0xO2', 'OTHER_sDAI'), conditional: null, prediction: null },
     ];
     const list = categoricalPoolList(pools, token('0xC', 'sDAI'));
     assert.deepEqual(list.map((p) => [p.key, `${p.token0.name}/${p.token1.name}`, p.address]), [
@@ -212,7 +202,10 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
         ['0-prediction', 'A_sDAI/sDAI', null],
         ['1-conditional', 'B company/B_sDAI', null],
         ['1-prediction', 'B_sDAI/sDAI', '0xPB'],
+        ['2-conditional', 'D_WETH/D_sDAI', null],
+        ['2-prediction', 'D_sDAI/OTHER_sDAI', null],
     ]);
+    assert.equal(list[5].token1.address, '0xO2');
 });
 
 test('trades find their answer by either outcome token, whatever its case; INVALID and the collaterals have none', () => {
@@ -224,7 +217,7 @@ test('trades find their answer by either outcome token, whatever its case; INVAL
         ],
         invalid: { company: token('0xC1'), currency: token('0xC2') },
     };
-    const answers = answerByToken(proposal);
+    const answers = answerByToken(proposal.outcomes);
     assert.deepEqual(answers.get('0xa1'), { index: 0, label: 'A' });
     assert.deepEqual(answers.get('0xa2'), { index: 0, label: 'A' });
     assert.deepEqual(answers.get('0xb2'), { index: 1, label: 'B' });

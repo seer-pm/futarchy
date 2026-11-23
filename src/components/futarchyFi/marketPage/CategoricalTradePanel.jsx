@@ -6,6 +6,7 @@ import { useRequiredChain } from '../../../hooks/useChainValidation';
 import { useSafeConnection } from '../../../hooks/useSafeConnection';
 import { tradeOutcome } from '../../../utils/outcomeTrade';
 import { formatWith } from '../../../utils/precisionFormatter';
+import { tradeSplitPlan } from '../../../utils/proposalFamily';
 import { CATEGORICAL_ROUTER_BY_CHAIN } from '../../../utils/proposalOutcomes';
 import { describeRedeemError } from '../../../utils/redeemPlan';
 import { quoteSeerSwap } from '../../../utils/seerSwap';
@@ -35,9 +36,11 @@ const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transitio
 const buttonClass = 'w-full py-3 px-4 rounded-xl font-semibold text-sm border-2 border-futarchyGray62 dark:border-futarchyGray112/40 bg-futarchyGray2 dark:bg-futarchyDarkGray2 text-black dark:text-white disabled:opacity-50 disabled:cursor-not-allowed';
 
 /**
- * Trades in the conditional pool of one answer of a categorical proposal:
+ * Trades in the conditional pool of one answer of a categorical market:
  * buy that answer's company token with its currency token, or sell it. The
- * shortfall of the token spent is split from the collateral first.
+ * shortfall of the token spent is split from the collateral first, through
+ * every question above the answer when it belongs to a follow-up question
+ * (utils/proposalFamily.js).
  */
 const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSelect, onConnectWallet }) => {
   const { proposal, pools, balances, resolution, refetch } = categorical;
@@ -61,17 +64,18 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
 
   const row = pools?.find((pool) => pool.key === selectedKey) ?? pools?.[0] ?? null;
   const isBuy = action === 'buy';
-  const tokenIn = row && (isBuy ? row.currency : row.company);
+  const side = isBuy ? 'currency' : 'company';
+  const tokenIn = row && row[side];
   const tokenOut = row && (isBuy ? row.company : row.currency);
-  const collateral = isBuy ? proposal.currencyToken : proposal.companyToken;
   const collateralSymbol = (isBuy ? config?.BASE_TOKENS_CONFIG?.currency?.symbol : config?.BASE_TOKENS_CONFIG?.company?.symbol)
     || (isBuy ? proposal.invalid.currency.name : proposal.invalid.company.name)?.replace(/^INVALID_/, '');
-  const balanceOf = (token) => balances?.get(token.toLowerCase()) ?? 0n;
 
   const amountRaw = parseAmount(amount);
-  const held = tokenIn ? balanceOf(tokenIn.address) : 0n;
-  const maxAmount = held + balanceOf(collateral);
-  const split = amountRaw !== null && amountRaw > held ? amountRaw - held : 0n;
+  const plan = row ? tradeSplitPlan(row, side, amountRaw ?? 0n, balances) : { steps: [], available: 0n };
+  const maxAmount = plan.available;
+  // The collateral split first, when the splits reach it.
+  const split = plan.steps.length > 0 && plan.steps[0].node.parent === null ? plan.steps[0].amount : 0n;
+  const splitsChained = plan.steps.some((step) => step.node.parent !== null);
 
   useEffect(() => {
     setQuote({ trade: null, quotedAt: 0, loading: false, error: null });
@@ -101,7 +105,7 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
 
   const blocker = !row ? null
     : !row.conditional ? `${row.label} has no ${row.company.name} / ${row.currency.name} pool yet.`
-      : split > 0n && !router ? 'Splitting is not available: the categorical futarchy router is not deployed on this chain yet.'
+      : plan.steps.length > 0 && !router ? 'Splitting is not available: the categorical futarchy router is not deployed on this chain yet.'
         : null;
   const canTrade = !blocker && !status.busy && quote.trade && !quote.loading && amountRaw !== null && amountRaw <= maxAmount;
 
@@ -119,15 +123,14 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
     report(`${label}…`);
     try {
       await tradeOutcome({
-        publicClient, walletClient, account, router, proposal: config.MARKET_ADDRESS,
-        collateralToken: collateral, collateralSymbol,
+        publicClient, walletClient, account, router, leaf: row, side, collateralSymbol,
         tokenIn: tokenIn.address, tokenOut: tokenOut.address, amountIn: amountRaw,
         trade: quote.trade, quotedAt: quote.quotedAt, slippageBps,
         isSafe: isSafeConnection(walletClient),
         batch,
-        onStep: (step) => {
-          if (step === 'batch') report(`${split > 0n ? `Splitting ${collateralSymbol} and swapping` : 'Swapping'} ${tokenIn.name} for ${tokenOut.name} in one transaction…`);
-          if (step === 'split') report(`Splitting ${format(split)} ${collateralSymbol} into outcome tokens…`);
+        onStep: (step, splitStep) => {
+          if (step === 'batch') report(`${plan.steps.length > 0 ? 'Splitting and swapping' : 'Swapping'} ${tokenIn.name} for ${tokenOut.name} in one transaction…`);
+          if (step === 'split') report(`Splitting ${format(splitStep.amount)} ${splitStep.sourceToken.name || collateralSymbol} into outcome tokens…`);
           if (step === 'approval') report(`Approving ${tokenIn.name}…`);
           if (step === 'swap') report(`Swapping ${tokenIn.name} for ${tokenOut.name}…`);
         },
@@ -219,9 +222,10 @@ const CategoricalTradePanel = ({ categorical, config, address, selectedKey, onSe
                     )}
                   </>
                 )}
-                {split > 0n && (
+                {plan.steps.length > 0 && (
                   <dt className="col-span-2 pt-1">
-                    Splits {format(split)} {collateralSymbol} first. You keep the other answers&apos; and the Invalid tokens it gives.
+                    {split > 0n ? `Splits ${format(split)} ${collateralSymbol} first` : `Splits ${format(plan.steps[0].amount)} ${plan.steps[0].sourceToken.name} first`}
+                    {splitsChained && ', then into the follow-up question\u2019s answers'}. You keep the other answers&apos; and the Invalid tokens it gives.
                   </dt>
                 )}
                 {amountRaw > maxAmount && address && <dt className="col-span-2 pt-1 text-futarchyCrimson11">Not enough {tokenIn.name} or {collateralSymbol}.</dt>}

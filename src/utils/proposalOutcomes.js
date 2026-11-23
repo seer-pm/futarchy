@@ -30,6 +30,8 @@ const PROPOSAL_ABI = parseAbi([
     'function collateralToken1() view returns (address)',
     'function collateralToken2() view returns (address)',
     'function encodedQuestion() view returns (string)',
+    'function parentMarket() view returns (address)',
+    'function parentOutcome() view returns (uint256)',
 ]);
 const CONDITIONAL_TOKENS_ABI = parseAbi(['function getOutcomeSlotCount(bytes32) view returns (uint256)']);
 const ERC20_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
@@ -160,25 +162,33 @@ export function categoricalWarnings({ encodedQuestion, outcomes, tokenNames }) {
  * @param {{send: Function}} provider
  * @param {{chainId?: number, conditionalTokens?: string}} [options]
  * @returns {Promise<{
+ *   address: string,
  *   kind: 'binary'|'categorical',
  *   conditionId: string,
+ *   parentMarket: string|null,
+ *   parentOutcome: number,
  *   companyToken: string,
  *   currencyToken: string,
  *   outcomes: Array<{label: string, company: {address: string, name: string|null}, currency: {address: string, name: string|null}}>,
  *   invalid: {company: {address: string, name: string|null}, currency: {address: string, name: string|null}}|null,
  *   warnings: Array<{code: string, message: string}>,
  * }>} outcomes are in slot order; invalid is null for binary proposals,
- *   where an Invalid answer pays No.
+ *   where an Invalid answer pays No. parentMarket is the proposal whose
+ *   answer parentOutcome this one is conditional on (utils/proposalFamily.js),
+ *   null for a proposal on the collaterals themselves.
  */
 export async function fetchProposalOutcomes(proposalAddress, provider, { chainId = 100, conditionalTokens } = {}) {
     const ctf = conditionalTokens || CONDITIONAL_TOKENS_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
     const call = (functionName, args) => read(provider, proposalAddress, PROPOSAL_ABI, functionName, args);
 
-    const [conditionId, numOutcomes, companyToken, currencyToken] = await Promise.all([
+    const [conditionId, numOutcomes, companyToken, currencyToken, parentMarket, parentOutcome] = await Promise.all([
         call('conditionId'),
         call('numOutcomes'),
         call('collateralToken1'),
         call('collateralToken2'),
+        // Proposals of older FutarchyProposal templates may not have them.
+        call('parentMarket').catch(() => ZERO_ADDRESS),
+        call('parentOutcome').catch(() => 0n),
     ]);
     const slotCount = Number(await read(provider, ctf, CONDITIONAL_TOKENS_ABI, 'getOutcomeSlotCount', [conditionId]));
     const kind = slotCount === Number(numOutcomes) + 1 ? 'categorical' : 'binary';
@@ -203,8 +213,11 @@ export async function fetchProposalOutcomes(proposalAddress, provider, { chainId
         : null;
 
     return {
+        address: proposalAddress,
         kind,
         conditionId,
+        parentMarket: parentMarket === ZERO_ADDRESS ? null : parentMarket,
+        parentOutcome: Number(parentOutcome),
         companyToken,
         currencyToken,
         outcomes,
@@ -231,45 +244,19 @@ export function outcomeRows(proposal) {
 }
 
 /**
- * The answer each outcome token of a categorical proposal belongs to, for
+ * The answer each outcome token of a categorical market belongs to, for
  * labelling trades: the indexer's pools carry no answer that every
- * deployment of it serves, but their tokens are the proposal's.
+ * deployment of it serves, but their tokens are the market's.
+ * @param {Array<{label: string, company: {address: string}, currency: {address: string}}>} answers
+ *   the answers with pools, such as utils/proposalFamily.js familySlots
+ *   without INVALID, which has no pools
  * @returns {Map<string, {index: number, label: string}>} keyed by lowercase
- *   token address, company and currency token of every answer; INVALID has
- *   no pools and is left out
+ *   token address, company and currency token of every answer; index is the
+ *   answer's position in `answers`
  */
-export function answerByToken(proposal) {
-    return new Map(proposal.outcomes.flatMap((outcome, index) => [outcome.company, outcome.currency]
+export function answerByToken(answers) {
+    return new Map(answers.flatMap((outcome, index) => [outcome.company, outcome.currency]
         .map((token) => [token.address.toLowerCase(), { index, label: outcome.label }])));
-}
-
-/**
- * The slot a resolved categorical proposal pays, from its
- * fetchOnChainResolutions result: the winning answer, or INVALID.
- * @returns {ReturnType<typeof outcomeRows>[number]|null} null while unresolved
- */
-export function winningRow(proposal, resolution) {
-    if (proposal?.kind !== 'categorical' || !resolution?.resolved) return null;
-    const rows = outcomeRows(proposal);
-    if (resolution.outcome === 'invalid') return rows[rows.length - 1];
-    return Number.isInteger(resolution.outcomeIndex) && resolution.outcomeIndex < proposal.outcomes.length
-        ? rows[resolution.outcomeIndex]
-        : null;
-}
-
-/**
- * Balances of an account in both collaterals and every outcome token of a
- * proposal, in one batched round.
- * @returns {Promise<Map<string, bigint>>} keyed by lowercase token address
- */
-export async function fetchOutcomeBalances(proposal, account, provider) {
-    const tokens = [
-        proposal.companyToken,
-        proposal.currencyToken,
-        ...outcomeRows(proposal).flatMap((row) => [row.company.address, row.currency.address]),
-    ];
-    const values = await Promise.all(tokens.map((token) => read(provider, token, ERC20_ABI, 'balanceOf', [account])));
-    return new Map(tokens.map((token, i) => [token.toLowerCase(), values[i]]));
 }
 
 /**
@@ -291,8 +278,10 @@ export function poolPrice(sqrtPriceX96, token0, base) {
  * factory, so they show before the candles indexer has the proposal:
  *   - conditional: answer's company token / answer's currency token, whose
  *     price is the company token's price if that answer wins;
- *   - prediction: answer's currency token / currency token, whose price is
- *     the chance the market gives that answer.
+ *   - prediction: answer's currency token / `quote`, whose price is the
+ *     chance the market gives that answer. `quote` is the currency token, or
+ *     for a proposal conditional on a parent's answer that answer's currency
+ *     token, so the price is the chance given that answer.
  * INVALID has no pools. A pool is null when nobody created it.
  *
  * @returns {Promise<Array<{key: string, label: string, company: object, currency: object,
@@ -302,7 +291,7 @@ export function poolPrice(sqrtPriceX96, token0, base) {
  *   answer's currency token in currency tokens (prediction); reserves are the
  *   pool's balances of the priced token (base) and the other one (quote)
  */
-export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = {}) {
+export async function fetchOutcomePools(proposal, provider, { chainId = 100, quote = { address: proposal.currencyToken, name: null } } = {}) {
     const amm = AMM_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
     const findPool = ([tokenA, tokenB]) => (amm.fee
         ? read(provider, amm.factory, AMM_ABI, 'getPool', [tokenA, tokenB, amm.fee])
@@ -327,18 +316,19 @@ export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = 
     const answers = outcomeRows(proposal).filter((row) => !row.isInvalid);
     const pairs = answers.flatMap((row) => [
         [row.company.address, row.currency.address],
-        [row.currency.address, proposal.currencyToken],
+        [row.currency.address, quote.address],
     ]);
     const addresses = await Promise.all(pairs.map(findPool));
     const pools = await Promise.all(addresses.map((address, i) => readPool(address, pairs[i])));
-    return answers.map((row, i) => ({ ...row, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
+    return answers.map((row, i) => ({ ...row, quote, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
 }
 
 /**
  * Every pool a categorical proposal trades in, two per answer and none for
  * INVALID, with the address of the ones that exist:
  *   - conditional: answer's company token / answer's currency token;
- *   - prediction: answer's currency token / the currency collateral.
+ *   - prediction: answer's currency token / the currency collateral, or the
+ *     row's `quote` (fetchOutcomePools) when it has a name.
  * token0/token1 are in that order, so a pool's initial price is token1 per
  * token0: the company token's price, or the answer's chance.
  * @param {Awaited<ReturnType<typeof fetchOutcomePools>>} pools
@@ -362,7 +352,7 @@ export function categoricalPoolList(pools, currency) {
             kind: 'prediction',
             answer: row.label,
             token0: named(row.currency, `${row.label} currency`),
-            token1: currency,
+            token1: row.quote?.name ? row.quote : currency,
             address: row.prediction?.address ?? null,
         },
     ]);
@@ -399,15 +389,4 @@ export function categoricalTotals(pools, volumeByPool) {
         impact: prices.length >= 2 ? computeImpactPercent(Math.max(...prices), Math.min(...prices)) : null,
         breakdown,
     };
-}
-
-/**
- * How much of a collateral the account can get back by merging: merging takes
- * the same amount of every outcome token of that collateral, INVALID included.
- * @param {'company'|'currency'} side
- */
-export function mergeableAmount(proposal, balances, side) {
-    return outcomeRows(proposal)
-        .map((row) => balances.get(row[side].address.toLowerCase()) ?? 0n)
-        .reduce((min, balance) => (balance < min ? balance : min));
 }

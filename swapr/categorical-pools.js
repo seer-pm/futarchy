@@ -8,6 +8,11 @@
 //   - prediction:  ANSWER_<currency> / <currency>, at --probability
 // INVALID gets no pools: its tokens stay in the wallet, for merging or for
 // redeeming if the question resolves Invalid.
+// A proposal that follows up an answer of another one (parentMarket, such as
+// its "Other") splits that answer's tokens instead of the collaterals: the
+// --split-* options split the parent answer's tokens, which must be in the
+// wallet, and its prediction pools quote in the parent answer's currency token
+// (ANSWER_<currency> / OTHER_<currency>), so they price the chance given it.
 //
 // Usage:
 //   node categorical-pools.js <proposal> --spot <currency per company> [options]
@@ -61,6 +66,8 @@ const proposal = new ethers.Contract(proposalAddress, [
   'function collateralToken1() view returns (address)',
   'function collateralToken2() view returns (address)',
   'function conditionId() view returns (bytes32)',
+  'function parentMarket() view returns (address)',
+  'function parentOutcome() view returns (uint256)',
 ], provider);
 const router = new ethers.Contract(CATEGORICAL_ROUTER, ['function splitPosition(address,address,uint256)'], wallet);
 const positionManager = new ethers.Contract(POSITION_MGR, [
@@ -119,8 +126,20 @@ async function main() {
   const slots = Number(await ctf.getOutcomeSlotCount(await proposal.conditionId()));
   if (slots !== n + 1) throw new Error(`${proposalAddress} is not a categorical proposal (${slots} slots for ${n} outcomes)`);
 
-  const company = await proposal.collateralToken1();
-  const currency = await proposal.collateralToken2();
+  // What the proposal splits: the collaterals, or the parent answer's tokens.
+  const collateral1 = await proposal.collateralToken1();
+  const collateral2 = await proposal.collateralToken2();
+  let company = collateral1;
+  let currency = collateral2;
+  const parentAddress = await proposal.parentMarket();
+  if (parentAddress !== ethers.ZeroAddress) {
+    const parent = proposal.attach(parentAddress);
+    const parentAnswers = Number(await parent.numOutcomes());
+    const index = Number(await proposal.parentOutcome());
+    [company] = await parent.wrappedOutcome(index);
+    [currency] = await parent.wrappedOutcome(parentAnswers + index);
+    console.log(`follows up answer ${index} (${await parent.outcomes(index)}) of ${parentAddress}`);
+  }
   const [companySymbol, currencySymbol] = await Promise.all([erc20(company).symbol(), erc20(currency).symbol()]);
   const prediction = parse(option('prediction', '1'));
   const probability = Number(option('probability', 1 / n));
@@ -162,11 +181,11 @@ async function main() {
 
   if (splitCompany > 0n) {
     await approve(company, CATEGORICAL_ROUTER, splitCompany);
-    await send(`split ${fmt(splitCompany)} ${companySymbol}`, router, 'splitPosition', [proposalAddress, company, splitCompany]);
+    await send(`split ${fmt(splitCompany)} ${companySymbol}`, router, 'splitPosition', [proposalAddress, collateral1, splitCompany]);
   }
   if (splitCurrency > 0n) {
     await approve(currency, CATEGORICAL_ROUTER, splitCurrency);
-    await send(`split ${fmt(splitCurrency)} ${currencySymbol}`, router, 'splitPosition', [proposalAddress, currency, splitCurrency]);
+    await send(`split ${fmt(splitCurrency)} ${currencySymbol}`, router, 'splitPosition', [proposalAddress, collateral2, splitCurrency]);
   }
 
   for (const p of plan) {

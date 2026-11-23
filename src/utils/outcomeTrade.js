@@ -7,7 +7,10 @@
  * When the wallet holds less of the input token than the trade spends, the
  * shortfall is split from the collateral first. A split gives the same amount
  * of every slot, so the other answers' and INVALID tokens of that collateral
- * stay in the wallet; merging them back needs all of them.
+ * stay in the wallet; merging them back needs all of them. An answer of a
+ * proposal chained to another one's answer (utils/proposalFamily.js) splits
+ * that answer's tokens, which may in turn be split from the collateral, so
+ * the splits run down the answer's path, parents first.
  *
  * With `batch` (utils/batchCalls.js) the split, the approvals and the swap
  * are one transaction.
@@ -16,6 +19,7 @@
 import { erc20Abi } from 'viem';
 import { sendBatch, shouldBatch } from './batchCalls.js';
 import { splitCalls, splitCollateral } from './collateralActions.js';
+import { sourceToken, tradeSplitPlan } from './proposalFamily.js';
 import { executeSeerSwap, getSeerPublicClient, quoteSeerSwap, seerSwapCalls } from './seerSwap.js';
 import { slippageBpsForMinimum } from './swapQuoteMath.js';
 import { PRICE_MOVED_WHILE_SIGNING, SAFE_TRANSACTION_SENT, assertReceiptSucceeded } from './txErrors.js';
@@ -30,21 +34,27 @@ import { PRICE_MOVED_WHILE_SIGNING, SAFE_TRANSACTION_SENT, assertReceiptSucceede
  * @param {object} p.trade quoteSeerSwap result for tokenIn → tokenOut and amountIn
  * @param {number} p.quotedAt Date.now() when `trade` was quoted
  * @param {bigint} p.amountIn raw units of tokenIn the trade spends
- * @param {string} p.collateralToken collateral that `tokenIn` is an outcome token of
+ * @param {object} p.leaf the answer traded (proposalFamily.js familyLeaves)
+ * @param {'company'|'currency'} p.side the side of the answer `tokenIn` is
  * @param {string} p.router FutarchyCategoricalRouter
- * @param {string} p.proposal the market's FutarchyProposal
  * @param {boolean} [p.batch] the wallet supports atomic batches (hooks/useAtomicBatch.js)
- * @param {(step: 'batch'|'split'|'approval'|'swap') => void} [p.onStep]
- *   'batch': split, approvals and swap were sent as one transaction
- * @returns {Promise<{hash: string, receipt: object, split: bigint}>} split is the collateral split first
+ * @param {(step: 'batch'|'split'|'approval'|'swap', splitStep?: object) => void} [p.onStep]
+ *   'batch': splits, approvals and swap were sent as one transaction;
+ *   'split' comes once per split with its tradeSplitPlan step
+ * @returns {Promise<{hash: string, receipt: object, splits: Array}>} splits is what was split first
  */
 export async function tradeOutcome({
-    publicClient, walletClient, account, router, proposal, collateralToken, collateralSymbol,
+    publicClient, walletClient, account, router, leaf, side, collateralSymbol,
     tokenIn, tokenOut, amountIn, trade, quotedAt, slippageBps,
     isSafe = false, useUnlimitedApproval = false, batch = false, onStep,
 }) {
-    const balance = await publicClient.readContract({ address: tokenIn, abi: erc20Abi, functionName: 'balanceOf', args: [account] });
-    const split = amountIn > balance ? amountIn - balance : 0n;
+    // The token traded and every token above it that a split could spend.
+    const nodes = [...leaf.path.map(({ node }) => node), leaf.node];
+    const tokens = [tokenIn, ...nodes.map((node) => sourceToken(node, side).address)];
+    const held = await Promise.all(tokens.map((token) => publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [account] })));
+    const balances = new Map(tokens.map((token, i) => [token.toLowerCase(), held[i]]));
+    const { steps: splits, available } = tradeSplitPlan(leaf, side, amountIn, balances);
+    if (available < amountIn) throw new Error(`Insufficient ${collateralSymbol} balance`);
 
     const confirmedMinimum = trade.minimumAmountOut();
     const quote = (bps) => quoteSeerSwap({ chainId: trade.chainId, account, tokenIn, tokenOut, amountInRaw: amountIn, slippageBps: bps });
@@ -59,22 +69,27 @@ export async function tradeOutcome({
     };
 
     if (shouldBatch({ batch, isSafe, account, walletClient })) {
+        // Each split after the first spends tokens the one before gives.
+        const splitCallLists = await Promise.all(splits.map((split, i) => splitCalls({
+            publicClient, account, router, proposal: split.proposal, collateralToken: split.collateralToken,
+            sourceToken: split.sourceToken.address, amount: split.amount, symbol: split.sourceToken.name || collateralSymbol,
+            useUnlimitedApproval, checkBalance: i === 0,
+        })));
         const calls = [
-            ...(split > 0n ? await splitCalls({
-                publicClient, account, router, proposal, collateralToken, amount: split, symbol: collateralSymbol, useUnlimitedApproval,
-            }) : []),
+            ...splitCallLists.flat(),
             ...await seerSwapCalls({ trade, account, useUnlimitedApproval, requote, quotedAt }),
         ];
         onStep?.('batch');
         const receipt = await sendBatch({ walletClient, account, calls });
-        if (receipt) return { hash: receipt.transactionHash, receipt, split };
+        if (receipt) return { hash: receipt.transactionHash, receipt, splits };
     }
 
-    if (split > 0n) {
-        onStep?.('split');
+    for (const split of splits) {
+        onStep?.('split', split);
         await splitCollateral({
-            publicClient, walletClient, account, router, proposal, collateralToken, amount: split,
-            symbol: collateralSymbol, useUnlimitedApproval, isSafe,
+            publicClient, walletClient, account, router, proposal: split.proposal, collateralToken: split.collateralToken,
+            sourceToken: split.sourceToken.address, amount: split.amount,
+            symbol: split.sourceToken.name || collateralSymbol, useUnlimitedApproval, isSafe,
         });
     }
 
@@ -88,5 +103,5 @@ export async function tradeOutcome({
     if (isSafe) throw new Error(SAFE_TRANSACTION_SENT);
     const receipt = await getSeerPublicClient(trade.chainId).waitForTransactionReceipt({ hash });
     assertReceiptSucceeded(receipt, hash);
-    return { hash, receipt, split };
+    return { hash, receipt, splits };
 }

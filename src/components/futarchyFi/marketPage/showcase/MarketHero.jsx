@@ -6,7 +6,7 @@ import TimeIcon from '../page/icons/TimeIcon';
 import VolumeIcon from '../page/icons/VolumeIcon';
 import MarketBadgeList from '../components/MarketBadgeList';
 import { computeImpactPercent, formatImpactPercent } from '../../../../utils/marketPageUtils.mjs';
-import { resolveMarketStatus } from '../../../../utils/proposalLifecycle';
+import { describeMarketStatus, resolveMarketStatus } from '../../../../utils/proposalLifecycle';
 import { TwapCountdown } from './TwapCountdown';
 import { SnapshotWidget } from './SnapshotWidget';
 
@@ -50,10 +50,19 @@ const MarketHero = ({
     setIsEditProposalModalOpen
   } = badgeModals;
 
-  const marketStatus = resolveMarketStatus({
+  const proposalStatus = resolveMarketStatus({
     ...config?.marketInfo,
     endTime: config?.marketInfo?.endTime || marketEndTime
   });
+  // With follow-up questions, the market's winner is the answer that won the
+  // last question; while that question is open the market has no winner yet.
+  const familyResolution = categorical?.resolution;
+  const familyWinner = familyResolution?.winner?.node?.parent ? familyResolution.winner.label : null;
+  const marketStatus = familyResolution?.pending
+    ? { ...proposalStatus, state: 'awaiting_resolution', outcome: null, answer: null, showCountdown: false, ...describeMarketStatus('awaiting_resolution') }
+    : familyWinner
+      ? { ...proposalStatus, outcome: null, answer: familyWinner, ...describeMarketStatus('resolved', null, familyWinner) }
+      : proposalStatus;
   const isResolved = marketStatus.state === 'resolved';
   // A categorical market has no YES/NO pools: its figures come from the
   // conditional pool of each answer (useCategoricalMarket).
@@ -289,9 +298,10 @@ const MarketHero = ({
                   });
 
                   // Create Pool badge - show when pools are missing (subgraph mode);
-                  // a categorical market needs two pools per answer
+                  // a categorical market needs two pools per answer, also
+                  // the answers its follow-up questions split
                   const poolsMissing = categorical?.isCategorical
-                    ? (categorical.pools ?? []).some((row) => !row.conditional || !row.prediction)
+                    ? (categorical.allPools ?? []).some((row) => !row.conditional || !row.prediction)
                     : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address;
                   if (poolsMissing) {
                     badges.push({

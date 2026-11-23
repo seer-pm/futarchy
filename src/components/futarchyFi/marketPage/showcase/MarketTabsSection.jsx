@@ -4,6 +4,7 @@ import SubgraphTradesDataLayer from '../SubgraphTradesDataLayer';
 import { TradeHistoryTable } from './TradeHistoryTable';
 import { useMemo } from 'react';
 import { answerByToken } from '../../../../utils/proposalOutcomes';
+import { familyNodes, familySlots } from '../../../../utils/proposalFamily';
 
 const MarketTabsSection = ({
   tabs,
@@ -26,7 +27,14 @@ const MarketTabsSection = ({
   const activeTab = isCategorical && !['recent-trades-sdk', 'my-trades-sdk'].includes(tabs.activeTab)
     ? 'recent-trades-sdk'
     : tabs.activeTab;
-  const answers = useMemo(() => (isCategorical ? answerByToken(categorical.proposal) : null), [isCategorical, categorical?.proposal]);
+  // Every answer of every proposal of the family, chained ones included:
+  // their pools trade too.
+  const answers = useMemo(() => (isCategorical
+    ? answerByToken(familySlots(categorical.family).filter((slot) => !slot.isInvalid))
+    : null), [isCategorical, categorical?.family]);
+  const proposalIds = useMemo(() => (isCategorical
+    ? familyNodes(categorical.family).map((node) => node.proposal.address.toLowerCase())
+    : null), [isCategorical, categorical?.family]);
   const { positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const { sdaiRate, isLoadingRate, rateError } = rate;
 
@@ -143,6 +151,7 @@ const MarketTabsSection = ({
               showMyTrades={false}
               limit={tradesLimit}
               answers={answers}
+              proposalIds={proposalIds}
             />
           </div>
         )}
@@ -154,6 +163,7 @@ const MarketTabsSection = ({
               showMyTrades={true}
               limit={tradesLimit}
               answers={answers}
+              proposalIds={proposalIds}
             />
           </div>
         )}

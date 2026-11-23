@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchPoolCandles } from '../../../utils/SubgraphPoolFetcher';
+import { chanceHistory } from '../../../utils/proposalFamily';
 
 // One color per answer, shared with the outcome list's legend dots.
 const ANSWER_COLORS = [
@@ -10,18 +11,18 @@ const ANSWER_COLORS = [
 export const answerColor = (index) => ANSWER_COLORS[index % ANSWER_COLORS.length];
 
 const PERIOD = 3600;
-const POOL_FIELD = { price: 'conditional', chance: 'prediction' };
 
 const isDark = () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
 
 /**
- * Price history of every answer of a categorical proposal, from the candles
+ * Price history of every answer of a categorical market, from the candles
  * indexer: the company token's price in each answer's conditional pool, or
- * the chance in its prediction pool. Each line ends at the pool's current
- * on-chain price, so it is up to date between hourly candles.
+ * its chance, the product of the prediction pools down its path (one pool
+ * for an answer of the first question). Each line ends at the current
+ * on-chain value, so it is up to date between hourly candles.
  *
  * @param {object} p
- * @param {Array} p.pools fetchOutcomePools result
+ * @param {Array} p.pools useCategoricalMarket pools (proposalFamily.js attachFamilyPools leaves)
  * @param {'price'|'chance'} p.metric
  */
 const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height = 260 }) => {
@@ -32,9 +33,9 @@ const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height =
 
   // Pool addresses only change when a pool is created, not with every price.
   const addresses = (pools ?? [])
-    .flatMap((row) => [row.conditional?.address, row.prediction?.address])
+    .flatMap((row) => [row.conditional, ...row.chancePools].map((pool) => pool?.address))
     .filter(Boolean);
-  const addressKey = addresses.join(',');
+  const addressKey = [...new Set(addresses.map((address) => address.toLowerCase()))].join(',');
 
   useEffect(() => {
     if (!addressKey) {
@@ -58,10 +59,13 @@ const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height =
     return () => { observer.disconnect(); resize.disconnect(); };
   }, []);
 
+  const history = (pool) => (pool && candles?.get(pool.address.toLowerCase())) || [];
   const lines = (pools ?? []).map((row) => {
-    const pool = row[POOL_FIELD[metric]];
-    const points = (pool && candles?.get(pool.address.toLowerCase())) || [];
-    return { row, pool, data: points.map(({ timestamp, price }) => ({ time: timestamp, value: price })) };
+    const points = metric === 'chance'
+      ? (row.chancePools.every(Boolean) ? chanceHistory(row.chancePools.map(history)) : [])
+      : history(row.conditional);
+    const current = metric === 'chance' ? row.chance : row.conditional?.price ?? null;
+    return { row, current, data: points.map(({ timestamp, price }) => ({ time: timestamp, value: price })) };
   });
   // Every line ends at the current price, at this hour or at the latest
   // candle of any answer, whichever is later.
@@ -69,11 +73,11 @@ const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height =
     Math.floor(Date.now() / 1000 / PERIOD) * PERIOD,
     ...lines.flatMap(({ data }) => data.map((point) => point.time)),
   );
-  const series = lines.map(({ row, pool, data }, index) => {
-    if (data.length > 0 && pool.price !== null) {
+  const series = lines.map(({ row, current, data }, index) => {
+    if (data.length > 0 && current !== null) {
       const last = data[data.length - 1];
-      if (end > last.time) data.push({ time: end, value: pool.price });
-      else last.value = pool.price;
+      if (end > last.time) data.push({ time: end, value: current });
+      else last.value = current;
     }
     const scale = metric === 'chance' ? 100 : 1;
     return { row, index, data: data.map((point) => ({ time: point.time, value: point.value * scale })) };

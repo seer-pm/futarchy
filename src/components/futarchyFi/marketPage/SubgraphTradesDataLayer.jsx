@@ -29,7 +29,10 @@ const SubgraphTradesDataLayer = ({
     limit = 30,
     // Categorical proposals: answer of each outcome token (answerByToken);
     // trades then show their answer instead of YES/NO
-    answers = null
+    answers = null,
+    // Every proposal whose pools the trades come from, when the market is a
+    // family of chained proposals (utils/proposalFamily.js); default the page's
+    proposalIds = null
 }) => {
     const [trades, setTrades] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +49,7 @@ const SubgraphTradesDataLayer = ({
 
     // Get proposalId from config
     const proposalId = config?.proposalId || config?.MARKET_ADDRESS;
+    const proposalIdsKey = proposalIds?.join(',') ?? '';
     const chainId = config?.chainId || 100;
 
     // Fetch pools from subgraph first, then fetch swaps
@@ -72,17 +76,19 @@ const SubgraphTradesDataLayer = ({
             // Step 1: Get pools for this proposal from subgraph (if not already cached)
             let pools = poolAddresses;
             if (pools.length === 0 || !poolsFetchedRef.current) {
-                console.log('[SubgraphTradesDataLayer] Fetching pools for proposal:', proposalId);
-                const poolsResult = await fetchPoolsForProposal(chainId, proposalId);
+                const ids = proposalIdsKey ? proposalIdsKey.split(',') : [proposalId];
+                console.log('[SubgraphTradesDataLayer] Fetching pools for proposals:', ids);
+                const poolsResults = await Promise.all(ids.map((id) => fetchPoolsForProposal(chainId, id)));
+                const failed = poolsResults.find((result) => result.error);
 
-                if (poolsResult.error) {
-                    setError(poolsResult.error);
+                if (failed) {
+                    setError(failed.error);
                     setIsLoading(false);
                     setIsSyncing(false);
                     return;
                 }
 
-                pools = poolsResult.pools.map(p => p.id);
+                pools = poolsResults.flatMap((result) => result.pools.map(p => p.id));
                 setPoolAddresses(pools);
                 poolsFetchedRef.current = true;
                 console.log('[SubgraphTradesDataLayer] Found pools:', pools);
@@ -124,7 +130,12 @@ const SubgraphTradesDataLayer = ({
             setIsLoading(false);
             setIsSyncing(false);
         }
-    }, [chainId, proposalId, poolAddresses, showMyTrades, address, limit]);
+    }, [chainId, proposalId, proposalIdsKey, poolAddresses, showMyTrades, address, limit]);
+
+    // A family's proposals arrive after the page's own: read their pools again.
+    useEffect(() => {
+        poolsFetchedRef.current = false;
+    }, [proposalIdsKey]);
 
     // Initial fetch
     useEffect(() => {

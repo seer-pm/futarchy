@@ -16,6 +16,8 @@ import {
     estimateCategoricalGas,
     MAX_CATEGORICAL_OUTCOMES
 } from '../../utils/categoricalProposal.mjs';
+import { getRpcProvider } from '../../utils/getBestRpc';
+import { fetchProposalOutcomes } from '../../utils/proposalOutcomes';
 
 // Gas above this needs a mostly empty block (Gnosis blocks hold 17M).
 const CATEGORICAL_GAS_WARNING = 10_000_000;
@@ -93,6 +95,73 @@ const AnswersInput = ({ outcomes, tokenNames, onChange }) => {
             {gas > CATEGORICAL_GAS_WARNING && (
                 <div className="text-xs text-amber-500">
                     {outcomes.length} answers need about {(gas / 1e6).toFixed(1)}M gas; the transaction may wait for a quiet block.
+                </div>
+            )}
+        </div>
+    );
+};
+
+/**
+ * The proposal a categorical question follows up, such as a question with
+ * candidates A, B, C and Other followed up on its Other by a question with a
+ * new candidate D and Other: the market page then shows both as one market
+ * (utils/proposalFamily.js). Picking a proposal fills in its collaterals,
+ * which the follow-up must share.
+ */
+const ParentProposalInput = ({ chainId, parentMarket, parentOutcome, onChange, onCollaterals }) => {
+    const [parent, setParent] = useState({ status: 'idle', outcomes: [], error: null });
+    const address = parentMarket.trim();
+
+    useEffect(() => {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+            setParent({ status: 'idle', outcomes: [], error: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setParent({ status: 'loading', outcomes: [], error: null });
+        fetchProposalOutcomes(address, getRpcProvider(chainId), { chainId })
+            .then((proposal) => {
+                if (cancelled) return;
+                if (proposal.kind !== 'categorical') {
+                    setParent({ status: 'error', outcomes: [], error: 'Only an answer of a categorical proposal can be followed up.' });
+                    return;
+                }
+                setParent({ status: 'ready', outcomes: proposal.outcomes.map((outcome) => outcome.label), error: null });
+                onCollaterals(proposal.companyToken, proposal.currencyToken);
+            })
+            .catch(() => { if (!cancelled) setParent({ status: 'error', outcomes: [], error: 'No futarchy proposal at this address on this chain.' }); });
+        return () => { cancelled = true; };
+        // onCollaterals is a new function every render; the address decides what to read.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [address, chainId]);
+
+    return (
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-futarchyGray11">Follows up an answer of (optional)</label>
+            <input
+                type="text"
+                aria-label="Proposal this question follows up"
+                className={`${inputClass} font-mono text-sm`}
+                value={parentMarket}
+                onChange={(e) => onChange({ parentMarket: e.target.value, parentOutcome: '' })}
+                placeholder="0x… proposal with an “Other” answer"
+            />
+            {parent.status === 'loading' && <div className="text-xs text-futarchyGray9">Reading the proposal…</div>}
+            {parent.error && <div className="text-xs text-amber-500">{parent.error}</div>}
+            {parent.status === 'ready' && (
+                <select
+                    aria-label="Answer this question follows up"
+                    className={inputClass}
+                    value={parentOutcome}
+                    onChange={(e) => onChange({ parentMarket, parentOutcome: e.target.value })}
+                >
+                    <option value="">Choose the answer it follows up…</option>
+                    {parent.outcomes.map((label, index) => <option key={index} value={String(index)}>{label}</option>)}
+                </select>
+            )}
+            {!address && (
+                <div className="text-xs text-futarchyGray9">
+                    To add answers later, end the answers with “Other” and follow it up with a new question.
                 </div>
             )}
         </div>
@@ -350,6 +419,16 @@ const CreateProposalModal = ({ isOpen, onClose }) => {
                                     rows={3}
                                 />
                             </div>
+
+                            {isCategorical && (
+                                <ParentProposalInput
+                                    chainId={formData.chainId}
+                                    parentMarket={formData.parentMarket}
+                                    parentOutcome={formData.parentOutcome}
+                                    onChange={({ parentMarket, parentOutcome }) => setFormData(prev => ({ ...prev, parentMarket, parentOutcome }))}
+                                    onCollaterals={(companyToken, currencyToken) => setFormData(prev => ({ ...prev, companyToken, currencyToken }))}
+                                />
+                            )}
 
                             {isCategorical && (
                                 <AnswersInput

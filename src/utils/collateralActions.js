@@ -75,16 +75,23 @@ const assertSplitBalance = async (publicClient, collateralToken, account, amount
 };
 
 /**
- * The calls of a split, for a batch: the collateral approval if the
- * allowance is short, then the split. Throws when the balance is short.
+ * The calls of a split, for a batch: the approval of the token the split
+ * spends if the allowance is short, then the split. Throws when the balance
+ * is short.
+ * @param {string} [p.sourceToken] the token the split spends: the collateral,
+ *   or for a proposal conditional on a parent's answer that answer's token of
+ *   the collateral (utils/proposalFamily.js)
+ * @param {boolean} [p.checkBalance] false when an earlier call of the same
+ *   batch gives the account the source token
  */
 export async function splitCalls({
-    publicClient, account, router, proposal, collateralToken, amount, symbol = 'token', useUnlimitedApproval = false,
+    publicClient, account, router, proposal, collateralToken, sourceToken = collateralToken, amount, symbol = 'token',
+    useUnlimitedApproval = false, checkBalance = true,
 }) {
     const amountRaw = toBigInt(amount);
-    await assertSplitBalance(publicClient, collateralToken, account, amountRaw, symbol);
+    if (checkBalance) await assertSplitBalance(publicClient, sourceToken, account, amountRaw, symbol);
     return [
-        ...await approvalCalls({ publicClient, account, token: collateralToken, spender: router, amount: amountRaw, useUnlimitedApproval }),
+        ...await approvalCalls({ publicClient, account, token: sourceToken, spender: router, amount: amountRaw, useUnlimitedApproval }),
         routerCall(router, 'splitPosition', proposal, collateralToken, amountRaw),
     ];
 }
@@ -128,6 +135,8 @@ export async function approveIfNeeded({
  * @param {string} p.router futarchy router
  * @param {string} p.proposal the market's FutarchyProposal
  * @param {string} p.collateralToken token to split
+ * @param {string} [p.sourceToken] the token the split spends, if not the
+ *   collateral: a parent answer's token (see splitCalls)
  * @param {bigint|string} p.amount raw units
  * @param {string} [p.symbol] for the insufficient-balance message
  * @param {boolean} [p.batch] the wallet supports atomic batches (hooks/useAtomicBatch.js)
@@ -136,21 +145,21 @@ export async function approveIfNeeded({
  * @returns {Promise<{hash: string, receipt: object}>}
  */
 export async function splitCollateral({
-    publicClient, walletClient, account, router, proposal, collateralToken, amount, symbol = 'token',
+    publicClient, walletClient, account, router, proposal, collateralToken, sourceToken = collateralToken, amount, symbol = 'token',
     useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, batch = false, onStep,
 }) {
     const amountRaw = toBigInt(amount);
     if (shouldBatch({ batch, isSafe, account, walletClient })) {
-        const calls = await splitCalls({ publicClient, account, router, proposal, collateralToken, amount: amountRaw, symbol, useUnlimitedApproval });
+        const calls = await splitCalls({ publicClient, account, router, proposal, collateralToken, sourceToken, amount: amountRaw, symbol, useUnlimitedApproval });
         const sent = await sendAsBatch({ walletClient, account, calls, onStep });
         if (sent) return sent;
     } else {
-        await assertSplitBalance(publicClient, collateralToken, account, amountRaw, symbol);
+        await assertSplitBalance(publicClient, sourceToken, account, amountRaw, symbol);
     }
 
     onStep?.('approval');
     await approveIfNeeded({
-        publicClient, walletClient, account, token: collateralToken, spender: router, amount: amountRaw,
+        publicClient, walletClient, account, token: sourceToken, spender: router, amount: amountRaw,
         useUnlimitedApproval, isSafe, waitForSafeExecution,
     });
     onStep?.('approved');
@@ -244,4 +253,79 @@ export async function mergeOutcomeTokens({
     const receipt = await confirm({ hash, publicClient, walletClient, isSafe, waitForSafeExecution });
     onStep?.('done');
     return { hash, receipt };
+}
+
+/**
+ * Runs splits one after another, such as a market's whole family of chained
+ * proposals (utils/proposalFamily.js familySplitPlan): each split after the
+ * first spends tokens an earlier one gives. With `batch` they are one
+ * transaction; otherwise one splitCollateral each.
+ *
+ * @param {object} p
+ * @param {Array<{proposal: string, collateralToken: string, sourceToken: {address: string, name: string|null}, amount: bigint}>} p.steps
+ * @param {string} [p.symbol] the collateral's symbol, for the insufficient-balance message
+ * @param {(step: 'batch'|'split'|'done', index?: number) => void} [p.onStep] index is the split's in `steps`
+ * @returns {Promise<{hash: string, receipt: object}>} the last transaction
+ */
+export async function splitThrough({
+    publicClient, walletClient, account, router, steps, symbol = 'token',
+    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, batch = false, onStep,
+}) {
+    if (shouldBatch({ batch, isSafe, account, walletClient })) {
+        const calls = await Promise.all(steps.map((split, index) => splitCalls({
+            publicClient, account, router, proposal: split.proposal, collateralToken: split.collateralToken,
+            sourceToken: split.sourceToken.address, amount: split.amount, symbol: split.sourceToken.name || symbol,
+            useUnlimitedApproval, checkBalance: index === 0,
+        })));
+        const sent = await sendAsBatch({ walletClient, account, calls: calls.flat(), onStep });
+        if (sent) return sent;
+    }
+    let result;
+    for (const [index, split] of steps.entries()) {
+        onStep?.('split', index);
+        result = await splitCollateral({
+            publicClient, walletClient, account, router, proposal: split.proposal, collateralToken: split.collateralToken,
+            sourceToken: split.sourceToken.address, amount: split.amount, symbol: split.sourceToken.name || symbol,
+            useUnlimitedApproval, isSafe, waitForSafeExecution,
+        });
+    }
+    onStep?.('done');
+    return result;
+}
+
+/**
+ * Runs merges one after another (utils/proposalFamily.js familyMergePlan,
+ * deepest proposal first): each merge after the first may spend tokens an
+ * earlier one gives back. With `batch` they are one transaction, with the
+ * approvals each needs; otherwise one mergeOutcomeTokens each.
+ *
+ * @param {object} p
+ * @param {Array<{proposal: string, collateralToken: string, outcomeTokens: string[], amount: bigint}>} p.steps
+ * @param {(step: 'batch'|'merge'|'done', index?: number) => void} [p.onStep] index is the merge's in `steps`
+ * @returns {Promise<{hash: string, receipt: object}>} the last transaction
+ */
+export async function mergeThrough({
+    publicClient, walletClient, account, router, steps,
+    useUnlimitedApproval = false, isSafe = false, waitForSafeExecution = false, batch = false, onStep,
+}) {
+    if (shouldBatch({ batch, isSafe, account, walletClient })) {
+        const calls = await Promise.all(steps.map(async (merge) => {
+            const approvals = await Promise.all(merge.outcomeTokens.map((token) => approvalCalls({
+                publicClient, account, token, spender: router, amount: merge.amount, useUnlimitedApproval,
+            })));
+            return [...approvals.flat(), routerCall(router, 'mergePositions', merge.proposal, merge.collateralToken, merge.amount)];
+        }));
+        const sent = await sendAsBatch({ walletClient, account, calls: calls.flat(), onStep });
+        if (sent) return sent;
+    }
+    let result;
+    for (const [index, merge] of steps.entries()) {
+        onStep?.('merge', index);
+        result = await mergeOutcomeTokens({
+            publicClient, walletClient, account, router, proposal: merge.proposal, collateralToken: merge.collateralToken,
+            outcomeTokens: merge.outcomeTokens, amount: merge.amount, useUnlimitedApproval, isSafe, waitForSafeExecution,
+        });
+    }
+    onStep?.('done');
+    return result;
 }

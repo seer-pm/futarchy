@@ -20,7 +20,9 @@
  */
 
 export const CATEGORICAL_FACTORY_ABI = [
-    'function createProposal((string,string[],string[],address,address,string,string,uint256,uint32)) returns (address)',
+    // The last two fields are parentMarket and parentOutcome: a proposal can be
+    // conditional on an answer of another one (utils/proposalFamily.js).
+    'function createProposal((string,string[],string[],address,address,string,string,uint256,uint32,address,uint256)) returns (address)',
     'function proposals(uint256) view returns (address)',
     'function marketsCount() view returns (uint256)',
 ];
@@ -30,6 +32,8 @@ export const MAX_CATEGORICAL_OUTCOMES = 20;
 
 // FutarchyCategoricalFactory.toString31 requires names shorter than 32 bytes.
 const MAX_TOKEN_NAME_BYTES = 31;
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 // Reality.eth separates question, answers, category and language with it.
 const REALITY_SEPARATOR = '\u241f';
@@ -72,6 +76,10 @@ export function estimateCategoricalGas(count) {
  * @param {string} input.language
  * @param {string|bigint} input.minBond in wei
  * @param {number} input.openingTime Unix seconds
+ * @param {string} [input.parentMarket] a proposal whose answer this one
+ *   follows up, such as its "Other": its tokens are split from that answer's
+ *   tokens. It needs the same collaterals, which the factory checks
+ * @param {number|string} [input.parentOutcome] the answer of parentMarket
  * @returns {{errors: string[], tokenNames: string[], params: Array|null}}
  *   params is null when there are errors; tokenNames are the prefixes used
  */
@@ -87,8 +95,13 @@ export function buildCategoricalProposal({
     language,
     minBond,
     openingTime,
+    parentMarket = '',
+    parentOutcome = '',
 }) {
     const errors = [];
+    const parent = String(parentMarket ?? '').trim();
+    if (parent && !/^0x[0-9a-fA-F]{40}$/.test(parent)) errors.push('The proposal this one follows up is not an address.');
+    if (parent && !/^\d+$/.test(String(parentOutcome).trim())) errors.push('Choose the answer this proposal follows up.');
     const answers = outcomes.map((answer) => String(answer ?? '').trim());
     const names = answers.map((answer, i) => String(tokenNames[i] ?? '').trim() || defaultTokenName(answer));
 
@@ -135,6 +148,8 @@ export function buildCategoricalProposal({
             language,
             String(minBond),
             Number(openingTime),
+            parent || ZERO_ADDRESS,
+            parent ? Number(parentOutcome) : 0,
         ],
     };
 }

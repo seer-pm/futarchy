@@ -12,6 +12,10 @@ const FUTARCHY_FACTORY_ABI = [
     'function marketsCount() view returns (uint256)'
 ];
 const ERC20_SYMBOL_ABI = ['function symbol() view returns (string)'];
+const PARENT_PROPOSAL_ABI = [
+    'function collateralToken1() view returns (address)',
+    'function collateralToken2() view returns (address)',
+];
 
 /**
  * Hook for creating Futarchy proposals with multi-chain support
@@ -48,6 +52,10 @@ export const useCreateProposal = () => {
             proposalType: 'binary',
             outcomes: ['', ''],
             tokenNames: ['', ''],
+            // Categorical only: a proposal whose answer (such as "Other") this
+            // one follows up; its tokens are split from that answer's tokens.
+            parentMarket: '',
+            parentOutcome: '',
             marketName: '',
             companyToken: chainConfig?.defaultTokens?.company?.address || '',
             currencyToken: chainConfig?.defaultTokens?.currency?.address || '',
@@ -187,6 +195,15 @@ export const useCreateProposal = () => {
                     openingTime: openingTimeUnix,
                 });
                 if (built.errors.length > 0) throw new Error(built.errors.join(' '));
+                if (formData.parentMarket?.trim()) {
+                    // The factory reverts otherwise; say why before the wallet does.
+                    const parent = new ethers.Contract(formData.parentMarket.trim(), PARENT_PROPOSAL_ABI, provider);
+                    const [parentCompany, parentCurrency] = await Promise.all([parent.collateralToken1(), parent.collateralToken2()]);
+                    if (parentCompany.toLowerCase() !== formData.companyToken.toLowerCase()
+                        || parentCurrency.toLowerCase() !== formData.currencyToken.toLowerCase()) {
+                        throw new Error('A follow-up proposal needs the same company and currency tokens as the proposal it follows up.');
+                    }
+                }
                 params = built.params;
             }
 
