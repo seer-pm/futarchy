@@ -40,12 +40,14 @@ const SubgraphTradesDataLayer = ({
     const [lastUpdate, setLastUpdate] = useState(null);
     const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [poolAddresses, setPoolAddresses] = useState([]);
 
     const { address, isConnected } = useAccount();
     const intervalRef = useRef(null);
     const countdownRef = useRef(null);
-    const poolsFetchedRef = useRef(false);
+    // The proposal's pool addresses once read (null until then). A ref, not
+    // state: as state, every read of an empty list made a new array, which
+    // recreated fetchTrades and ran it again at once, in a loop.
+    const poolsRef = useRef(null);
 
     // Get proposalId from config
     const proposalId = config?.proposalId || config?.MARKET_ADDRESS;
@@ -74,8 +76,10 @@ const SubgraphTradesDataLayer = ({
 
         try {
             // Step 1: Get pools for this proposal from subgraph (if not already cached)
-            let pools = poolAddresses;
-            if (pools.length === 0 || !poolsFetchedRef.current) {
+            // Read the pools again while there are none, so pools created
+            // later show up on the next refresh.
+            let pools = poolsRef.current;
+            if (!pools?.length) {
                 const ids = proposalIdsKey ? proposalIdsKey.split(',') : [proposalId];
                 console.log('[SubgraphTradesDataLayer] Fetching pools for proposals:', ids);
                 const poolsResults = await Promise.all(ids.map((id) => fetchPoolsForProposal(chainId, id)));
@@ -89,8 +93,7 @@ const SubgraphTradesDataLayer = ({
                 }
 
                 pools = poolsResults.flatMap((result) => result.pools.map(p => p.id));
-                setPoolAddresses(pools);
-                poolsFetchedRef.current = true;
+                poolsRef.current = pools;
                 console.log('[SubgraphTradesDataLayer] Found pools:', pools);
             }
 
@@ -130,12 +133,13 @@ const SubgraphTradesDataLayer = ({
             setIsLoading(false);
             setIsSyncing(false);
         }
-    }, [chainId, proposalId, proposalIdsKey, poolAddresses, showMyTrades, address, limit]);
+    }, [chainId, proposalId, proposalIdsKey, showMyTrades, address, limit]);
 
-    // A family's proposals arrive after the page's own: read their pools again.
+    // Another proposal, or a family's proposals arriving after the page's
+    // own: read their pools again.
     useEffect(() => {
-        poolsFetchedRef.current = false;
-    }, [proposalIdsKey]);
+        poolsRef.current = null;
+    }, [chainId, proposalId, proposalIdsKey]);
 
     // Initial fetch
     useEffect(() => {
