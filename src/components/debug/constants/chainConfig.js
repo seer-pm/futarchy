@@ -10,8 +10,8 @@ export const CHAIN_CONFIG = {
         name: 'Ethereum',
         rpcUrl: 'https://eth-mainnet.public.blastapi.io',
         factoryAddress: '0xf9369c0F7a84CAC3b7Ef78c837cF7313309D3678',
-        // FutarchyCategoricalFactory (N answers + Invalid); not deployed yet.
-        categoricalFactoryAddress: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || null,
+        // FutarchyCategoricalFactory (N answers + Invalid).
+        categoricalFactoryAddress: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || '0x2342B838f9fAFb14789B91D6702123a481496041',
         adapterAddress: '0xAc9Bf8EbA6Bd31f8E8c76f8E8B2AAd0BD93f98Dc',
         positionManager: '0xC36442b4a4522E871399CD717aBDD847Ab11FE88',
         poolFactory: '0x1F98431c8aD98523631AE4a59f267346ea31F984',

@@ -30,7 +30,7 @@ import { fetchOutcomePools, fetchProposalOutcomes } from './proposalOutcomes.js'
 // FutarchyCategoricalFactory per chain, whose proposals are searched for the
 // ones chained to a family's answers.
 export const CATEGORICAL_FACTORY_BY_CHAIN = {
-    1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || null,
+    1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_FACTORY || '0x2342B838f9fAFb14789B91D6702123a481496041',
     100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_FACTORY || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295',
 };
 

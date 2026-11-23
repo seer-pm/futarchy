@@ -47,7 +47,7 @@ const CONDITIONAL_TOKENS_BY_CHAIN = {
 // (seer-pm/demo contracts/deployments/gnosis), not on Ethereum yet; the
 // variables override the address for a build.
 export const CATEGORICAL_ROUTER_BY_CHAIN = {
-    1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_ROUTER || null,
+    1: process.env.NEXT_PUBLIC_MAINNET_FUTARCHY_CATEGORICAL_ROUTER || '0xe5a4dFff551aDD6efd317b11E1E3aab556aDD300',
     100: process.env.NEXT_PUBLIC_GNOSIS_FUTARCHY_CATEGORICAL_ROUTER || '0x97Fa06A3067bC5faB00D28A30aC7E8555742a023',
 };
 
