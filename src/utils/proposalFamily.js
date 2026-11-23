@@ -201,7 +201,6 @@ export function familyLeaves(family) {
  */
 export function familySlots(family) {
     return familyNodes(family).flatMap((node) => {
-        const via = node.parent ? node.parent.node.proposal.outcomes[node.parent.index].label : null;
         return [
             ...node.proposal.outcomes.map((outcome, index) => ({
                 key: answerKey(node, index),
@@ -216,7 +215,9 @@ export function familySlots(family) {
             })),
             {
                 key: invalidKey(node),
-                label: via ? `Invalid (${via})` : 'Invalid',
+                // Not named after the answer it follows up: that is usually a
+                // hidden "Other". Its depth shows which question it belongs to.
+                label: 'Invalid',
                 isInvalid: true,
                 chained: false,
                 ...node.proposal.invalid,

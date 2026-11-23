@@ -181,6 +181,12 @@ npm run call-pool-apis
   are split from that answer's tokens and the market page shows both as one market
   (`src/utils/proposalFamily.js`). `categorical-pools.js` then splits the parent
   answer's tokens and quotes the prediction pools in its currency token
+- `categorical-other-chain.js` (`npm run categorical:other`) creates a categorical question
+  that can grow, as Seer's `create-other-chain-markets.ts`: every proposal ends with
+  "Other", and `--parent <any proposal of the chain> --answer <name>` adds candidates
+  with a new proposal on the last proposal's "Other", taking its question, collaterals,
+  bond, category, language and opening time. Dry run by default, `--send` creates it.
+  The market page hides an "Other" that a later proposal follows up
 
 ### automate-futarchy.js
 

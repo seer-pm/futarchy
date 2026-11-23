@@ -66,6 +66,9 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   };
   const collateral = { company: proposal.companyToken, currency: proposal.currencyToken };
   const balanceOf = (token) => balances?.get(token.toLowerCase()) ?? 0n;
+  // An answer a follow-up question splits again, such as "Other", is not an
+  // outcome of the market: it is shown only while the wallet holds its tokens.
+  const visibleRows = rows.filter((row) => !row.chained || balanceOf(row.company.address) > 0n || balanceOf(row.currency.address) > 0n);
   const mergeable = balances
     ? { company: familyMergeable(family, balances, 'company'), currency: familyMergeable(family, balances, 'currency') }
     : null;
@@ -185,7 +188,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {visibleRows.map((row) => {
                   const won = winner?.key === row.key;
                   return (
                     <tr
@@ -222,7 +225,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
             <p className="text-xs text-futarchyGray11 dark:text-white/70">
               Invalid tokens pay your collateral back if Reality answers Invalid, which undoes every trade. They have
               no pool: keep them, merging needs them.
-              {questions && ' Answers marked \u2192 are split again by a follow-up question, whose tokens are shown below them.'}
+              {visibleRows.some((row) => row.chained) && ' Answers marked \u2192 are split again by a follow-up question, whose tokens are shown below them.'}
             </p>
 
             {!router ? (
