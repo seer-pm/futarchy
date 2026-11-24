@@ -305,9 +305,10 @@ const MarketHero = ({
 
                   // Create Pool badge - show when pools are missing (subgraph mode);
                   // a categorical market needs two pools per answer it shows,
-                  // not for the answers its follow-up questions split
+                  // not for the answers its follow-up questions split nor for
+                  // a last "Other" whose chance is what the others leave
                   const poolsMissing = poolsKnown && (categorical?.isCategorical
-                    ? (categorical.allPools ?? []).some((row) => !row.chained && (!row.conditional || !row.prediction))
+                    ? (categorical.allPools ?? []).some((row) => !row.chained && !row.residual && (!row.conditional || !row.prediction))
                     : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address);
                   if (poolsMissing) {
                     badges.push({

@@ -80,21 +80,34 @@ test('only the chained proposals the root lists are followed, ahead of earlier u
     assert.deepEqual(shown(null), ['A', 'B', 'Mallory', 'Other']);
 });
 
-test('every answer\'s chance is its own prediction price, and the chained Other needs no pools', () => {
+test('every answer\'s chance is its own prediction price, and the Others without pools get what the rest leaves', () => {
     const pool = (price) => ({ address: `0xP${price}`, price });
     const f = family();
     const [root, child] = familyNodes(f);
+    const chances = (rootPrices, childPrices) => {
+        const rows = (labels, prices) => labels.map((label, i) => ({ label, prediction: prices[i] === null ? null : pool(prices[i]) }));
+        return attachFamilyPools(f, new Map([
+            [root, rows(['A', 'B', 'Other'], rootPrices)],
+            [child, rows(['D', 'Other'], childPrices)],
+        ]));
+    };
+    const rounded = (leaves) => leaves.map((leaf) => (leaf.chance === null ? null : Number(leaf.chance.toFixed(6))));
+
     // Prediction pools all quote in sDAI: the follow-up answers' prices are already their chance.
-    const pools = new Map([
-        [root, [{ label: 'A', prediction: pool(0.35) }, { label: 'B', prediction: pool(0.25) }, { label: 'Other', prediction: null }]],
-        [child, [{ label: 'D', prediction: pool(0.3) }, { label: 'Other', prediction: null }]],
+    // The last Other gets the root's Other (1 - .35 - .25 = .40) less D, not 1 less D.
+    const { leaves, all } = chances([0.35, 0.25, null], [0.1, null]);
+    assert.deepEqual(rounded(leaves), [0.35, 0.25, 0.1, 0.3]);
+    // The liquidity screens list every answer; the root's Other the follow-up question splits is
+    // marked chained, the last Other residual: neither needs pools.
+    assert.deepEqual(all.map((row) => [row.label, row.chained, row.residual]), [
+        ['A', false, false], ['B', false, false], ['Other', true, true], ['D (Other)', false, false], ['Other (Other)', false, true],
     ]);
-    const { leaves, all } = attachFamilyPools(f, pools);
-    assert.deepEqual(leaves.map((leaf) => leaf.chance), [0.35, 0.25, 0.3, null]);
-    // The liquidity screens list every answer; the root's Other the follow-up question splits is marked chained.
-    assert.deepEqual(all.map((row) => [row.label, row.chained]), [
-        ['A', false], ['B', false], ['Other', true], ['D (Other)', false], ['Other (Other)', false],
-    ]);
+
+    // Unknown when an answer above it has no price, or the others already take more than the whole.
+    assert.deepEqual(rounded(chances([0.35, null, null], [0.1, null]).leaves), [0.35, null, 0.1, null]);
+    assert.deepEqual(rounded(chances([0.35, 0.25, null], [0.5, null]).leaves), [0.35, 0.25, 0.5, null]);
+    // Only the last answer is a residual: a candidate without a pool stays unknown.
+    assert.deepEqual(rounded(chances([null, 0.25, 0.4], [0.1, null]).leaves), [null, 0.25, 0.1, 0.3]);
 });
 
 test('merging can take a chained answer\'s tokens from merging the follow-up question first', () => {

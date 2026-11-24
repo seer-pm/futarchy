@@ -248,20 +248,22 @@ export function familySlots(family) {
  * Adds the pools to the family's answers (fetchOutcomePools per proposal).
  * @param {Map<object, Array>} poolsByNode fetchOutcomePools result by node
  * @returns {{leaves: Array, all: Array}} leaves: familyLeaves with conditional,
- *   prediction and chance (the prediction price); all: every answer of every
- *   proposal with its pools and a label naming the answer a follow-up one
- *   hangs from, for the liquidity screens. Chained answers (chained: true) need
- *   no pools, but keep the ones made before they were followed up.
+ *   prediction and chance (the prediction price, or residualChance); all: every
+ *   answer of every proposal with its pools and a label naming the answer a
+ *   follow-up one hangs from, for the liquidity screens. Chained answers
+ *   (chained: true) need no pools, but keep the ones made before they were
+ *   followed up; a residual answer (residual: true) needs none either.
  */
 export function attachFamilyPools(family, poolsByNode) {
     const rowOf = (node, index) => poolsByNode.get(node)?.[index] ?? null;
+    const chanceOf = residualChance((node, index) => rowOf(node, index)?.prediction?.price ?? null);
     const leaves = familyLeaves(family).map((leaf) => {
         const own = rowOf(leaf.node, leaf.index);
         return {
             ...leaf,
             conditional: own?.conditional ?? null,
             prediction: own?.prediction ?? null,
-            chance: own?.prediction?.price ?? null,
+            chance: chanceOf(leaf.node, leaf.index),
         };
     });
     const all = familyNodes(family).flatMap((node) => (poolsByNode.get(node) ?? []).map((row, index) => ({
@@ -269,8 +271,35 @@ export function attachFamilyPools(family, poolsByNode) {
         key: answerKey(node, index),
         label: node.parent ? `${row.label} (${node.parent.node.proposal.outcomes[node.parent.index].label})` : row.label,
         chained: node.children.has(index),
+        residual: !row.conditional && !row.prediction && chanceOf(node, index) !== null,
     })));
     return { leaves, all };
+}
+
+/**
+ * The chance of each answer: its prediction price, or, for the last answer of
+ * a proposal without one (the "Other" a market chains on, which needs no
+ * pools, as in Seer's opportunity markets), what its siblings leave of the
+ * proposal's whole chance: 1 for the root, the chance of the parent answer
+ * for a chained proposal. Null when a sibling has no price either, or the
+ * siblings' prices add up to more than the whole.
+ * @param {(node: object, index: number) => number|null} priceOf prediction price
+ * @returns {(node: object, index: number) => number|null}
+ */
+function residualChance(priceOf) {
+    const chanceOf = (node, index) => {
+        const price = priceOf(node, index);
+        const last = node.proposal.outcomes.length - 1;
+        if (price !== null || index !== last) return price;
+        const siblings = node.proposal.outcomes.slice(0, last).map((_, i) => priceOf(node, i));
+        if (siblings.includes(null)) return null;
+        const whole = node.parent ? chanceOf(node.parent.node, node.parent.index) : 1;
+        if (whole === null) return null;
+        const rest = whole - siblings.reduce((sum, value) => sum + value, 0);
+        // Prices that add up to the whole leave a float a hair below zero.
+        return rest > -1e-9 ? Math.max(rest, 0) : null;
+    };
+    return chanceOf;
 }
 
 /** Reads every proposal's pools and attaches them (attachFamilyPools). */

@@ -19,8 +19,11 @@ const CategoricalOutcomesCard = ({ categorical, config, selectedKey, onSelect })
   const currency = config?.BASE_TOKENS_CONFIG?.currency?.symbol || proposal.invalid.currency.name?.replace(/^INVALID_/, '');
 
   const prices = (pools ?? []).map((row) => row.conditional?.price ?? null);
-  const best = prices.reduce((top, price, i) => (price !== null && (top === null || price > prices[top]) ? i : top), null);
   const maxPrice = Math.max(0, ...prices.filter((price) => price !== null));
+  // No highest answer when several share the top price (pools started at the
+  // same spot), up to the rounding of their pools' prices.
+  const top = prices.flatMap((price, i) => (price !== null && maxPrice > 0 && price >= maxPrice * (1 - 1e-6) ? [i] : []));
+  const best = top.length === 1 ? top[0] : null;
   const [metric, setMetric] = useState('price');
   const pill = (active) => `px-3 py-1 rounded-full text-xs font-semibold transition-colors ${active
     ? 'bg-futarchyGray12 text-white dark:bg-white dark:text-black'
