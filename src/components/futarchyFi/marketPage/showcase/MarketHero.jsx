@@ -269,18 +269,21 @@ const MarketHero = ({
 
                   // Reality.eth question badge. It is a link, not an action, so it
                   // stops saying "Resolve" once the market is resolved.
-                  // A market chained over several questions links each one,
-                  // numbered in the order the positions name their INVALIDs.
-                  const questionLinks = [marketData.question_link, ...(categorical?.followUpQuestionLinks ?? [])];
-                  questionLinks.forEach((link, i) => {
-                    if (!link) return;
-                    const number = questionLinks.length > 1 ? ` ${i + 1}` : '';
+                  // A market chained over several questions lists each one in a
+                  // menu, numbered in the order the positions name their INVALIDs.
+                  const followUps = categorical?.followUpQuestionLinks ?? [];
+                  if (marketData.question_link) {
+                    const menu = followUps.length > 0
+                      ? [{ label: categorical.proposal.outcomes.map((outcome) => outcome.label).join(', '), link: marketData.question_link }, ...followUps]
+                        .map((item, i) => ({ ...item, label: `Question ${i + 1}: ${item.label}` }))
+                      : undefined;
                     badges.push({
-                      text: `${isResolved ? 'Resolution Question' : 'Resolve Question'}${number}`,
+                      text: isResolved ? 'Resolution Question' : 'Resolve Question',
                       colorScheme: 'violet',
-                      link
+                      link: marketData.question_link,
+                      menu
                     });
-                  });
+                  }
 
                   // Snapshot Vote badge - link to Snapshot proposal
                   {

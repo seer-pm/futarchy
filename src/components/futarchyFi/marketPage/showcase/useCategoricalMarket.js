@@ -147,14 +147,20 @@ export function useCategoricalMarket(config, address) {
   const refetch = useCallback(() => setRefreshKey((key) => key + 1), []);
 
   // The Reality question of every follow-up proposal, after the root's (the
-  // page's own question link): each is answered on its own.
+  // page's own question link): each is answered on its own. label lists the
+  // question's answers, which tell the questions apart.
   const [followUpQuestionLinks, setFollowUpQuestionLinks] = useState([]);
   useEffect(() => {
     setFollowUpQuestionLinks([]);
     if (nodes.length < 2) return undefined;
     let cancelled = false;
     Promise.all(nodes.slice(1).map((node) => getRealityQuestionUrl(chainId, node.proposal.address)))
-      .then((links) => { if (!cancelled) setFollowUpQuestionLinks(links.filter(Boolean)); });
+      .then((links) => {
+        if (cancelled) return;
+        setFollowUpQuestionLinks(nodes.slice(1)
+          .map((node, i) => ({ label: node.proposal.outcomes.map((outcome) => outcome.label).join(', '), link: links[i] }))
+          .filter(({ link }) => link));
+      });
     return () => { cancelled = true; };
   }, [nodes, chainId]);
 
