@@ -278,10 +278,10 @@ export function poolPrice(sqrtPriceX96, token0, base) {
  * factory, so they show before the candles indexer has the proposal:
  *   - conditional: answer's company token / answer's currency token, whose
  *     price is the company token's price if that answer wins;
- *   - prediction: answer's currency token / `quote`, whose price is the
- *     chance the market gives that answer. `quote` is the currency token, or
- *     for a proposal conditional on a parent's answer that answer's currency
- *     token, so the price is the chance given that answer.
+ *   - prediction: answer's currency token / the currency collateral, whose
+ *     price is the chance the market gives that answer. A proposal conditional
+ *     on a parent's answer has the root's collateral, so its price is the
+ *     chance too, not the chance given that answer.
  * INVALID has no pools. A pool is null when nobody created it.
  *
  * @returns {Promise<Array<{key: string, label: string, company: object, currency: object,
@@ -291,7 +291,7 @@ export function poolPrice(sqrtPriceX96, token0, base) {
  *   answer's currency token in currency tokens (prediction); reserves are the
  *   pool's balances of the priced token (base) and the other one (quote)
  */
-export async function fetchOutcomePools(proposal, provider, { chainId = 100, quote = { address: proposal.currencyToken, name: null } } = {}) {
+export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = {}) {
     const amm = AMM_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
     const findPool = ([tokenA, tokenB]) => (amm.fee
         ? read(provider, amm.factory, AMM_ABI, 'getPool', [tokenA, tokenB, amm.fee])
@@ -316,21 +316,21 @@ export async function fetchOutcomePools(proposal, provider, { chainId = 100, quo
     const answers = outcomeRows(proposal).filter((row) => !row.isInvalid);
     const pairs = answers.flatMap((row) => [
         [row.company.address, row.currency.address],
-        [row.currency.address, quote.address],
+        [row.currency.address, proposal.currencyToken],
     ]);
     const addresses = await Promise.all(pairs.map(findPool));
     const pools = await Promise.all(addresses.map((address, i) => readPool(address, pairs[i])));
-    return answers.map((row, i) => ({ ...row, quote, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
+    return answers.map((row, i) => ({ ...row, conditional: pools[2 * i], prediction: pools[2 * i + 1] }));
 }
 
 /**
  * Every pool a categorical proposal trades in, two per answer and none for
  * INVALID, with the address of the ones that exist:
  *   - conditional: answer's company token / answer's currency token;
- *   - prediction: answer's currency token / the currency collateral, or the
- *     row's `quote` (fetchOutcomePools) when it has a name.
+ *   - prediction: answer's currency token / the currency collateral.
  * token0/token1 are in that order, so a pool's initial price is token1 per
- * token0: the company token's price, or the answer's chance.
+ * token0: the company token's price, or the answer's chance. A chained answer
+ * (attachFamilyPools) needs no pools: only the ones that exist are listed.
  * @param {Awaited<ReturnType<typeof fetchOutcomePools>>} pools
  * @param {{address: string, name: string}} currency the currency collateral
  * @returns {Array<{key: string, kind: 'conditional'|'prediction', answer: string,
@@ -352,10 +352,10 @@ export function categoricalPoolList(pools, currency) {
             kind: 'prediction',
             answer: row.label,
             token0: named(row.currency, `${row.label} currency`),
-            token1: row.quote?.name ? row.quote : currency,
+            token1: currency,
             address: row.prediction?.address ?? null,
         },
-    ]);
+    ].filter((pool) => !row.chained || pool.address));
 }
 
 /**

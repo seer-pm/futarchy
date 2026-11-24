@@ -193,8 +193,9 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
     const pools = [
         { key: '0', label: 'A', company: token('0xA1', 'A_WETH'), currency: token('0xA2', 'A_sDAI'), conditional: { address: '0xPA' }, prediction: null },
         { key: '1', label: 'B', company: token('0xB1', null), currency: token('0xB2', 'B_sDAI'), conditional: null, prediction: { address: '0xPB' } },
-        // An answer of a follow-up question: its chance is quoted in the parent answer's currency token.
-        { key: '2', label: 'D', company: token('0xD1', 'D_WETH'), currency: token('0xD2', 'D_sDAI'), quote: token('0xO2', 'OTHER_sDAI'), conditional: null, prediction: null },
+        { key: '2', label: 'D', company: token('0xD1', 'D_WETH'), currency: token('0xD2', 'D_sDAI'), conditional: null, prediction: null },
+        // An answer a follow-up question splits needs no pools: only its existing ones are listed.
+        { key: '3', label: 'O', company: token('0xE1', 'O_WETH'), currency: token('0xE2', 'O_sDAI'), chained: true, conditional: { address: '0xPO' }, prediction: null },
     ];
     const list = categoricalPoolList(pools, token('0xC', 'sDAI'));
     assert.deepEqual(list.map((p) => [p.key, `${p.token0.name}/${p.token1.name}`, p.address]), [
@@ -203,9 +204,9 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
         ['1-conditional', 'B company/B_sDAI', null],
         ['1-prediction', 'B_sDAI/sDAI', '0xPB'],
         ['2-conditional', 'D_WETH/D_sDAI', null],
-        ['2-prediction', 'D_sDAI/OTHER_sDAI', null],
+        ['2-prediction', 'D_sDAI/sDAI', null],
+        ['3-conditional', 'O_WETH/O_sDAI', '0xPO'],
     ]);
-    assert.equal(list[5].token1.address, '0xO2');
 });
 
 test('trades find their answer by either outcome token, whatever its case; INVALID and the collaterals have none', () => {

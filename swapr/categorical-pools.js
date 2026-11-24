@@ -7,19 +7,23 @@
 //   - conditional: ANSWER_<company> / ANSWER_<currency>, at --spot
 //   - prediction:  ANSWER_<currency> / <currency>, at --probability
 // INVALID gets no pools: its tokens stay in the wallet, for merging or for
-// redeeming if the question resolves Invalid.
+// redeeming if the question resolves Invalid. Neither does an answer another
+// proposal follows up (a chained "Other"): the market shows that proposal's
+// answers instead.
 // A proposal that follows up an answer of another one (parentMarket, such as
 // its "Other") splits that answer's tokens instead of the collaterals: the
 // --split-* options split the parent answer's tokens, which must be in the
-// wallet, and its prediction pools quote in the parent answer's currency token
-// (ANSWER_<currency> / OTHER_<currency>), so they price the chance given it.
+// wallet. Its prediction pools quote in the currency collateral too, as in
+// Seer's opportunity markets, so their price is the answer's whole chance:
+// --probability defaults to the parent answer's chance divided by the answers.
 //
 // Usage:
 //   node categorical-pools.js <proposal> --spot <currency per company> [options]
 //     --split-company <n>   split n of the company collateral first
 //     --split-currency <n>  split n of the currency collateral first
 //     --prediction <n>      answer currency tokens per prediction pool (default 1)
-//     --probability <p>     starting chance of every answer (default 1/answers)
+//     --probability <p>     starting chance of every answer (default 1/answers, times
+//                           the parent answer's chance for a follow-up proposal)
 //     --send                send the transactions; without it the script only prints the plan
 // Each conditional pool gets all the answer's company tokens the wallet holds,
 // with spot times that many of the answer's currency tokens. Existing pools
@@ -33,6 +37,7 @@ const CATEGORICAL_ROUTER = process.env.CATEGORICAL_ROUTER_ADDRESS || '0x97Fa06A3
 const CONDITIONAL_TOKENS = '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce';
 const POSITION_MGR = '0x91fd594c46d8b01e62dbdebed2401dde01817834';
 const ALGEBRA_FACTORY = '0xA0864cCA6E114013AB0e27cbd5B6f4c8947da766';
+const CATEGORICAL_FACTORY = process.env.CATEGORICAL_FACTORY_ADDRESS || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295';
 const MAX_TICK = 887272;
 
 const args = process.argv.slice(2);
@@ -75,7 +80,16 @@ const positionManager = new ethers.Contract(POSITION_MGR, [
   'function mint((address token0,address token1,int24 tickLower,int24 tickUpper,uint256 amount0Desired,uint256 amount1Desired,uint256 amount0Min,uint256 amount1Min,address recipient,uint256 deadline)) returns (uint256,uint128,uint256,uint256)',
 ], wallet);
 const factory = new ethers.Contract(ALGEBRA_FACTORY, ['function poolByPair(address,address) view returns (address)'], provider);
-const pool = (address) => new ethers.Contract(address, ['function liquidity() view returns (uint128)', 'function tickSpacing() view returns (int24)'], provider);
+const pool = (address) => new ethers.Contract(address, [
+  'function liquidity() view returns (uint128)',
+  'function tickSpacing() view returns (int24)',
+  'function token0() view returns (address)',
+  'function globalState() view returns (uint160 price, int24 tick, uint16 fee, uint16 timepointIndex, uint16 communityFeeToken0, uint16 communityFeeToken1, bool unlocked)',
+], provider);
+const categoricalFactory = new ethers.Contract(CATEGORICAL_FACTORY, [
+  'function marketsCount() view returns (uint256)',
+  'function proposals(uint256) view returns (address)',
+], provider);
 
 const fmt = (wei) => ethers.formatEther(wei);
 const parse = (value) => ethers.parseEther(String(value));
@@ -90,6 +104,41 @@ const sqrt = (value) => {
 };
 // sqrtPriceX96 of a pool that holds amount0 of token0 and amount1 of token1.
 const sqrtPriceX96 = (amount0, amount1) => sqrt((amount1 << 192n) / amount0);
+
+// Price of `base` in `quote` in their pool, null when there is no such pool.
+async function poolPrice(base, quote) {
+  const address = await factory.poolByPair(base, quote);
+  if (address === ethers.ZeroAddress || await pool(address).liquidity() === 0n) return null;
+  const [state, token0] = await Promise.all([pool(address).globalState(), pool(address).token0()]);
+  const ratio = Number(state.price) / 2 ** 96;
+  return token0.toLowerCase() === base.toLowerCase() ? ratio * ratio : 1 / (ratio * ratio);
+}
+
+// The chance the market gives answer `index` of `market`: its prediction
+// price, or what the other answers leave of the market's whole chance when it
+// has no pool. A follow-up market's answers share the chance of the answer it
+// follows up (1 for a root). null when it cannot be told.
+async function answerChance(market, index) {
+  const n = Number(await market.numOutcomes());
+  const currency = await market.collateralToken2();
+  const prices = await Promise.all(Array.from({ length: n }, async (_, i) => poolPrice((await market.wrappedOutcome(n + i))[0], currency)));
+  if (prices[index] !== null) return prices[index];
+  const others = prices.filter((_, i) => i !== index);
+  if (others.includes(null)) return null;
+  const parent = await market.parentMarket();
+  const total = parent === ethers.ZeroAddress ? 1 : await answerChance(market.attach(parent), Number(await market.parentOutcome()));
+  return total === null ? null : total - others.reduce((a, b) => a + b, 0);
+}
+
+// The answers of `address` another proposal of the factory follows up.
+async function followedUpAnswers(address) {
+  const count = Number(await categoricalFactory.marketsCount());
+  const children = await Promise.all(Array.from({ length: count }, async (_, i) => {
+    const child = proposal.attach(await categoricalFactory.proposals(i));
+    return (await child.parentMarket()).toLowerCase() === address.toLowerCase() ? Number(await child.parentOutcome()) : null;
+  }));
+  return new Set(children.filter((index) => index !== null));
+}
 
 // Fees: GAS_PRICE_GWEI from .env when set, as in algebra-cli.js. Otherwise a
 // 1 gwei tip: the tip ethers v6 asks the node for can be close to zero, and
@@ -131,6 +180,7 @@ async function main() {
   const collateral2 = await proposal.collateralToken2();
   let company = collateral1;
   let currency = collateral2;
+  let parentChance = 1;
   const parentAddress = await proposal.parentMarket();
   if (parentAddress !== ethers.ZeroAddress) {
     const parent = proposal.attach(parentAddress);
@@ -138,11 +188,15 @@ async function main() {
     const index = Number(await proposal.parentOutcome());
     [company] = await parent.wrappedOutcome(index);
     [currency] = await parent.wrappedOutcome(parentAnswers + index);
-    console.log(`follows up answer ${index} (${await parent.outcomes(index)}) of ${parentAddress}`);
+    parentChance = await answerChance(parent, index);
+    console.log(`follows up answer ${index} (${await parent.outcomes(index)}) of ${parentAddress}, chance ${parentChance ?? 'unknown'}`);
   }
-  const [companySymbol, currencySymbol] = await Promise.all([erc20(company).symbol(), erc20(currency).symbol()]);
+  const [companySymbol, currencySymbol, collateralSymbol] = await Promise.all([erc20(company).symbol(), erc20(currency).symbol(), erc20(collateral2).symbol()]);
   const prediction = parse(option('prediction', '1'));
-  const probability = Number(option('probability', 1 / n));
+  const probability = Number(option('probability', parentChance === null ? NaN : parentChance / n));
+  // Also catches a parent answer its siblings leave nothing to (their prices add up to 1 or more).
+  if (!(probability > 0 && probability < 1)) throw new Error(`starting chance ${probability} is not between 0 and 1; pass --probability`);
+  const followedUp = await followedUpAnswers(proposalAddress);
   const splitCompany = parse(option('split-company', '0'));
   const splitCurrency = parse(option('split-currency', '0'));
 
@@ -150,7 +204,8 @@ async function main() {
   for (let i = 0; i < n; i++) {
     const [companyToken] = await proposal.wrappedOutcome(i);
     const [currencyToken] = await proposal.wrappedOutcome(n + i);
-    answers.push({ label: await proposal.outcomes(i), company: companyToken, currency: currencyToken });
+    if (followedUp.has(i)) console.log(`  ${await proposal.outcomes(i)}: followed up by another proposal, no pools`);
+    else answers.push({ label: await proposal.outcomes(i), company: companyToken, currency: currencyToken });
   }
 
   console.log(`${n} answers, ${companySymbol}/${currencySymbol}, spot ${spot} ${currencySymbol} per ${companySymbol}, prediction ${fmt(prediction)} at ${probability}`);
@@ -162,20 +217,24 @@ async function main() {
     const companyHeld = await erc20(answer.company).balanceOf(wallet.address) + splitCompany;
     const currencyHeld = await erc20(answer.currency).balanceOf(wallet.address) + splitCurrency;
     const conditional = { label: `${answer.label} conditional`, tokenA: answer.company, amountA: companyHeld, tokenB: answer.currency, amountB: times(companyHeld, spot) };
-    const predictionPool = { label: `${answer.label} prediction`, tokenA: answer.currency, amountA: prediction, tokenB: currency, amountB: times(prediction, probability) };
+    const predictionPool = { label: `${answer.label} prediction`, tokenA: answer.currency, amountA: prediction, tokenB: collateral2, amountB: times(prediction, probability) };
     let currencyNeeded = 0n;
     for (const p of [conditional, predictionPool]) {
       const address = await factory.poolByPair(p.tokenA, p.tokenB);
       p.skip = address !== ethers.ZeroAddress && await pool(address).liquidity() > 0n;
       console.log(`  ${p.label}: ${p.skip ? `${address} has liquidity, skipped` : `${fmt(p.amountA)} / ${fmt(p.amountB)}`}`);
       if (!p.skip && p === conditional && companyHeld === 0n) throw new Error(`no ${answer.label} company tokens for its conditional pool; split some with --split-company`);
+      if (!p.skip && (p.amountA === 0n || p.amountB === 0n)) throw new Error(`${p.label} would start with an empty side; raise --prediction or the amounts`);
       if (!p.skip) currencyNeeded += p === conditional ? p.amountB : p.amountA;
       if (!p.skip) plan.push(p);
     }
     if (currencyNeeded > currencyHeld) throw new Error(`${answer.label} needs ${fmt(currencyNeeded)} of its currency token and will hold ${fmt(currencyHeld)}; split more with --split-currency`);
   }
-  const currencyForPredictions = plan.filter((p) => p.tokenB === currency).reduce((sum, p) => sum + p.amountB, 0n);
-  if (splitCurrency + currencyForPredictions > await erc20(currency).balanceOf(wallet.address)) throw new Error(`not enough ${currencySymbol}`);
+  // Prediction pools take the currency collateral, which the root's splits take too.
+  const currencyForPredictions = plan.filter((p) => p.tokenB === collateral2).reduce((sum, p) => sum + p.amountB, 0n);
+  const collateralNeeded = currencyForPredictions + (currency === collateral2 ? splitCurrency : 0n);
+  if (collateralNeeded > await erc20(collateral2).balanceOf(wallet.address)) throw new Error(`not enough ${collateralSymbol}`);
+  if (currency !== collateral2 && splitCurrency > await erc20(currency).balanceOf(wallet.address)) throw new Error(`not enough ${currencySymbol}`);
   if (splitCompany > await erc20(company).balanceOf(wallet.address)) throw new Error(`not enough ${companySymbol}`);
   if (!SEND) { console.log('Plan only; add --send to send it.'); return; }
 

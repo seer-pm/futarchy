@@ -12,10 +12,11 @@
  *   - a leaf: an answer with no proposal chained to it (A, B, C, D, the last
  *     Other). The market shows these as its answers;
  *   - chained: an answer another proposal splits (the first Other). Its tokens
- *     and pools exist, but the market shows the chained proposal's answers.
- * The chance of a leaf is the product of the prediction prices on its path:
- * the chained proposal's prediction pools trade its answers against the
- * parent answer's currency token, so they price the chance given that answer.
+ *     exist, but the market shows the chained proposal's answers, and it needs
+ *     no pools.
+ * Every proposal's prediction pools trade its answers' currency tokens against
+ * the currency collateral, which a chained proposal shares with the root, so a
+ * leaf's prediction price is its chance, as in Seer's opportunity markets.
  * The company token's price if a leaf wins is its own conditional pool's.
  *
  * A proposal conditional on an answer splits that answer's tokens, one per
@@ -229,37 +230,31 @@ export function familySlots(family) {
     });
 }
 
-const product = (values) => (values.some((value) => typeof value !== 'number') ? null : values.reduce((a, b) => a * b, 1));
-
 /**
- * Adds the pools to the family's answers (fetchOutcomePools per proposal; a
- * chained proposal's prediction pools quote in the parent answer's currency
- * token).
+ * Adds the pools to the family's answers (fetchOutcomePools per proposal).
  * @param {Map<object, Array>} poolsByNode fetchOutcomePools result by node
  * @returns {{leaves: Array, all: Array}} leaves: familyLeaves with conditional,
- *   prediction (the chance given the answers above it), chance (the product
- *   down the path) and chancePools (the prediction pools of the path, its own
- *   last); all: every answer of every proposal with its pools, chained ones
- *   included, for the liquidity screens
+ *   prediction and chance (the prediction price); all: every answer of every
+ *   proposal with its pools and a label naming the answer a follow-up one
+ *   hangs from, for the liquidity screens. Chained answers (chained: true) need
+ *   no pools, but keep the ones made before they were followed up.
  */
 export function attachFamilyPools(family, poolsByNode) {
     const rowOf = (node, index) => poolsByNode.get(node)?.[index] ?? null;
     const leaves = familyLeaves(family).map((leaf) => {
         const own = rowOf(leaf.node, leaf.index);
-        const chancePools = [...leaf.path.map(({ node, index }) => rowOf(node, index)?.prediction ?? null), own?.prediction ?? null];
         return {
             ...leaf,
-            quote: own?.quote ?? null,
             conditional: own?.conditional ?? null,
             prediction: own?.prediction ?? null,
-            chance: product(chancePools.map((pool) => pool?.price)),
-            chancePools,
+            chance: own?.prediction?.price ?? null,
         };
     });
     const all = familyNodes(family).flatMap((node) => (poolsByNode.get(node) ?? []).map((row, index) => ({
         ...row,
         key: answerKey(node, index),
         label: node.parent ? `${row.label} (${node.parent.node.proposal.outcomes[node.parent.index].label})` : row.label,
+        chained: node.children.has(index),
     })));
     return { leaves, all };
 }
@@ -267,10 +262,7 @@ export function attachFamilyPools(family, poolsByNode) {
 /** Reads every proposal's pools and attaches them (attachFamilyPools). */
 export async function fetchFamilyPools(family, provider, { chainId = 100 } = {}) {
     const nodes = familyNodes(family);
-    const pools = await Promise.all(nodes.map((node) => fetchOutcomePools(node.proposal, provider, {
-        chainId,
-        quote: node.parent ? sourceToken(node, 'currency') : { address: node.proposal.currencyToken, name: null },
-    })));
+    const pools = await Promise.all(nodes.map((node) => fetchOutcomePools(node.proposal, provider, { chainId })));
     return attachFamilyPools(family, new Map(nodes.map((node, i) => [node, pools[i]])));
 }
 
@@ -413,28 +405,4 @@ export function familyRedeemPlan(resolution, balances) {
         paidBelow = amounts;
     }
     return steps.filter(({ amounts }) => amounts.company > 0n || amounts.currency > 0n);
-}
-
-/**
- * The chance history of an answer down its path, from the price history of
- * each prediction pool on the way (attachFamilyPools chancePools): at every
- * time any of them has a point, the product of each one's latest price. It
- * starts once every pool has a price.
- * @param {Array<Array<{timestamp: number, price: number}>>} seriesList oldest first each
- * @returns {Array<{timestamp: number, price: number}>}
- */
-export function chanceHistory(seriesList) {
-    if (seriesList.length === 0 || seriesList.some((series) => series.length === 0)) return [];
-    if (seriesList.length === 1) return seriesList[0];
-    const times = [...new Set(seriesList.flatMap((series) => series.map((point) => point.timestamp)))].sort((a, b) => a - b);
-    const cursors = seriesList.map(() => -1);
-    const points = [];
-    for (const time of times) {
-        seriesList.forEach((series, i) => {
-            while (cursors[i] + 1 < series.length && series[cursors[i] + 1].timestamp <= time) cursors[i] += 1;
-        });
-        if (cursors.some((cursor) => cursor < 0)) continue;
-        points.push({ timestamp: time, price: seriesList.reduce((total, series, i) => total * series[cursors[i]].price, 1) });
-    }
-    return points;
 }

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import { fetchPoolCandles } from '../../../utils/SubgraphPoolFetcher';
-import { chanceHistory } from '../../../utils/proposalFamily';
 
 // One color per answer, shared with the outcome list's legend dots.
 const ANSWER_COLORS = [
@@ -33,7 +32,7 @@ const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height =
 
   // Pool addresses only change when a pool is created, not with every price.
   const addresses = (pools ?? [])
-    .flatMap((row) => [row.conditional, ...row.chancePools].map((pool) => pool?.address))
+    .flatMap((row) => [row.conditional, row.prediction].map((pool) => pool?.address))
     .filter(Boolean);
   const addressKey = [...new Set(addresses.map((address) => address.toLowerCase()))].join(',');
 
@@ -61,9 +60,7 @@ const CategoricalHistoryChart = ({ pools, chainId, metric, selectedKey, height =
 
   const history = (pool) => (pool && candles?.get(pool.address.toLowerCase())) || [];
   const lines = (pools ?? []).map((row) => {
-    const points = metric === 'chance'
-      ? (row.chancePools.every(Boolean) ? chanceHistory(row.chancePools.map(history)) : [])
-      : history(row.conditional);
+    const points = history(metric === 'chance' ? row.prediction : row.conditional);
     const current = metric === 'chance' ? row.chance : row.conditional?.price ?? null;
     return { row, current, data: points.map(({ timestamp, price }) => ({ time: timestamp, value: price })) };
   });

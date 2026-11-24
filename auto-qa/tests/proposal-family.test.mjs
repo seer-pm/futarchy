@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    attachFamilyPools, buildFamily, chanceHistory, familyLeaves, familyMergeable, familyMergePlan, familyNodes,
+    attachFamilyPools, buildFamily, familyLeaves, familyMergeable, familyMergePlan, familyNodes,
     familyRedeemPlan, familyResolution, familySplitPlan, tradeSplitPlan,
 } from '../../src/utils/proposalFamily.js';
 
@@ -64,20 +64,21 @@ test('only the first proposal chained to an answer is followed, and the rest are
     assert.deepEqual(result.warnings.map((warning) => warning.code), ['several-chained-proposals']);
 });
 
-test('the chance of a follow-up answer is its own times the chance of the answer it follows', () => {
+test('every answer\'s chance is its own prediction price, and the chained Other needs no pools', () => {
     const pool = (price) => ({ address: `0xP${price}`, price });
     const f = family();
     const [root, child] = familyNodes(f);
-    const pools = (otherChance) => new Map([
-        [root, [{ prediction: pool(0.35) }, { prediction: pool(0.25) }, { prediction: otherChance === null ? null : pool(otherChance) }]],
-        [child, [{ prediction: pool(0.25) }, { prediction: pool(0.75) }]],
+    // Prediction pools all quote in sDAI: the follow-up answers' prices are already their chance.
+    const pools = new Map([
+        [root, [{ label: 'A', prediction: pool(0.35) }, { label: 'B', prediction: pool(0.25) }, { label: 'Other', prediction: null }]],
+        [child, [{ label: 'D', prediction: pool(0.3) }, { label: 'Other', prediction: null }]],
     ]);
-    const { leaves, all } = attachFamilyPools(f, pools(0.4));
-    assert.deepEqual(leaves.map((leaf) => leaf.chance), [0.35, 0.25, 0.4 * 0.25, 0.4 * 0.75]);
-    // The liquidity screens list every pool, the chained answer's too.
-    assert.equal(all.length, 5);
-    // Without a price for the root's Other the follow-up chances are unknown, not their conditional chance.
-    assert.deepEqual(attachFamilyPools(f, pools(null)).leaves.map((leaf) => leaf.chance), [0.35, 0.25, null, null]);
+    const { leaves, all } = attachFamilyPools(f, pools);
+    assert.deepEqual(leaves.map((leaf) => leaf.chance), [0.35, 0.25, 0.3, null]);
+    // The liquidity screens list every answer; the root's Other the follow-up question splits is marked chained.
+    assert.deepEqual(all.map((row) => [row.label, row.chained]), [
+        ['A', false], ['B', false], ['Other', true], ['D (Other)', false], ['Other (Other)', false],
+    ]);
 });
 
 test('merging can take a chained answer\'s tokens from merging the follow-up question first', () => {
@@ -168,14 +169,3 @@ test('a root answer, or an Invalid follow-up question, pays like any other slot'
     assert.equal(familyResolution(family(), () => ({ resolved: false })).pending, null);
 });
 
-test('chance history multiplies the latest price of each pool once all have one', () => {
-    const parent = [{ timestamp: 100, price: 0.5 }, { timestamp: 300, price: 0.4 }];
-    const child = [{ timestamp: 200, price: 0.2 }, { timestamp: 400, price: 0.5 }];
-    assert.deepEqual(chanceHistory([parent, child]), [
-        { timestamp: 200, price: 0.5 * 0.2 },
-        { timestamp: 300, price: 0.4 * 0.2 },
-        { timestamp: 400, price: 0.4 * 0.5 },
-    ]);
-    assert.deepEqual(chanceHistory([parent]), parent);
-    assert.deepEqual(chanceHistory([parent, []]), []);
-});

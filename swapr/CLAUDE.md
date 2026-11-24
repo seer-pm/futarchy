@@ -180,7 +180,9 @@ npm run call-pool-apis
   `parentOutcome` in the config; interactive mode asks), such as its "Other": its tokens
   are split from that answer's tokens and the market page shows both as one market
   (`src/utils/proposalFamily.js`). `categorical-pools.js` then splits the parent
-  answer's tokens and quotes the prediction pools in its currency token
+  answer's tokens and quotes the prediction pools in the currency collateral, as
+  Seer's opportunity markets do, so their price is the answer's whole chance; it
+  makes no pools for an answer another proposal follows up
 - `categorical-other-chain.js` (`npm run categorical:other`) creates a categorical question
   that can grow, as Seer's `create-other-chain-markets.ts`: every proposal ends with
   "Other", and `--parent <any proposal of the chain> --answer <name>` adds candidates
