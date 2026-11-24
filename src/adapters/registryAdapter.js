@@ -85,6 +85,35 @@ async function queryProposalMetadata(normalizedAddress) {
 }
 
 /**
+ * The chained proposals a categorical proposal's market shows
+ * (utils/proposalFamily.js): the addresses its registry metadata lists in
+ * `chainedProposals`, none when it lists none or is not registered. A failed
+ * read or unreadable metadata throws: it must not pass for an empty list,
+ * which would drop the chained proposals and their tokens from the market.
+ * @param {string} rootAddress the family's root proposal
+ * @returns {Promise<string[]>}
+ */
+export function fetchChainedProposalsFromRegistry(rootAddress) {
+    const address = rootAddress.toLowerCase();
+    return cachedOnce(`registry:chained:${address}`, async () => {
+        const response = await fetch(REGISTRY_SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: `{ proposalEntities(where: { proposalAddress: "${address}" }, first: 5) { metadata organization { aggregator { id } } } }` }),
+        });
+        if (!response.ok) throw new Error(`registry: HTTP ${response.status}`);
+        const { data, errors } = await response.json();
+        if (errors?.length) throw new Error(`registry: ${errors[0].message}`);
+        const entity = data.proposalEntities.find(
+            (e) => e.organization?.aggregator?.id?.toLowerCase() === DEFAULT_AGGREGATOR.toLowerCase()
+        );
+        if (!entity?.metadata) return [];
+        const list = JSON.parse(entity.metadata).chainedProposals;
+        return Array.isArray(list) ? list.filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a)) : [];
+    });
+}
+
+/**
  * Extract chain ID from ProposalEntity metadata
  * @param {Object} proposalEntity - The ProposalEntity from Registry
  * @returns {number|null} - Chain ID (1 or 100) or null

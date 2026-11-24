@@ -31,6 +31,7 @@
 // Reads PRIVATE_KEY and RPC_URL from .env, like algebra-cli.js.
 require('dotenv').config();
 const { ethers } = require('ethers');
+const { registryEntry } = require('./categorical-registry');
 
 const RPC_URL = process.env.RPC_URL || 'https://rpc.gnosischain.com';
 const CATEGORICAL_ROUTER = process.env.CATEGORICAL_ROUTER_ADDRESS || '0x97Fa06A3067bC5faB00D28A30aC7E8555742a023';
@@ -130,11 +131,18 @@ async function answerChance(market, index) {
   return total === null ? null : total - others.reduce((a, b) => a + b, 0);
 }
 
-// The answers of `address` another proposal of the factory follows up.
+// The answers of `address` a proposal its root's registry metadata lists in
+// chainedProposals follows up, as the market page shows them
+// (src/utils/proposalFamily.js); a follow-up proposal nobody listed does not count.
 async function followedUpAnswers(address) {
+  let root = address;
+  for (let parent = await proposal.attach(root).parentMarket(); parent !== ethers.ZeroAddress; parent = await proposal.attach(root).parentMarket()) root = parent;
+  const listed = new Set((await registryEntry(root))?.listed ?? []);
   const count = Number(await categoricalFactory.marketsCount());
   const children = await Promise.all(Array.from({ length: count }, async (_, i) => {
-    const child = proposal.attach(await categoricalFactory.proposals(i));
+    const childAddress = await categoricalFactory.proposals(i);
+    if (!listed.has(childAddress.toLowerCase())) return null;
+    const child = proposal.attach(childAddress);
     return (await child.parentMarket()).toLowerCase() === address.toLowerCase() ? Number(await child.parentOutcome()) : null;
   }));
   return new Set(children.filter((index) => index !== null));

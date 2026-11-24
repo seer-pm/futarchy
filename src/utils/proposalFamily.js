@@ -6,7 +6,9 @@
  * markets on "Other": a question with candidates A, B, C and Other gets a
  * later question with D and Other, whose tokens are split from the first
  * question's Other tokens and redeem to them. A family is a root proposal and
- * every proposal chained to its answers, at any depth.
+ * every proposal chained to its answers, at any depth. Anyone can chain a
+ * proposal to any answer, so the app only follows the ones the root's registry
+ * metadata lists in `chainedProposals` (fetchProposalFamily listChained).
  *
  * Each answer of a family is one of:
  *   - a leaf: an answer with no proposal chained to it (A, B, C, D, the last
@@ -85,14 +87,17 @@ export async function fetchChainedProposals(factory, provider) {
  * @param {object} root fetchProposalOutcomes of the root
  * @param {Map<string, Array<{address: string, parentOutcome: number}>>} chained
  * @param {Map<string, object>} proposals fetchProposalOutcomes by lowercase address
+ * @param {Set<string>|null} [listed] lowercase addresses of the chained proposals
+ *   to follow; null follows every one
  * @returns {{root: object, warnings: Array<{code: string, message: string}>}}
  */
-export function buildFamily(root, chained, proposals) {
+export function buildFamily(root, chained, proposals, listed = null) {
     const warnings = [];
     const build = (proposal, parent, depth) => {
         const node = { proposal, parent, children: new Map(), depth };
         if (depth >= MAX_DEPTH) return node;
         for (const { address, parentOutcome } of chained.get(lower(proposal.address)) ?? []) {
+            if (listed && !listed.has(lower(address))) continue;
             const child = proposals.get(lower(address));
             if (!child || child.kind !== 'categorical' || parentOutcome >= proposal.outcomes.length
                 || lower(child.companyToken) !== lower(proposal.companyToken)
@@ -113,12 +118,15 @@ export function buildFamily(root, chained, proposals) {
 
 /**
  * The family of a proposal: its root, found by following parentMarket up, and
- * every proposal of `factory` chained below it.
+ * the proposals of `factory` chained below it.
  * @param {string} proposalAddress any proposal of the family
  * @param {{send: Function}} provider batching provider (utils/getBestRpc.js)
- * @param {{chainId?: number, conditionalTokens?: string, factory?: string|null}} [options]
+ * @param {{chainId?: number, conditionalTokens?: string, factory?: string|null,
+ *   listChained?: (rootAddress: string) => Promise<string[]>}} [options] listChained
+ *   gives the chained proposals to follow (the root's registry metadata,
+ *   adapters/registryAdapter.js); without it every one is followed
  */
-export async function fetchProposalFamily(proposalAddress, provider, { chainId = 100, conditionalTokens, factory } = {}) {
+export async function fetchProposalFamily(proposalAddress, provider, { chainId = 100, conditionalTokens, factory, listChained } = {}) {
     const options = { chainId, conditionalTokens };
     const proposals = new Map();
     const fetchOne = async (address) => {
@@ -133,15 +141,17 @@ export async function fetchProposalFamily(proposalAddress, provider, { chainId =
     const chained = factoryAddress ? await fetchChainedProposals(factoryAddress, provider) : new Map();
     let root = start;
     for (let depth = 0; root.parentMarket && depth < MAX_DEPTH; depth++) root = await fetchOne(root.parentMarket);
+    const listed = listChained ? new Set((await listChained(root.address)).map(lower)) : null;
 
     // Read every proposal below the root, level by level.
     let level = [root];
     for (let depth = 0; level.length > 0 && depth < MAX_DEPTH; depth++) {
-        const next = level.flatMap((proposal) => (chained.get(lower(proposal.address)) ?? []).map(({ address }) => address));
+        const next = level.flatMap((proposal) => (chained.get(lower(proposal.address)) ?? []).map(({ address }) => address))
+            .filter((address) => !listed || listed.has(lower(address)));
         level = await Promise.all(next.map((address) => fetchOne(address).catch(() => null)));
         level = level.filter((proposal) => proposal?.kind === 'categorical');
     }
-    return buildFamily(root, chained, proposals);
+    return buildFamily(root, chained, proposals, listed);
 }
 
 /** Every proposal of a family, root first, parents before their chained proposals. */

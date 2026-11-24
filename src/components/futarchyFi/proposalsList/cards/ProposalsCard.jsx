@@ -7,6 +7,7 @@ import { getMarketUrl } from "../../../../utils/urlUtils";
 import { getRpcProvider } from "../../../../utils/getBestRpc";
 import { fetchFamilyPools, fetchProposalFamily } from "../../../../utils/proposalFamily";
 import { answerColor } from "../../marketPage/CategoricalHistoryChart";
+import { fetchChainedProposalsFromRegistry } from "../../../../adapters/registryAdapter";
 
 // Subgraph-backed pool fetcher (replaces SupabasePoolFetcher)
 const poolFetcher = createSubgraphPoolFetcher();
@@ -307,7 +308,7 @@ const useCategoricalAnswers = (proposalID, chainId = 100) => {
     if (!proposalID) return undefined;
     let cancelled = false;
     const provider = getRpcProvider(chainId);
-    fetchProposalFamily(proposalID, provider, { chainId })
+    fetchProposalFamily(proposalID, provider, { chainId, listChained: fetchChainedProposalsFromRegistry })
       .then((family) => fetchFamilyPools(family, provider, { chainId }))
       .then(({ leaves }) => {
         if (cancelled) return;

@@ -64,6 +64,22 @@ test('only the first proposal chained to an answer is followed, and the rest are
     assert.deepEqual(result.warnings.map((warning) => warning.code), ['several-chained-proposals']);
 });
 
+test('only the chained proposals the root lists are followed, ahead of earlier unlisted ones', () => {
+    // A stranger chained 0xBAD3 on the root's Other before our CHILD.
+    const stranger = proposal('0xBAD3', '0xb', ['Mallory', 'Other'], { parentMarket: ROOT.address, parentOutcome: 2 });
+    const chained = new Map([[ROOT.address.toLowerCase(), [
+        { address: stranger.address, parentOutcome: 2 },
+        { address: CHILD.address, parentOutcome: 2 },
+    ]]]);
+    const proposals = byAddress(ROOT, CHILD, stranger);
+    const shown = (listed) => familyLeaves(buildFamily(ROOT, chained, proposals, listed)).map((leaf) => leaf.label);
+    assert.deepEqual(shown(new Set([CHILD.address.toLowerCase()])), ['A', 'B', 'D', 'Other']);
+    // Nothing listed: the root alone, its Other a plain answer.
+    assert.deepEqual(shown(new Set()), ['A', 'B', 'Other']);
+    // Without a list, the first created wins, as before.
+    assert.deepEqual(shown(null), ['A', 'B', 'Mallory', 'Other']);
+});
+
 test('every answer\'s chance is its own prediction price, and the chained Other needs no pools', () => {
     const pool = (price) => ({ address: `0xP${price}`, price });
     const f = family();

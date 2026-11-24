@@ -20,17 +20,27 @@
 //       The new proposal follows up the "Other" of the chain's last proposal, and
 //       takes its question, collaterals, bond, category, language and opening
 //       time, so every proposal of the chain asks the same question.
+//   The market page only shows the proposals the root's registry metadata
+//   lists in `chainedProposals` (src/utils/proposalFamily.js), and so does this
+//   script: a new proposal follows up the "Other" of the last listed one, and
+//   once it is mined the script prints the root's metadata with it added and
+//   the updateExtendedMetadata call that saves it (signed by the owner of the
+//   root's ProposalMetadata).
 //   Without --send the script prints the plan and estimates the gas; with
 //   --send it creates the proposal. The sent transaction is saved in
-//   tmp/categorical-other-chain.pending.json until it is mined, so a run that
-//   stopped while it was pending waits for it instead of sending it again.
+//   tmp/categorical-other-chain.pending.json until it is mined and the root's
+//   metadata lists the proposal it created: a run that stopped before waits
+//   for the transaction, or prints the metadata update again, instead of
+//   creating the proposal a second time.
 // Reads PRIVATE_KEY and RPC_URL from the environment or .env, like algebra-cli.js;
-// CATEGORICAL_FACTORY_ADDRESS overrides the factory.
+// CATEGORICAL_FACTORY_ADDRESS overrides the factory; REGISTRY_GRAPHQL_URL and
+// NEXT_PUBLIC_FUTARCHY_AGGREGATOR the registry, as in the app.
 require('dotenv').config();
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { ethers } = require('ethers');
+const { AGGREGATOR, registryEntry } = require('./categorical-registry');
 
 const RPC_URL = process.env.RPC_URL || 'https://rpc.gnosischain.com';
 const FACTORY = process.env.CATEGORICAL_FACTORY_ADDRESS || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295';
@@ -39,6 +49,7 @@ const SDAI = '0xaf204776c7245bF4147c2612BF6e5972Ee483701';
 const OTHER = 'Other';
 // Reality.eth separates question, answers, category and language with it.
 const SEPARATOR = '\u241f';
+
 
 const PENDING_FILE = path.join(__dirname, 'tmp', 'categorical-other-chain.pending.json');
 
@@ -129,31 +140,39 @@ async function chainedProposals() {
   return children;
 }
 
+async function rootOf(address) {
+  for (;;) {
+    const parent = await proposalAt(address).parentMarket();
+    if (parent === ethers.ZeroAddress) return address;
+    address = parent;
+  }
+}
+
 /**
- * The chain from its root down to its last proposal, following each "Other".
+ * The chain from its root down to its last proposal, following each "Other"
+ * to the proposal the root's registry metadata lists (chainedProposals).
  * `start` can be any proposal of the chain: the root is found through parentMarket.
  */
 async function chainOf(start) {
-  let root = start;
-  for (;;) {
-    const parent = await proposalAt(root).parentMarket();
-    if (parent === ethers.ZeroAddress) break;
-    root = parent;
-  }
+  const root = await rootOf(start);
+  const entry = await registryEntry(root);
+  if (!entry) console.warn(`Warning: ${root} is not in the registry (aggregator ${AGGREGATOR}); the market page will not show its chain until it is registered.`);
+  const listed = new Set(entry?.listed ?? []);
   const children = await chainedProposals();
   const chain = [];
   for (let address = root; address;) {
     const outcomes = await answersOf(address);
     const otherIndex = outcomes.findIndex((answer) => answer.toLowerCase() === OTHER.toLowerCase());
     chain.push({ address, outcomes, otherIndex });
-    const next = otherIndex >= 0 ? children.get(`${address.toLowerCase()}:${otherIndex}`) ?? [] : [];
-    if (next.length > 1) {
-      console.warn(`Warning: ${next.length} proposals follow up "${OTHER}" of ${address}; the market shows the first, ${next[0]}, and so does this script.`);
+    const all = otherIndex >= 0 ? children.get(`${address.toLowerCase()}:${otherIndex}`) ?? [] : [];
+    const next = all.filter((child) => listed.has(child.toLowerCase()));
+    if (all.length > next.length) {
+      console.warn(`Warning: ${all.length - next.length} proposal(s) not listed in the root's chainedProposals follow up "${OTHER}" of ${address}; the market ignores them, and so does this script.`);
     }
     address = next[0];
   }
   if (!chain.some(({ address }) => address.toLowerCase() === start.toLowerCase())) {
-    throw new Error(`${start} is not on the chain the market shows: another proposal already follows up the same answer.`);
+    throw new Error(`${start} is not on the chain the market shows: the root's registry metadata does not list it in chainedProposals.`);
   }
   return chain;
 }
@@ -256,15 +275,51 @@ async function main() {
   await reportMined(tx.hash);
 }
 
-/** Waits for a createProposal transaction and prints the proposal it created. */
+/**
+ * Waits for a createProposal transaction and prints the proposal it created.
+ * The pending file then records that proposal until the root's metadata
+ * lists it (settlePending).
+ */
 async function reportMined(hash) {
   const receipt = await provider.waitForTransaction(hash);
-  fs.rmSync(PENDING_FILE, { force: true });
-  if (receipt.status !== 1) throw new Error(`createProposal reverted: ${hash}`);
+  if (receipt.status !== 1) {
+    fs.rmSync(PENDING_FILE, { force: true });
+    throw new Error(`createProposal reverted: ${hash}`);
+  }
   const event = receipt.logs
     .map((log) => { try { return factory.interface.parseLog(log); } catch { return null; } })
     .find((parsed) => parsed?.name === 'NewProposal');
-  console.log(`Proposal: ${event.args.proposal} (block ${receipt.blockNumber})`);
+  const proposal = event.args.proposal;
+  console.log(`Proposal: ${proposal} (block ${receipt.blockNumber})`);
+  fs.writeFileSync(PENDING_FILE, JSON.stringify({ hash, proposal }, null, 2));
+  if (await printRegistryUpdate(proposal)) fs.rmSync(PENDING_FILE, { force: true });
+}
+
+/**
+ * The root's registry metadata with `proposal` added to chainedProposals, and
+ * the call that saves it: the market page shows a chained proposal only once
+ * the root lists it.
+ */
+/** @returns {Promise<boolean>} whether nothing is left to publish */
+async function printRegistryUpdate(proposal) {
+  const root = await rootOf(proposal);
+  if (root.toLowerCase() === proposal.toLowerCase()) {
+    console.log('\nRegister this proposal in the registry; later levels are added to its metadata\'s chainedProposals.');
+    return true;
+  }
+  const entry = await registryEntry(root);
+  if (!entry) {
+    console.log(`\n${root} is not in the registry: register it, with "chainedProposals": ["${proposal}"] in its metadata.`);
+    return false;
+  }
+  const chained = Array.isArray(entry.metadata.chainedProposals) ? entry.metadata.chainedProposals : [];
+  if (chained.some((a) => a.toLowerCase() === proposal.toLowerCase())) return true;
+  const metadata = JSON.stringify({ ...entry.metadata, chainedProposals: [...chained, ethers.getAddress(proposal)] });
+  const data = new ethers.Interface(['function updateExtendedMetadata(string,string)']).encodeFunctionData('updateExtendedMetadata', [metadata, entry.metadataURI]);
+  console.log(`\nThe market page shows ${proposal} once the root lists it. New metadata of ${root}:\n${metadata}`);
+  console.log(`Save it from the owner of ProposalMetadata ${entry.address} ("Edit Proposal" on the market page, or this transaction on Gnosis):`);
+  console.log(`  to ${entry.address}\n  data ${data}`);
+  return false;
 }
 
 /**
@@ -276,6 +331,18 @@ async function reportMined(hash) {
 async function settlePending() {
   if (!fs.existsSync(PENDING_FILE)) return false;
   const pending = JSON.parse(fs.readFileSync(PENDING_FILE, 'utf8'));
+  if (pending.proposal) {
+    // Created by a previous run, not yet listed by the root: until it is, the
+    // chain this script reads does not have it, so creating again could repeat it.
+    console.log(`${pending.proposal}, created by a previous run (${pending.hash}), must be listed in its root's chainedProposals first.`);
+    if (await printRegistryUpdate(pending.proposal)) {
+      fs.rmSync(PENDING_FILE, { force: true });
+      console.log('It is listed now; continuing.');
+      return false;
+    }
+    console.log(`\nRun the command again once the metadata is saved and indexed (delete ${PENDING_FILE} to give up on it).`);
+    return true;
+  }
   if (!await provider.getTransaction(pending.hash)) {
     console.log(`${pending.hash} from a previous run is unknown to the node (dropped); continuing.`);
     fs.rmSync(PENDING_FILE, { force: true });

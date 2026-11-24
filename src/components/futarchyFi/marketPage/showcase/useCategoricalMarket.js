@@ -4,8 +4,10 @@ import { fetchOnChainResolutions, resolutionKey } from '../../../../utils/onChai
 import { categoricalTotals } from '../../../../utils/proposalOutcomes';
 import { familyNodes, familyResolution, fetchFamilyBalances, fetchFamilyPools, fetchProposalFamily } from '../../../../utils/proposalFamily';
 import { fetchProposalMarketData } from '../../../../services/proposalMarketData';
+import { fetchChainedProposalsFromRegistry } from '../../../../adapters/registryAdapter';
 
 const POOL_REFRESH_MS = 30_000;
+const FAMILY_RETRY_MS = 10_000;
 
 /**
  * A categorical proposal's outcomes, their pools, resolution and the
@@ -34,15 +36,22 @@ export function useCategoricalMarket(config, address) {
   const [volumeByPool, setVolumeByPool] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // A failed read (RPC, or the registry's chainedProposals) leaves no family
+  // rather than a partial one, and is tried again after FAMILY_RETRY_MS.
+  const [familyAttempt, setFamilyAttempt] = useState(0);
   useEffect(() => {
     setFamily(null);
     if (!proposalAddress) return undefined;
     let cancelled = false;
-    fetchProposalFamily(proposalAddress, getRpcProvider(chainId), { chainId, conditionalTokens })
+    let retry = null;
+    fetchProposalFamily(proposalAddress, getRpcProvider(chainId), { chainId, conditionalTokens, listChained: fetchChainedProposalsFromRegistry })
       .then((result) => { if (!cancelled) setFamily(result); })
-      .catch((error) => console.warn('[useCategoricalMarket] Could not read the proposal outcomes:', error?.message));
-    return () => { cancelled = true; };
-  }, [proposalAddress, chainId, conditionalTokens]);
+      .catch((error) => {
+        console.warn('[useCategoricalMarket] Could not read the proposal outcomes:', error?.message);
+        if (!cancelled) retry = setTimeout(() => setFamilyAttempt((n) => n + 1), FAMILY_RETRY_MS);
+      });
+    return () => { cancelled = true; clearTimeout(retry); };
+  }, [proposalAddress, chainId, conditionalTokens, familyAttempt]);
 
   const proposal = family?.root.proposal ?? null;
   const isCategorical = proposal?.kind === 'categorical';

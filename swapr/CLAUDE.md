@@ -189,6 +189,9 @@ npm run call-pool-apis
   with a new proposal on the last proposal's "Other", taking its question, collaterals,
   bond, category, language and opening time. Dry run by default, `--send` creates it.
   The market page hides an "Other" that a later proposal follows up
+  and only shows the follow-up proposals the root's registry metadata lists in
+  `chainedProposals`; after creating one the script prints that metadata with it
+  added and the `updateExtendedMetadata` call for the metadata owner to send
 
 ### automate-futarchy.js
 
