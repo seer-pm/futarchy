@@ -56,7 +56,19 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState({ busy: false, message: null, error: null });
 
-  const rows = useMemo(() => familySlots(family), [family]);
+  // The market's answers in the order the outcomes show them, then the answers
+  // follow-up questions split again, then every question's INVALID: each
+  // question has its own INVALID tokens, named after the question past the first.
+  const rows = useMemo(() => {
+    const slots = familySlots(family);
+    const byKey = new Map(slots.map((slot) => [slot.key, slot]));
+    const invalids = slots.filter((slot) => slot.isInvalid);
+    return [
+      ...familyLeaves(family).map((leaf) => byKey.get(leaf.key)),
+      ...slots.filter((slot) => slot.chained),
+      ...invalids.map((slot, i) => (i === 0 ? slot : { ...slot, label: `Invalid (question ${i + 1})` })),
+    ];
+  }, [family]);
   // What a split gives: the market's answers and every question's INVALID.
   const answerCount = useMemo(() => familyLeaves(family).length + rows.filter((row) => row.isInvalid).length, [family, rows]);
   const winner = resolution?.winner ?? null;
@@ -67,8 +79,10 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
   const collateral = { company: proposal.companyToken, currency: proposal.currencyToken };
   const balanceOf = (token) => balances?.get(token.toLowerCase()) ?? 0n;
   // An answer a follow-up question splits again, such as "Other", is not an
-  // outcome of the market: it is shown only while the wallet holds its tokens.
-  const visibleRows = rows.filter((row) => !row.chained || balanceOf(row.company.address) > 0n || balanceOf(row.currency.address) > 0n);
+  // outcome of the market, and a follow-up question's INVALID is one more
+  // INVALID: both are shown only while the wallet holds their tokens.
+  const visibleRows = rows.filter((row) => !(row.chained || (row.isInvalid && row.node.parent))
+    || balanceOf(row.company.address) > 0n || balanceOf(row.currency.address) > 0n);
   const mergeable = balances
     ? { company: familyMergeable(family, balances, 'company'), currency: familyMergeable(family, balances, 'currency') }
     : null;
@@ -195,7 +209,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
                       key={row.key}
                       className={`border-t border-futarchyGray62 dark:border-futarchyGray112/40 ${row.isInvalid || row.chained ? 'text-futarchyGray11 dark:text-white/60' : 'text-futarchyGray12 dark:text-white'} ${won ? 'bg-futarchyGreen3 dark:bg-futarchyGreen11/20' : ''}`}
                     >
-                      <td className="py-2 pr-2" style={row.depth > 0 ? { paddingLeft: `${row.depth}rem` } : undefined}>
+                      <td className="py-2 pr-2">
                         <span
                           className={row.isInvalid ? 'italic' : 'font-medium'}
                           title={row.chained ? 'A follow-up question splits these tokens into its answers' : undefined}
@@ -225,7 +239,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
             <p className="text-xs text-futarchyGray11 dark:text-white/70">
               Invalid tokens pay your collateral back if Reality answers Invalid, which undoes every trade. They have
               no pool: keep them, merging needs them.
-              {visibleRows.some((row) => row.chained) && ' Answers marked \u2192 are split again by a follow-up question, whose tokens are shown below them.'}
+              {visibleRows.some((row) => row.chained) && ' Answers marked \u2192 are split again by a follow-up question into answers listed above.'}
             </p>
 
             {!router ? (
