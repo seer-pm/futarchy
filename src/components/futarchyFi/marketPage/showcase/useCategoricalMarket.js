@@ -20,7 +20,10 @@ const FAMILY_RETRY_MS = 10_000;
  *     screens;
  *   - resolution: familyResolution, resolved once a leaf or INVALID won.
  * For a binary proposal isCategorical is false and the page keeps its YES/NO
- * panels; while the proposal is read it is false too.
+ * panels; while the proposal is read it is false too. Once the proposal is
+ * known to be categorical but its family is not read yet, isCategoricalPending
+ * is true, with familyError when the last read failed (it is retried), so the
+ * page shows neither the YES/NO panels nor a partial family.
  */
 export function useCategoricalMarket(config, address) {
   const proposalAddress = config?.MARKET_ADDRESS;
@@ -39,19 +42,37 @@ export function useCategoricalMarket(config, address) {
   // A failed read (RPC, or the registry's chainedProposals) leaves no family
   // rather than a partial one, and is tried again after FAMILY_RETRY_MS.
   const [familyAttempt, setFamilyAttempt] = useState(0);
+  const [knownCategorical, setKnownCategorical] = useState(false);
+  const [familyError, setFamilyError] = useState(null);
+  useEffect(() => {
+    setKnownCategorical(false);
+    setFamilyError(null);
+  }, [proposalAddress, chainId]);
   useEffect(() => {
     setFamily(null);
     if (!proposalAddress) return undefined;
     let cancelled = false;
     let retry = null;
-    fetchProposalFamily(proposalAddress, getRpcProvider(chainId), { chainId, conditionalTokens, listChained: fetchChainedProposalsFromRegistry })
-      .then((result) => { if (!cancelled) setFamily(result); })
+    fetchProposalFamily(proposalAddress, getRpcProvider(chainId), {
+      chainId,
+      conditionalTokens,
+      listChained: fetchChainedProposalsFromRegistry,
+      onCategorical: () => { if (!cancelled) setKnownCategorical(true); },
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setFamily(result);
+        setFamilyError(null);
+      })
       .catch((error) => {
         console.warn('[useCategoricalMarket] Could not read the proposal outcomes:', error?.message);
-        if (!cancelled) retry = setTimeout(() => setFamilyAttempt((n) => n + 1), FAMILY_RETRY_MS);
+        if (cancelled) return;
+        setFamilyError(error?.message || 'Unknown error');
+        retry = setTimeout(() => setFamilyAttempt((n) => n + 1), FAMILY_RETRY_MS);
       });
     return () => { cancelled = true; clearTimeout(retry); };
   }, [proposalAddress, chainId, conditionalTokens, familyAttempt]);
+  const retryFamily = useCallback(() => setFamilyAttempt((n) => n + 1), []);
 
   const proposal = family?.root.proposal ?? null;
   const isCategorical = proposal?.kind === 'categorical';
@@ -126,6 +147,9 @@ export function useCategoricalMarket(config, address) {
 
   return {
     isCategorical,
+    isCategoricalPending: knownCategorical && !family,
+    familyError: knownCategorical && !family ? familyError : null,
+    retryFamily,
     proposal,
     family,
     pools,

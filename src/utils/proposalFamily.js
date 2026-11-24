@@ -122,19 +122,21 @@ export function buildFamily(root, chained, proposals, listed = null) {
  * @param {string} proposalAddress any proposal of the family
  * @param {{send: Function}} provider batching provider (utils/getBestRpc.js)
  * @param {{chainId?: number, conditionalTokens?: string, factory?: string|null,
- *   listChained?: (rootAddress: string) => Promise<string[]>}} [options] listChained
- *   gives the chained proposals to follow (the root's registry metadata,
- *   adapters/registryAdapter.js); without it every one is followed
+ *   listChained?: (rootAddress: string) => Promise<string[]>, onCategorical?: () => void}} [options]
+ *   listChained gives the chained proposals to follow (the root's registry
+ *   metadata, adapters/registryAdapter.js); without it every one is followed.
+ *   onCategorical is called as soon as the proposal is known to be categorical,
+ *   before the rest of the family is read
  */
-export async function fetchProposalFamily(proposalAddress, provider, { chainId = 100, conditionalTokens, factory, listChained } = {}) {
+export async function fetchProposalFamily(proposalAddress, provider, { chainId = 100, conditionalTokens, factory, listChained, onCategorical } = {}) {
     const options = { chainId, conditionalTokens };
     const proposals = new Map();
-    const fetchOne = async (address) => {
-        if (!proposals.has(lower(address))) proposals.set(lower(address), await fetchProposalOutcomes(address, provider, options));
+    const fetchOne = async (address, extra) => {
+        if (!proposals.has(lower(address))) proposals.set(lower(address), await fetchProposalOutcomes(address, provider, { ...options, ...extra }));
         return proposals.get(lower(address));
     };
 
-    const start = await fetchOne(proposalAddress);
+    const start = await fetchOne(proposalAddress, { onCategorical });
     // A Yes/No proposal has no answers to follow up.
     if (start.kind !== 'categorical') return buildFamily(start, new Map(), proposals);
     const factoryAddress = factory === undefined ? CATEGORICAL_FACTORY_BY_CHAIN[Number(chainId) === 1 ? 1 : 100] : factory;
@@ -148,7 +150,9 @@ export async function fetchProposalFamily(proposalAddress, provider, { chainId =
     for (let depth = 0; level.length > 0 && depth < MAX_DEPTH; depth++) {
         const next = level.flatMap((proposal) => (chained.get(lower(proposal.address)) ?? []).map(({ address }) => address))
             .filter((address) => !listed || listed.has(lower(address)));
-        level = await Promise.all(next.map((address) => fetchOne(address).catch(() => null)));
+        // A listed proposal that cannot be read fails the family rather than
+        // leaving its answers out; an unlisted one is only skipped.
+        level = await Promise.all(next.map((address) => (listed ? fetchOne(address) : fetchOne(address).catch(() => null))));
         level = level.filter((proposal) => proposal?.kind === 'categorical');
     }
     return buildFamily(root, chained, proposals, listed);

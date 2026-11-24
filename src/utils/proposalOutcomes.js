@@ -160,7 +160,9 @@ export function categoricalWarnings({ encodedQuestion, outcomes, tokenNames }) {
  *
  * @param {string} proposalAddress
  * @param {{send: Function}} provider
- * @param {{chainId?: number, conditionalTokens?: string}} [options]
+ * @param {{chainId?: number, conditionalTokens?: string, onCategorical?: () => void}} [options]
+ *   onCategorical is called once the proposal is known to be categorical,
+ *   before its tokens and labels are read
  * @returns {Promise<{
  *   address: string,
  *   kind: 'binary'|'categorical',
@@ -177,7 +179,7 @@ export function categoricalWarnings({ encodedQuestion, outcomes, tokenNames }) {
  *   answer parentOutcome this one is conditional on (utils/proposalFamily.js),
  *   null for a proposal on the collaterals themselves.
  */
-export async function fetchProposalOutcomes(proposalAddress, provider, { chainId = 100, conditionalTokens } = {}) {
+export async function fetchProposalOutcomes(proposalAddress, provider, { chainId = 100, conditionalTokens, onCategorical } = {}) {
     const ctf = conditionalTokens || CONDITIONAL_TOKENS_BY_CHAIN[Number(chainId) === 1 ? 1 : 100];
     const call = (functionName, args) => read(provider, proposalAddress, PROPOSAL_ABI, functionName, args);
 
@@ -195,6 +197,7 @@ export async function fetchProposalOutcomes(proposalAddress, provider, { chainId
     if (kind === 'binary' && slotCount !== 2) {
         throw new Error(`Unexpected futarchy proposal layout: ${slotCount} slots, ${numOutcomes} outcomes`);
     }
+    if (kind === 'categorical') onCategorical?.();
 
     const answers = slotCount - (kind === 'categorical' ? 1 : 0);
     const tokenCount = kind === 'categorical' ? 2 * answers + 2 : 4;

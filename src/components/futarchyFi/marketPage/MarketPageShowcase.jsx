@@ -9,6 +9,7 @@ import { useSnapshotData } from '../../../hooks/useSnapshotData';
 import MarketBalancePanel from './MarketBalancePanel';
 import CategoricalPositionsPanel from './CategoricalPositionsPanel';
 import CategoricalOutcomesCard from './CategoricalOutcomesCard';
+import CategoricalStatusCard from './CategoricalStatusCard';
 import CategoricalTradePanel from './CategoricalTradePanel';
 import { useYesNoPoolData } from '../../../hooks/usePoolData';
 import { FUTARCHY_ROUTER_ADDRESS as DEFAULT_FUTARCHY_ROUTER_ADDRESS } from './constants/contracts';
@@ -305,6 +306,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                           selectedKey={selectedOutcome}
                           onSelect={setSelectedOutcome}
                         />
+                      ) : categorical.isCategoricalPending ? (
+                        <CategoricalStatusCard categorical={categorical} />
                       ) : <MarketChartSection
                         showTripleChart={showTripleChart}
                         showSubgraphChart={showSubgraphChart}
@@ -322,7 +325,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                       />}
 
                       {/* Tabs Section: trades and positions, per answer for a categorical proposal */}
-                      <MarketTabsSection
+                      {!categorical.isCategoricalPending && <MarketTabsSection
                         tabs={tabs}
                         balances={balances}
                         config={config}
@@ -332,7 +335,7 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                         setCurrentTransactionData={confirmSwap.setCurrentTransactionData}
                         setIsConfirmModalOpen={confirmSwap.setIsConfirmModalOpen}
                         categorical={categorical}
-                      />
+                      />}
                     </div>
 
                     {/* Right side - Balance Panel */}
@@ -356,6 +359,8 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                             onConnectWallet={handleConnectWallet}
                           />
                           </>
+                        ) : categorical.isCategoricalPending ? (
+                          <CategoricalStatusCard categorical={categorical} title="Trade" />
                         ) : (
                           <div className="">
                             <ShowcaseSwapComponent
@@ -383,10 +388,10 @@ const MarketPageShowcase = ({ hidden = false, debugMode = false, proposal = null
                           </div>
                         )}
 
-                        {!categorical.isCategorical && <YourViewCard subject={marketSubject} />}
+                        {!categorical.isCategorical && !categorical.isCategoricalPending && <YourViewCard subject={marketSubject} />}
 
                         {/* Balance Stats Container */}
-                        {!categorical.isCategorical && <MarketBalancePanel
+                        {!categorical.isCategorical && !categorical.isCategoricalPending && <MarketBalancePanel
                           positions={positions}
                           address={address}
                           handleOpenCollateralModal={handleOpenCollateralModal}

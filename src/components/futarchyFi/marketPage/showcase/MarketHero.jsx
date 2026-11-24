@@ -290,19 +290,25 @@ const MarketHero = ({
                     }
                   }
 
+                  // Neither pool badge until a categorical market's answers are
+                  // read: its pools are per answer, not YES/NO.
+                  const poolsKnown = !categorical?.isCategoricalPending;
+
                   // Add Liquidity badge
-                  badges.push({
-                    text: 'Add Liquidity',
-                    colorScheme: 'teal',
-                    onClick: () => setIsAddLiquidityModalOpen(true)
-                  });
+                  if (poolsKnown) {
+                    badges.push({
+                      text: 'Add Liquidity',
+                      colorScheme: 'teal',
+                      onClick: () => setIsAddLiquidityModalOpen(true)
+                    });
+                  }
 
                   // Create Pool badge - show when pools are missing (subgraph mode);
                   // a categorical market needs two pools per answer it shows,
                   // not for the answers its follow-up questions split
-                  const poolsMissing = categorical?.isCategorical
+                  const poolsMissing = poolsKnown && (categorical?.isCategorical
                     ? (categorical.allPools ?? []).some((row) => !row.chained && (!row.conditional || !row.prediction))
-                    : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address;
+                    : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address);
                   if (poolsMissing) {
                     badges.push({
                       text: '+ Create Pool',
