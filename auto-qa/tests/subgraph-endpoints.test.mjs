@@ -3,8 +3,7 @@
  *
  * Pins src/config/subgraphEndpoints.js — the single source of truth
  * for which subgraph URLs the frontend uses. A typo, missing chain id,
- * or drift between this and contracts.js DEFAULT_AGGREGATOR breaks
- * data loading silently.
+ * or a second hard-coded aggregator breaks data loading silently.
  *
  * The API HOST is deployment-specific and env-overridable, so it is
  * deliberately not pinned. What is pinned: that the env var is read,
@@ -17,8 +16,8 @@
  * surface even when the live endpoints are reachable.
  *
  * Spec mirrors src/config/subgraphEndpoints.js + cross-checks against
- * src/components/futarchyFi/marketPage/constants/contracts.js for
- * DEFAULT_AGGREGATOR drift.
+ * src/components/futarchyFi/marketPage/constants/contracts.js, which must
+ * not hard-code the aggregator again.
  */
 
 import { test } from 'node:test';
@@ -144,25 +143,18 @@ test('isChainSupported — true for chains 1 and 100, false otherwise', () => {
 });
 
 // ---------------------------------------------------------------------------
-// DEFAULT_AGGREGATOR — must equal the contracts.js value
+// DEFAULT_AGGREGATOR — env-overridable, Seer's aggregator as fallback
 // ---------------------------------------------------------------------------
 
-test('subgraphEndpoints — DEFAULT_AGGREGATOR equals the value in contracts.js', () => {
-    const m1 = SRC.match(/export\s+const\s+DEFAULT_AGGREGATOR\s*=\s*['"]([^'"]+)['"]/);
-    assert.ok(m1, 'DEFAULT_AGGREGATOR not found in subgraphEndpoints.js');
-
-    // contracts.js has it under CONTRACT_ADDRESSES.DEFAULT_AGGREGATOR
-    const m2 = CONTRACTS_SRC.match(/DEFAULT_AGGREGATOR\s*:\s*['"]([^'"]+)['"]/);
-    assert.ok(m2, 'DEFAULT_AGGREGATOR not found in contracts.js');
-
-    assert.equal(m1[1], m2[1],
-        `DEFAULT_AGGREGATOR drift between subgraphEndpoints.js and contracts.js: ` +
-        `${m1[1]} vs ${m2[1]}. ` +
-        `These two values must always be in sync — they refer to the same on-chain contract.`);
+test('subgraphEndpoints — DEFAULT_AGGREGATOR reads NEXT_PUBLIC_FUTARCHY_AGGREGATOR and falls back to Seer\'s', () => {
+    assert.match(SRC,
+        /export\s+const\s+DEFAULT_AGGREGATOR\s*=\s*process\.env\.NEXT_PUBLIC_FUTARCHY_AGGREGATOR\s*\|\|\s*SEER_AGGREGATOR/);
+    const m = SRC.match(/const\s+SEER_AGGREGATOR\s*=\s*['"]([^'"]+)['"]/);
+    assert.ok(m, 'SEER_AGGREGATOR fallback not found in subgraphEndpoints.js');
+    assert.equal(m[1].toLowerCase(), '0xab9c4ffda083f10959a21bd4d4b1ae62713c582d');
 });
 
-test('subgraphEndpoints — DEFAULT_AGGREGATOR is a valid 0x + 40 hex chars address', () => {
-    const m = SRC.match(/export\s+const\s+DEFAULT_AGGREGATOR\s*=\s*['"]([^'"]+)['"]/);
-    assert.match(m[1], /^0x[a-fA-F0-9]{40}$/,
-        `DEFAULT_AGGREGATOR has wrong shape: "${m[1]}"`);
+test('contracts.js — no second copy of the aggregator address', () => {
+    assert.doesNotMatch(CONTRACTS_SRC, /DEFAULT_AGGREGATOR/,
+        'The aggregator lives only in subgraphEndpoints.js, so the env override reaches every caller.');
 });

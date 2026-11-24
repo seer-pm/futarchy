@@ -29,7 +29,8 @@ const MarketModals = ({
   proposalId,
   config,
   configLoading,
-  refetchConfig
+  refetchConfig,
+  categorical
 }) => {
   const {
     isCollateralModalOpen,
@@ -154,15 +155,19 @@ const MarketModals = ({
           config={config}
         />
       )}
+      {/* Closed while a categorical market's answers load (or failed to):
+          without them the modals would offer YES/NO pools. */}
       <AddLiquidityModal
-        isOpen={isAddLiquidityModalOpen}
+        isOpen={isAddLiquidityModalOpen && !categorical?.isCategoricalPending}
         onClose={() => setIsAddLiquidityModalOpen(false)}
         config={config}
+        categorical={categorical}
       />
       <CreatePoolModal
-        isOpen={isCreatePoolModalOpen}
+        isOpen={isCreatePoolModalOpen && !categorical?.isCategoricalPending}
         onClose={() => setIsCreatePoolModalOpen(false)}
         config={config}
+        categorical={categorical}
         onPoolCreated={refetchConfig}
       />
       {isEditProposalModalOpen && (

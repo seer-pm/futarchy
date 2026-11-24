@@ -3,11 +3,8 @@
  * Queries futarchy-complete-new for ProposalEntity metadata
  */
 
-import { AGGREGATOR_SUBGRAPH_URL as REGISTRY_SUBGRAPH_URL } from '../config/subgraphEndpoints';
+import { AGGREGATOR_SUBGRAPH_URL as REGISTRY_SUBGRAPH_URL, DEFAULT_AGGREGATOR } from '../config/subgraphEndpoints';
 import { cachedOnce } from '../services/requestCache';
-
-// Default Aggregator address (Futarchy Finance production)
-const DEFAULT_AGGREGATOR = '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1';
 
 /**
  * Fetch ProposalMetadata from Registry by proposalAddress (trading contract)
@@ -85,6 +82,35 @@ async function queryProposalMetadata(normalizedAddress) {
         console.error('[Registry] Query failed:', error.message);
         return null;
     }
+}
+
+/**
+ * The chained proposals a categorical proposal's market shows
+ * (utils/proposalFamily.js): the addresses its registry metadata lists in
+ * `chainedProposals`, none when it lists none or is not registered. A failed
+ * read or unreadable metadata throws: it must not pass for an empty list,
+ * which would drop the chained proposals and their tokens from the market.
+ * @param {string} rootAddress the family's root proposal
+ * @returns {Promise<string[]>}
+ */
+export function fetchChainedProposalsFromRegistry(rootAddress) {
+    const address = rootAddress.toLowerCase();
+    return cachedOnce(`registry:chained:${address}`, async () => {
+        const response = await fetch(REGISTRY_SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: `{ proposalEntities(where: { proposalAddress: "${address}" }, first: 5) { metadata organization { aggregator { id } } } }` }),
+        });
+        if (!response.ok) throw new Error(`registry: HTTP ${response.status}`);
+        const { data, errors } = await response.json();
+        if (errors?.length) throw new Error(`registry: ${errors[0].message}`);
+        const entity = data.proposalEntities.find(
+            (e) => e.organization?.aggregator?.id?.toLowerCase() === DEFAULT_AGGREGATOR.toLowerCase()
+        );
+        if (!entity?.metadata) return [];
+        const list = JSON.parse(entity.metadata).chainedProposals;
+        return Array.isArray(list) ? list.filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a)) : [];
+    });
 }
 
 /**

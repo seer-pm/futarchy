@@ -125,7 +125,7 @@ function classifyBuy(swap) {
     const tInRole = swap.tokenIn?.role || '';
     const tOutRole = swap.tokenOut?.role || '';
     const isCompanyRole = (r) =>
-        r === 'YES_COMPANY' || r === 'NO_COMPANY' || r === 'COMPANY';
+        r === 'YES_COMPANY' || r === 'NO_COMPANY' || r === 'COMPANY' || r === 'ANSWER_COMPANY';
 
     if (isCompanyRole(tOutRole) && !isCompanyRole(tInRole)) return true;
     if (isCompanyRole(tInRole) && !isCompanyRole(tOutRole)) return false;
@@ -284,6 +284,16 @@ test('classifyBuy: role-based — in=NO_COMPANY, out=non-company → sell', () =
         tokenOut: { role: 'COLLATERAL', symbol: 'sDAI' },
     };
     assert.equal(classifyBuy(swap), false);
+});
+
+test('classifyBuy: a categorical answer\'s ANSWER_COMPANY counts as the company side, in source too', () => {
+    assert.match(SRC, /r === 'ANSWER_COMPANY'/);
+    const swap = {
+        tokenIn: { role: 'ANSWER_COMPANY', symbol: 'REMOVED_WETH' },
+        tokenOut: { role: 'ANSWER_CURRENCY', symbol: 'REMOVED_sDAI' },
+    };
+    assert.equal(classifyBuy(swap), false);
+    assert.equal(classifyBuy({ tokenIn: swap.tokenOut, tokenOut: swap.tokenIn }), true);
 });
 
 test('classifyBuy: role-based — bare COMPANY also counts', () => {

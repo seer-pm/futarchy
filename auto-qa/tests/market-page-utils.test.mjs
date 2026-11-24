@@ -123,6 +123,14 @@ test('computeExecutionPrice: sell = currency received / company paid', () => {
     assert.equal(computeExecutionPrice(swap), 103.31);
 });
 
+test('computeExecutionPrice: a categorical answer\'s company token prices the same way', () => {
+    const swap = {
+        amountIn: '0.5', amountOut: '1000',
+        tokenIn: { role: 'ANSWER_COMPANY' }, tokenOut: { role: 'ANSWER_CURRENCY' },
+    };
+    assert.equal(computeExecutionPrice(swap), 2000);
+});
+
 test('computeExecutionPrice returns null when it cannot tell the sides apart', () => {
     assert.equal(computeExecutionPrice({ amountIn: '1', amountOut: '2', tokenIn: {}, tokenOut: {} }), null);
     assert.equal(computeExecutionPrice({ amountIn: '0', amountOut: '2', tokenIn: { role: 'YES_CURRENCY' }, tokenOut: { role: 'YES_COMPANY' } }), null);

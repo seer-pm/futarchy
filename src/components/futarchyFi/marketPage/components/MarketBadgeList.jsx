@@ -15,6 +15,7 @@ const MarketBadgeList = ({ badges = [] }) => {
           colorScheme={badge.colorScheme}
           link={badge.link}
           onClick={badge.onClick}
+          menu={badge.menu}
         />
       ))}
     </div>

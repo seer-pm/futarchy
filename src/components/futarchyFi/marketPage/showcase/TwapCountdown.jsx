@@ -23,7 +23,12 @@ const formatTwapValue = (value) => {
   return value.toPrecision(4);
 };
 
-// TWAP Countdown Component
+// TWAP Countdown Component.
+// A binary proposal compares its YES and NO pools. A categorical proposal passes
+// `answers`, one entry per answer: { label, poolConfig, companyTokenAddress },
+// where poolConfig is the answer's conditional pool (answer company token /
+// answer currency token, or null when nobody created it). The answer with the
+// highest TWAP leads.
 const TwapCountdown = ({
   twapStartTimestamp,
   twapDurationHours = 24,
@@ -34,8 +39,23 @@ const TwapCountdown = ({
   invertTwapPoolYes = false,
   invertTwapPoolNo = false,
   yesCompanyTokenAddress = null,
-  noCompanyTokenAddress = null
+  noCompanyTokenAddress = null,
+  answers = null
 }) => {
+  const isCategorical = answers !== null;
+  const twapPools = useMemo(() => (isCategorical
+    ? answers.map(({ label, poolConfig, companyTokenAddress }) => ({ label, poolConfig, companyTokenAddress, invert: null }))
+    : [
+      { label: 'YES', poolConfig: yesPoolConfig, companyTokenAddress: yesCompanyTokenAddress, invert: invertTwapPoolYes },
+      { label: 'NO', poolConfig: noPoolConfig, companyTokenAddress: noCompanyTokenAddress, invert: invertTwapPoolNo }
+    ]), [isCategorical, answers, yesPoolConfig, noPoolConfig, yesCompanyTokenAddress, noCompanyTokenAddress, invertTwapPoolYes, invertTwapPoolNo]);
+  // Categorical pools are re-read every 30s as new objects; key the TWAP
+  // calculation on what it reads so a refresh does not restart it.
+  const twapPoolsKey = twapPools.map((pool) => `${pool.label}:${pool.poolConfig?.address}:${pool.companyTokenAddress}:${pool.invert}`).join('|');
+  const twapPoolsRef = useRef(twapPools);
+  twapPoolsRef.current = twapPools;
+  // Comparing needs two pools: YES and NO, or two answers that have one.
+  const canCompare = twapPools.filter((pool) => pool.poolConfig?.address).length >= 2;
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [timeUntilStart, setTimeUntilStart] = useState(null);
   const [isActive, setIsActive] = useState(false);
@@ -43,7 +63,8 @@ const TwapCountdown = ({
   const [isWaitingToStart, setIsWaitingToStart] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [twapResults, setTwapResults] = useState({ yes: null, no: null, spread: null });
+  // One TWAP per entry of twapPools, null while unknown or when it has no pool.
+  const [twapPrices, setTwapPrices] = useState([]);
   const [twapLoading, setTwapLoading] = useState(false);
   const [twapError, setTwapError] = useState(null);
   const [lastTwapUpdate, setLastTwapUpdate] = useState(null);
@@ -171,15 +192,17 @@ const TwapCountdown = ({
   }, [twapStartTimestamp, twapDurationSeconds]);
 
   useEffect(() => {
-    const shouldCalculateTwap = (isActive || hasEnded) && yesPoolConfig?.address && noPoolConfig?.address;
+    const shouldCalculateTwap = (isActive || hasEnded) && canCompare;
 
     if (!shouldCalculateTwap) {
-      setTwapResults({ yes: null, no: null, spread: null });
+      setTwapPrices([]);
       setTwapError(null);
       return;
     }
 
     let cancelled = false;
+    // Prices are per entry of twapPools; drop the ones of the previous pools.
+    setTwapPrices([]);
 
     const runCalculation = async () => {
       try {
@@ -191,20 +214,15 @@ const TwapCountdown = ({
         const secondsAgoStart = Math.max(1, now - twapStartTimestamp);
         const secondsAgoEnd = hasEnded ? Math.max(0, now - twapEndTimestamp) : 0;
 
-        const [yesPrice, noPrice] = await Promise.all([
-          fetchPoolTwap(yesPoolConfig, secondsAgoStart, invertTwapPoolYes, secondsAgoEnd, yesCompanyTokenAddress),
-          fetchPoolTwap(noPoolConfig, secondsAgoStart, invertTwapPoolNo, secondsAgoEnd, noCompanyTokenAddress)
-        ]);
+        // Every pool over the same window. One failure fails the comparison, so
+        // no leader is shown while a pool's TWAP is missing.
+        const prices = await Promise.all(twapPoolsRef.current.map((pool) => (pool.poolConfig?.address
+          ? fetchPoolTwap(pool.poolConfig, secondsAgoStart, pool.invert, secondsAgoEnd, pool.companyTokenAddress)
+          : null)));
 
         if (cancelled) return;
 
-        setTwapResults({
-          yes: yesPrice,
-          no: noPrice,
-          spread: Number.isFinite(yesPrice) && Number.isFinite(noPrice)
-            ? yesPrice - noPrice
-            : null
-        });
+        setTwapPrices(prices);
         setLastTwapUpdate(new Date());
       } catch (err) {
         if (!cancelled) {
@@ -225,13 +243,35 @@ const TwapCountdown = ({
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isActive, hasEnded, twapStartTimestamp, twapDurationSeconds, yesPoolConfig, noPoolConfig, invertTwapPoolYes, invertTwapPoolNo, yesCompanyTokenAddress, noCompanyTokenAddress, fetchPoolTwap]);
+  }, [isActive, hasEnded, twapStartTimestamp, twapDurationSeconds, canCompare, twapPoolsKey, fetchPoolTwap]);
 
-  const { leaderboardText, percentDiff, leaderTheme } = useMemo(() => {
-    if (twapResults.yes === null || twapResults.no === null) return { leaderboardText: null, percentDiff: null, leaderTheme: 'neutral' };
+  const { leaderboardText, percentDiff, leaderTheme, leaderIndex } = useMemo(() => {
+    const empty = { leaderboardText: null, percentDiff: null, leaderTheme: 'neutral', leaderIndex: null };
 
-    const yes = parseFloat(twapResults.yes);
-    const no = parseFloat(twapResults.no);
+    if (isCategorical) {
+      // Answers with a TWAP, highest first. The lead is the leader's margin over
+      // the runner-up, with the same formula as the binary TWAP impact.
+      const ranked = twapPrices
+        .map((price, index) => ({ price, index }))
+        .filter(({ price }) => Number.isFinite(price))
+        .sort((a, b) => b.price - a.price);
+      if (ranked.length < 2) return empty;
+      const [first, second] = ranked;
+      if (first.price - second.price < 1e-8) {
+        return { ...empty, leaderboardText: 'The top answers are currently tied on TWAP.', percentDiff: formatImpactPercent(0) };
+      }
+      return {
+        leaderboardText: `\u201c${twapPools[first.index].label}\u201d is ahead on TWAP, over \u201c${twapPools[second.index].label}\u201d.`,
+        percentDiff: formatImpactPercent(computeImpactPercent(first.price, second.price)),
+        leaderTheme: 'blue',
+        leaderIndex: first.index
+      };
+    }
+
+    if (!Number.isFinite(twapPrices[0]) || !Number.isFinite(twapPrices[1])) return empty;
+
+    const yes = twapPrices[0];
+    const no = twapPrices[1];
     const diff = Math.abs(yes - no);
 
     // If effectively tied
@@ -258,7 +298,7 @@ const TwapCountdown = ({
         leaderTheme: 'yellow'
       };
     }
-  }, [twapResults]);
+  }, [isCategorical, twapPrices, twapPools]);
 
   // Determine colors based on state and leader
   const getThemeClasses = () => {
@@ -348,7 +388,7 @@ const TwapCountdown = ({
             </span>
             {percentDiff && (isActive || hasEnded) && (
               <span className={`text-xs font-bold ${theme.text}`}>
-                (TWAP impact {percentDiff})
+                ({isCategorical ? 'TWAP lead' : 'TWAP impact'} {percentDiff})
               </span>
             )}
           </div>
@@ -385,7 +425,7 @@ const TwapCountdown = ({
             )}
 
             {/* TWAP values grid */}
-            {(isActive || hasEnded) && yesPoolConfig?.address && noPoolConfig?.address && (
+            {(isActive || hasEnded) && canCompare && (
               <div className="rounded-md bg-white/5 dark:bg-white/10 p-2">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/70 dark:text-white/60">
                   <span>{hasEnded ? 'Final TWAP Window' : 'Live TWAP Window'}</span>
@@ -407,18 +447,17 @@ const TwapCountdown = ({
                       </div>
                     )}
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-md bg-black/10 dark:bg-white/5 p-2">
-                        <p className="text-white/60 dark:text-white/70">YES TWAP</p>
-                        <p className="font-mono text-sm text-white dark:text-white">
-                          {formatTwapValue(twapResults.yes)}
-                        </p>
-                      </div>
-                      <div className="rounded-md bg-black/10 dark:bg-white/5 p-2">
-                        <p className="text-white/60 dark:text-white/70">NO TWAP</p>
-                        <p className="font-mono text-sm text-white dark:text-white">
-                          {formatTwapValue(twapResults.no)}
-                        </p>
-                      </div>
+                      {twapPools.map((pool, index) => (
+                        <div
+                          key={pool.label}
+                          className={`rounded-md bg-black/10 dark:bg-white/5 p-2 min-w-0 ${index === leaderIndex ? 'ring-1 ring-blue-400/60' : ''}`}
+                        >
+                          <p className="text-white/60 dark:text-white/70 truncate" title={pool.label}>{pool.label} TWAP</p>
+                          <p className="font-mono text-sm text-white dark:text-white">
+                            {pool.poolConfig?.address ? formatTwapValue(twapPrices[index]) : 'No pool'}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                     {leaderboardText && (
                       <p className="mt-2 text-[11px] text-white/80 dark:text-white/70">

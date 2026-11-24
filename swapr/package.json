@@ -26,6 +26,8 @@
       "view:config": "node algebra-cli.js viewPositions remove-config.json",
       "merge": "node algebra-cli.js merge",
       "merge:proposal": "node algebra-cli.js merge",
+      "categorical:pools": "node categorical-pools.js",
+      "categorical:other": "node categorical-other-chain.js",
       "generate-pools": "node generate-pool-files.js",
       "generate-pools-from": "node generate-pool-files.js",
       "call-pool-apis": "node call-pool-apis.js",

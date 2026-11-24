@@ -469,6 +469,8 @@ export const useContractConfig = (proposalId, forceTestPools = false) => {
               ? 'resolved'
               : (data.resolution_status || data._registryMetadata?.resolution_status || null),
             finalOutcome: FINAL_OUTCOME_BY_OUTCOME[marketStatus.outcome] || null,
+            // A categorical proposal's winner (finalOutcome stays null for it).
+            winningAnswer: marketStatus.answer,
             // TWAP configuration (prioritize Registry metadata, then direct metadata)
             twapStartTimestamp: data._registryMetadata?.twapStartTimestamp || metadata?.twapStartTimestamp || null,
             twapDurationHours: data._registryMetadata?.twapDurationHours || metadata?.twapDurationHours || 24,

@@ -228,8 +228,10 @@ export async function fetchProposalFromSubgraph(proposalAddress, chainId) {
         return sym.replace(/^(YES|NO)_/i, '') || null;
     };
 
-    const companySymbol  = stripPrefix(yesCompany?.symbol)  || stripPrefix(noCompany?.symbol);
-    const currencySymbol = stripPrefix(yesCurrency?.symbol) || stripPrefix(noCurrency?.symbol);
+    // A categorical proposal has no YES/NO tokens (its roles are
+    // ANSWER_COMPANY / ANSWER_CURRENCY): the collaterals carry the symbols.
+    const companySymbol  = stripPrefix(yesCompany?.symbol)  || stripPrefix(noCompany?.symbol) || proposal.companyToken?.symbol || null;
+    const currencySymbol = stripPrefix(yesCurrency?.symbol) || stripPrefix(noCurrency?.symbol) || proposal.currencyToken?.symbol || null;
 
     const companyAddr  = proposal.companyToken?.id ?? null;
     const currencyAddr = proposal.currencyToken?.id ?? null;

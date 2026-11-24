@@ -169,6 +169,29 @@ npm run call-pool-apis
 - Creates new futarchy proposal through the factory
 - Returns proposal address
 - Requires `openingTime` (see above)
+- `proposalType: "categorical"` with `outcomes` (and optional `tokenNames`) creates a
+  question with several answers on `FutarchyCategoricalFactory`
+  (`categoricalFactoryAddress` / `CATEGORICAL_FACTORY_ADDRESS`); interactive mode asks
+  for the type. Checks and escaping come from `src/utils/categoricalProposal.mjs`,
+  shared with the app's Create Proposal modal. Its gas is estimated, not fixed
+- `setupPoolsFromFutarchyProposal` only builds Yes/No pools and stops on a categorical proposal;
+  `categorical-pools.js` (`npm run categorical:pools`) builds a categorical proposal's pools
+- A categorical question can follow up an answer of another proposal (`parentMarket`,
+  `parentOutcome` in the config; interactive mode asks), such as its "Other": its tokens
+  are split from that answer's tokens and the market page shows both as one market
+  (`src/utils/proposalFamily.js`). `categorical-pools.js` then splits the parent
+  answer's tokens and quotes the prediction pools in the currency collateral, as
+  Seer's opportunity markets do, so their price is the answer's whole chance; it
+  makes no pools for an answer another proposal follows up
+- `categorical-other-chain.js` (`npm run categorical:other`) creates a categorical question
+  that can grow, as Seer's `create-other-chain-markets.ts`: every proposal ends with
+  "Other", and `--parent <any proposal of the chain> --answer <name>` adds candidates
+  with a new proposal on the last proposal's "Other", taking its question, collaterals,
+  bond, category, language and opening time. Dry run by default, `--send` creates it.
+  The market page hides an "Other" that a later proposal follows up
+  and only shows the follow-up proposals the root's registry metadata lists in
+  `chainedProposals`; after creating one the script prints that metadata with it
+  added and the `updateExtendedMetadata` call for the metadata owner to send
 
 ### automate-futarchy.js
 

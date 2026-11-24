@@ -14,7 +14,6 @@ import DynamicShareCard from "../../../dynamicImageFolder/DynamicShareCard";
 import CreateProposalModal from "../../../debug/CreateProposalModal";
 import OrganizationManagerModal from "../../../debug/OrganizationManagerModal";
 import EditProposalModal from "../../../debug/EditProposalModal";
-import { CONTRACT_ADDRESSES } from "../../marketPage/constants/contracts";
 import { ENABLE_V2_SUBGRAPH, DEBUG_MODE } from "../../../../config/featureFlags";
 import { useMediaQuery } from "../../../../hooks/useMediaQuery";
 
@@ -176,7 +175,7 @@ const CompaniesPage = ({ useStorybookUrl = false }) => {
             isOpen={isOrgModalOpen}
             onClose={() => setIsOrgModalOpen(false)}
             mode="aggregator"
-            entityId={aggregatorAddress || CONTRACT_ADDRESSES.DEFAULT_AGGREGATOR}
+            entityId={aggregatorAddress || DEFAULT_AGGREGATOR}
           />
         </>
       )}

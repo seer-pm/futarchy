@@ -114,6 +114,7 @@ const ProposalsPage = ({
             let noPrice = null;
             let totalVolume = 0;
             let totalLiquidity = 0;
+            let isCategorical = false;
 
             try {
               const { SUBGRAPH_ENDPOINTS } = await import('../../../../../config/subgraphEndpoints');
@@ -141,6 +142,16 @@ const ProposalsPage = ({
                 });
                 const result = await res.json();
                 const pools = result.data?.proposal?.pools || [];
+                // Only a categorical proposal has answers; its card shows them
+                // instead of YES/NO. A separate query: indexers older than the
+                // categorical one have no `outcomes` and reject the whole query,
+                // which then just means a YES/NO card.
+                const outcomesRes = await fetch(endpoint, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ query: `{ proposal(id: "${proposalAddress.toLowerCase()}") { outcomes } }` })
+                }).then((r) => r.json()).catch(() => null);
+                isCategorical = Array.isArray(outcomesRes?.data?.proposal?.outcomes);
 
                 // Extract conditional pools for YES/NO prices
                 const yesConditional = pools.find(p => p.type === 'CONDITIONAL' && p.outcomeSide === 'YES');
@@ -217,6 +228,7 @@ const ProposalsPage = ({
               },
               totalVolume,
               totalLiquidity,
+              isCategorical,
               fromSubgraph: true
             };
           })

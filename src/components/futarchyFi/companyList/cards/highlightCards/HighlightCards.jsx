@@ -341,7 +341,10 @@ const HighlightCard = ({
     {
       label: marketStatus.outcomeLabel ? "Outcome" : "Status",
       value: marketStatus.outcomeLabel || marketStatus.shortLabel,
-      colorClass: marketStatus.outcome === 'yes' ? "text-futarchyBlue9 dark:text-futarchyBlue9" : "text-futarchyGold8 dark:text-futarchyGold8",
+      // Blue for YES, gold for NO and statuses; a categorical winner is neither.
+      colorClass: marketStatus.outcome === 'yes' ? "text-futarchyBlue9 dark:text-futarchyBlue9"
+        : marketStatus.answer ? "text-futarchyGray12 dark:text-white"
+          : "text-futarchyGold8 dark:text-futarchyGold8",
     },
     {
       label: "Impact",

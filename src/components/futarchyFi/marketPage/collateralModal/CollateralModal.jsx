@@ -13,6 +13,7 @@ import {
   MARKET_ADDRESS
 } from "../constants/contracts";
 import { useSafeConnection } from "../../../../hooks/useSafeConnection";
+import { useAtomicBatch } from "../../../../hooks/useAtomicBatch";
 // import { useContractConfig } from "../../../../hooks/useContractConfig";
 import { useRequiredChain } from "../../../../hooks/useChainValidation";
 import { splitCollateral, mergeCollateral } from "../../../../utils/collateralActions";
@@ -167,6 +168,8 @@ const StepWithSubsteps = ({
   // Logic to determine if a specific substep is the one currently processing
   const isSubstepActive = (substep) => {
     if (!isStepActive) return false;
+    // Every substep is in the one batched transaction
+    if (processingStep === "batch") return true;
 
     if (action === "add") {
       if (substep.id === 1) {
@@ -333,6 +336,7 @@ const CollateralModal = ({
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const isSafeConnection = useSafeConnection();
+  const batch = useAtomicBatch();
   const { address: account, isConnected } = useAccount();
   // const { config, isLoading: configLoading } = useContractConfig();
   const requiredChain = useRequiredChain(config?.chainId);
@@ -1043,6 +1047,7 @@ const CollateralModal = ({
         // A Safe queues the transaction. Either wait for it to execute, or
         // (the default) tell the user it was sent and close.
         waitForSafeExecution: useBlockExplorer,
+        batch,
       };
       updateDebugInfo({
         status: isSafe ? 'Safe Wallet Detected' : 'Standard Wallet Detected',
@@ -1059,7 +1064,12 @@ const CollateralModal = ({
           ...common,
           symbol: baseToken.symbol,
           onStep: (step) => {
-            if (step === 'approved') {
+            if (step === 'batch') {
+              setLocalProcessingStep("batch");
+            } else if (step === 'approval') {
+              // Step by step, also after a wallet declined the batch
+              setLocalProcessingStep("baseTokenApproval");
+            } else if (step === 'approved') {
               // Also when the allowance was already enough
               markSubstepCompleted(1, 0);
               markApproved('baseToken');
@@ -1092,7 +1102,12 @@ const CollateralModal = ({
           yesToken,
           noToken,
           onStep: (step) => {
-            if (step === 'yesApproved') {
+            if (step === 'batch') {
+              setLocalProcessingStep("batch");
+            } else if (step === 'yesApproval') {
+              // Step by step, also after a wallet declined the batch
+              setLocalProcessingStep("yesApproval");
+            } else if (step === 'yesApproved') {
               markSubstepCompleted(1, 0);
               markApproved('yesToken');
             } else if (step === 'noApproval') {
@@ -1415,7 +1430,7 @@ const CollateralModal = ({
                     <StepWithSubsteps
                       key={step}
                       step={parseInt(step)}
-                      title={data.title}
+                      title={localProcessingStep === "batch" ? `${data.title} in one transaction` : data.title}
                       substeps={data.substeps}
                       expanded={expandedSteps[step]}
                       onToggle={() => toggleStepExpansion(step)}

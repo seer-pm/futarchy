@@ -11,7 +11,7 @@
  * The SDK is loaded on demand: only the trade panel and dialog need it.
  */
 
-import { createPublicClient, erc20Abi, fallback, formatUnits, http } from 'viem';
+import { createPublicClient, encodeFunctionData, erc20Abi, fallback, formatUnits, http } from 'viem';
 import { gnosis, mainnet } from 'viem/chains';
 import { RPC_ENDPOINTS } from '../config/rpcEndpoints';
 import { approvalAmountFor } from './approvalAmount';
@@ -173,4 +173,31 @@ export const executeSeerSwap = async ({
     onApprovalComplete?.();
 
     return tradeTokens({ trade: tradeToSend, account, isTradingCredits: false }, { client: walletClient });
+};
+
+/**
+ * The calls of a quoted swap, for one atomic batch (utils/batchCalls.js):
+ * the router approval if the allowance is short, then the swap. A batch is
+ * signed once, so only a quote older than MAX_QUOTE_AGE_MS is rebuilt (with
+ * `requote`, as in executeSeerSwap) before its calldata is taken.
+ *
+ * @returns {Promise<{to: string, data: string, value: bigint}[]>}
+ */
+export const seerSwapCalls = async ({ trade, account, useUnlimitedApproval = false, requote, quotedAt = Date.now() }) => {
+    const { fetchNeededApprovals, getAmmTradeExecution } = await loadSdk();
+    const tradeToSend = requote && Date.now() - quotedAt > MAX_QUOTE_AGE_MS ? await requote() : trade;
+    const amountIn = tradeToSend.maximumAmountIn();
+    const [needed] = await fetchNeededApprovals(
+        getSeerPublicClient(tradeToSend.chainId), [tradeToSend.tokenIn.address], account, tradeToSend.approveAddress, [amountIn],
+    );
+    const swap = await getAmmTradeExecution(tradeToSend, account);
+    const approval = needed ? [{
+        to: tradeToSend.tokenIn.address,
+        data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [tradeToSend.approveAddress, approvalAmountFor(amountIn.toString(), useUnlimitedApproval).toBigInt()],
+        }),
+    }] : [];
+    return [...approval, { to: swap.to, data: swap.data, value: swap.value }];
 };

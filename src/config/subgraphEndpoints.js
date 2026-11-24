@@ -34,8 +34,17 @@ export const SUBGRAPH_ENDPOINTS = {
     100: `${FUTARCHY_API_BASE}/candles/graphql`,
 };
 
-// Default Aggregator Contract (same as futarchy-complete-sdk)
-export const DEFAULT_AGGREGATOR = '0xC5eB43D53e2FE5FddE5faf400CC4167e5b5d4Fc1';
+// The aggregator whose organizations and proposals the app lists, and whose
+// ProposalMetadata the market page reads. Defaults to Seer's ("Seer Futarchy",
+// owner 0x4EDCA105188a0783Ab3A6f09c50567D1E3F8591D), a copy of futarchy.fi's
+// organizations and proposals made with scripts/copy-registry-aggregator.mjs;
+// NEXT_PUBLIC_FUTARCHY_AGGREGATOR points the app at another one. Inlined at
+// build time.
+const SEER_AGGREGATOR = '0xAb9C4ffdA083f10959a21bD4D4b1AE62713c582d';
+// futarchy.fi's aggregator, the original: 0xC5eB43D53e2FE5FddE5faf400CC4167e5b5d4Fc1
+// (owner 0x645a3d9208523bbfee980f7269ac72c61dd3b552). Set
+// NEXT_PUBLIC_FUTARCHY_AGGREGATOR to it to list its organizations instead.
+export const DEFAULT_AGGREGATOR = process.env.NEXT_PUBLIC_FUTARCHY_AGGREGATOR || SEER_AGGREGATOR;
 
 /**
  * Pool types available in the subgraph

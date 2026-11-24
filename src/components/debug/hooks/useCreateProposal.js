@@ -3,12 +3,18 @@ import { ethers } from 'ethers';
 import { useAccount, useChainId, useSwitchChain, useWalletClient, usePublicClient } from 'wagmi';
 import { CHAIN_CONFIG, getExplorerTxUrl, getExplorerAddressUrl } from '../constants/chainConfig';
 import { getEthersSigner } from '../../../utils/ethersAdapters';
+import { buildCategoricalProposal, CATEGORICAL_FACTORY_ABI } from '../../../utils/categoricalProposal.mjs';
 
 // Futarchy Factory ABI
 const FUTARCHY_FACTORY_ABI = [
     'function createProposal((string,address,address,string,string,uint256,uint32)) returns (address)',
     'function proposals(uint256) view returns (address)',
     'function marketsCount() view returns (uint256)'
+];
+const ERC20_SYMBOL_ABI = ['function symbol() view returns (string)'];
+const PARENT_PROPOSAL_ABI = [
+    'function collateralToken1() view returns (address)',
+    'function collateralToken2() view returns (address)',
 ];
 
 /**
@@ -41,6 +47,15 @@ export const useCreateProposal = () => {
 
         return {
             chainId,
+            // 'binary': Yes/No (FutarchyFactory); 'categorical': one of
+            // several answers plus Invalid (FutarchyCategoricalFactory).
+            proposalType: 'binary',
+            outcomes: ['', ''],
+            tokenNames: ['', ''],
+            // Categorical only: a proposal whose answer (such as "Other") this
+            // one follows up; its tokens are split from that answer's tokens.
+            parentMarket: '',
+            parentOutcome: '',
             marketName: '',
             companyToken: chainConfig?.defaultTokens?.company?.address || '',
             currencyToken: chainConfig?.defaultTokens?.currency?.address || '',
@@ -64,6 +79,16 @@ export const useCreateProposal = () => {
         }
         if (!formData.openingTime) {
             return { isValid: false, error: 'Opening time is required' };
+        }
+        if (formData.proposalType === 'categorical') {
+            if (!CHAIN_CONFIG[formData.chainId]?.categoricalFactoryAddress) {
+                return { isValid: false, error: `Categorical proposals are not available on ${CHAIN_CONFIG[formData.chainId]?.name || 'this chain'} yet` };
+            }
+            const { errors } = buildCategoricalProposal({
+                ...formData,
+                openingTime: Math.floor(new Date(formData.openingTime).getTime() / 1000),
+            });
+            if (errors.length > 0) return { isValid: false, error: errors.join(' ') };
         }
         return { isValid: true };
     }, []);
@@ -132,10 +157,13 @@ export const useCreateProposal = () => {
                 throw new Error(`Chain mismatch. Expected ${chainConfig.name} (${targetChainId}), but wallet is on chain ${network.chainId}. Please switch manually.`);
             }
 
+            const isCategorical = formData.proposalType === 'categorical';
+            const factoryAddress = isCategorical ? chainConfig.categoricalFactoryAddress : chainConfig.factoryAddress;
+
             // Create factory contract with fresh signer
             const factory = new ethers.Contract(
-                chainConfig.factoryAddress,
-                FUTARCHY_FACTORY_ABI,
+                factoryAddress,
+                isCategorical ? CATEGORICAL_FACTORY_ABI : FUTARCHY_FACTORY_ABI,
                 freshSigner
             );
 
@@ -143,7 +171,7 @@ export const useCreateProposal = () => {
             const openingTimeUnix = Math.floor(new Date(formData.openingTime).getTime() / 1000);
 
             // Prepare proposal parameters (tuple)
-            const params = [
+            let params = [
                 formData.marketName,
                 formData.companyToken,
                 formData.currencyToken,
@@ -153,8 +181,34 @@ export const useCreateProposal = () => {
                 openingTimeUnix
             ];
 
+            if (isCategorical) {
+                // Token names get the collateral symbols appended on-chain and
+                // must still fit in 31 bytes, so check them with the real symbols.
+                const [companySymbol, currencySymbol] = await Promise.all(
+                    [formData.companyToken, formData.currencyToken].map((token) =>
+                        new ethers.Contract(token, ERC20_SYMBOL_ABI, provider).symbol())
+                );
+                const built = buildCategoricalProposal({
+                    ...formData,
+                    companySymbol,
+                    currencySymbol,
+                    openingTime: openingTimeUnix,
+                });
+                if (built.errors.length > 0) throw new Error(built.errors.join(' '));
+                if (formData.parentMarket?.trim()) {
+                    // The factory reverts otherwise; say why before the wallet does.
+                    const parent = new ethers.Contract(formData.parentMarket.trim(), PARENT_PROPOSAL_ABI, provider);
+                    const [parentCompany, parentCurrency] = await Promise.all([parent.collateralToken1(), parent.collateralToken2()]);
+                    if (parentCompany.toLowerCase() !== formData.companyToken.toLowerCase()
+                        || parentCurrency.toLowerCase() !== formData.currencyToken.toLowerCase()) {
+                        throw new Error('A follow-up proposal needs the same company and currency tokens as the proposal it follows up.');
+                    }
+                }
+                params = built.params;
+            }
+
             console.log('Creating proposal with params:', params);
-            console.log('Factory address:', chainConfig.factoryAddress);
+            console.log('Factory address:', factoryAddress);
 
             setStatus({ type: 'info', message: 'Please confirm in your wallet...' });
 

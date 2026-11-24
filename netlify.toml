@@ -5,14 +5,15 @@
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--legacy-peer-deps"
-  # Host serving /registry/graphql and /candles/graphql. Every subgraph URL in
-  # src/config/subgraphEndpoints.js derives from it, and usePoolData falls back
-  # to it, so this is the single knob for the backend. Deploy-preview and
-  # branch-deploy contexts inherit this block unless they override it.
-  NEXT_PUBLIC_FUTARCHY_API_URL = "https://api.futarchy.seer.pm"
+  # NEXT_PUBLIC_FUTARCHY_API_URL, the host serving /registry/graphql and
+  # /candles/graphql, is deliberately not set here: a value in this file
+  # overrides the Netlify UI, so leaving it out lets a branch or Deploy
+  # Previews value set in the UI point a preview at another backend. Unset,
+  # src/config/subgraphEndpoints.js uses DEFAULT_API_BASE
+  # (https://api.futarchy.seer.pm).
 
   # NEXT_PUBLIC_POOL_API_URL is deliberately unset: usePoolData falls back to
-  # the host above, so setting it here would silently pin that one caller to a
+  # that same host, so setting it here would silently pin that one caller to a
   # different backend — which is exactly what happened while it still read the
   # upstream project's API host.
 

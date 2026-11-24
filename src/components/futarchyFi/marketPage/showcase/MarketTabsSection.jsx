@@ -2,6 +2,9 @@ import RedeemTokens from '../redeemTokens/RedeemTokens';
 import PositionsTable from '../PositionsTable';
 import SubgraphTradesDataLayer from '../SubgraphTradesDataLayer';
 import { TradeHistoryTable } from './TradeHistoryTable';
+import { useMemo } from 'react';
+import { answerByToken } from '../../../../utils/proposalOutcomes';
+import { familyNodes, familySlots } from '../../../../utils/proposalFamily';
 
 const MarketTabsSection = ({
   tabs,
@@ -11,9 +14,27 @@ const MarketTabsSection = ({
   selectedCurrency,
   rate,
   setCurrentTransactionData,
-  setIsConfirmModalOpen
+  setIsConfirmModalOpen,
+  categorical
 }) => {
-  const { marketHasClosed, activeTab, setActiveTab, tradesLimit, setTradesLimit } = tabs;
+  const { tradesLimit, setTradesLimit, setActiveTab } = tabs;
+  // A categorical proposal (useCategoricalMarket) shows its trades, labelled
+  // by answer, before and after resolution. Its positions, split, merge and
+  // redeem live in CategoricalPositionsPanel in the right column, so it has
+  // no Position or Redeem Tokens tab.
+  const isCategorical = !!categorical?.isCategorical;
+  const marketHasClosed = isCategorical ? false : tabs.marketHasClosed;
+  const activeTab = isCategorical && !['recent-trades-sdk', 'my-trades-sdk'].includes(tabs.activeTab)
+    ? 'recent-trades-sdk'
+    : tabs.activeTab;
+  // Every answer of every proposal of the family, chained ones included:
+  // their pools trade too.
+  const answers = useMemo(() => (isCategorical
+    ? answerByToken(familySlots(categorical.family).filter((slot) => !slot.isInvalid))
+    : null), [isCategorical, categorical?.family]);
+  const proposalIds = useMemo(() => (isCategorical
+    ? familyNodes(categorical.family).map((node) => node.proposal.address.toLowerCase())
+    : null), [isCategorical, categorical?.family]);
   const { positions, isLoadingPositions, balanceError, refetchBalances } = balances;
   const { sdaiRate, isLoadingRate, rateError } = rate;
 
@@ -57,7 +78,7 @@ const MarketTabsSection = ({
             </button>
 
             {/* Position button - third */}
-            <button
+            {!isCategorical && <button
               onClick={() => setActiveTab('position')}
               className={`pb-2 font-medium transition-colors duration-200 ${activeTab === 'position'
                 ? 'text-futarchyViolet11 dark:text-futarchyViolet9 border-b-2 border-futarchyViolet9'
@@ -65,7 +86,7 @@ const MarketTabsSection = ({
                 }`}
             >
               Position
-            </button>
+            </button>}
           </>
         )}
       </div>
@@ -129,6 +150,8 @@ const MarketTabsSection = ({
               config={config}
               showMyTrades={false}
               limit={tradesLimit}
+              answers={answers}
+              proposalIds={proposalIds}
             />
           </div>
         )}
@@ -139,6 +162,8 @@ const MarketTabsSection = ({
               config={config}
               showMyTrades={true}
               limit={tradesLimit}
+              answers={answers}
+              proposalIds={proposalIds}
             />
           </div>
         )}

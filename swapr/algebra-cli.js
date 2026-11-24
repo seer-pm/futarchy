@@ -161,6 +161,7 @@ const futarchyProposalAbi = [
   'function collateralToken2() view returns (address)',
   'function wrappedOutcome(uint256 index) view returns (address, bytes)',
   'function marketName() view returns (string)',
+  'function conditionId() view returns (bytes32)',
   'function futarchyProposalParams() view returns (tuple(bytes32 conditionId, address collateralToken1, address collateralToken2, bytes32 questionId, bytes encodedQuestion, uint32 openingTime))'
 ];
 
@@ -197,6 +198,12 @@ const DEFAULT_MIN_BOND = '1000000000000000000';
 const DEFAULT_CATEGORY = 'crypto, kleros, governance';
 const DEFAULT_LANGUAGE = 'en';
 const DEFAULT_FACTORY_ADDRESS = '0xa6cB18FCDC17a2B44E5cAd2d80a6D5942d30a345';
+// FutarchyCategoricalFactory (questions with N answers plus Invalid) on Gnosis.
+// CATEGORICAL_FACTORY_ADDRESS in .env or categoricalFactoryAddress in the config override it.
+const DEFAULT_CATEGORICAL_FACTORY_ADDRESS = process.env.CATEGORICAL_FACTORY_ADDRESS || '0x4e79be3a63b09d22D4DAfcd66Feb00535A654295';
+const CONDITIONAL_TOKENS_ADDRESS = '0xCeAfDD6bc0bEF976fdCd1112955828E00543c0Ce'; // Gnosis
+// Shared with the app's Create Proposal modal: escaping, token names, limits.
+const loadCategoricalProposal = () => import('../src/utils/categoricalProposal.mjs');
 const DEFAULT_ADAPTER_ADDRESS = '0x7495a583ba85875d59407781b4958ED6e0E1228f';
 
 const pm     = new ethers.Contract(POSITION_MGR, pmAbi, wallet);
@@ -1919,10 +1926,34 @@ async function createNewProposal(autoMode = false, config = null) {
   
   // Get the factory address
   let factoryAddress, companyTokenAddr, currencyTokenAddr, marketName, category, language, minBond, openingTime;
+  // Yes/No questions go to FutarchyFactory; questions with several answers
+  // (categorical) to FutarchyCategoricalFactory, with Invalid added last.
+  let categorical = false, outcomes = [], tokenNames = [];
+  // A categorical question can follow up an answer of another proposal (such
+  // as its "Other"): parentMarket and parentOutcome, empty for none.
+  let parentMarket = '', parentOutcome = '';
   
   if (autoMode) {
     console.log('🤖 AUTO MODE: Using values from config for proposal creation...');
-    factoryAddress = DEFAULT_FACTORY_ADDRESS;
+    categorical = config?.proposalType === 'categorical';
+    if (config?.proposalType && !['binary', 'categorical'].includes(config.proposalType)) {
+      console.error(`❌ proposalType must be "binary" or "categorical", not "${config.proposalType}".`);
+      return null;
+    }
+    factoryAddress = categorical
+      ? (config.categoricalFactoryAddress || DEFAULT_CATEGORICAL_FACTORY_ADDRESS)
+      : DEFAULT_FACTORY_ADDRESS;
+    if (categorical) {
+      outcomes = Array.isArray(config.outcomes) ? config.outcomes : [];
+      tokenNames = Array.isArray(config.tokenNames) ? config.tokenNames : [];
+      parentMarket = config.parentMarket || '';
+      parentOutcome = config.parentOutcome ?? '';
+      if (!factoryAddress) {
+        console.error('❌ A categorical proposal needs the FutarchyCategoricalFactory address:');
+        console.error('   set "categoricalFactoryAddress" in the config or CATEGORICAL_FACTORY_ADDRESS in .env.');
+        return null;
+      }
+    }
     // Use tokens from config if provided, otherwise use defaults
     companyTokenAddr = config && config.companyTokenAddress ? config.companyTokenAddress : DEFAULT_COMPANY_TOKEN;
     currencyTokenAddr = config && config.currencyTokenAddress ? config.currencyTokenAddress : DEFAULT_CURRENCY_TOKEN;
@@ -1953,7 +1984,10 @@ async function createNewProposal(autoMode = false, config = null) {
     openingTime = config.openingTime;
     console.log(`🤖 Using opening time from config: ${openingTime} (${new Date(openingTime * 1000).toLocaleString()})`);
     
+    console.log(`  Question Type: ${categorical ? `categorical (${outcomes.length} answers + Invalid)` : 'Yes/No'}`);
     console.log(`  Factory Address: ${factoryAddress}`);
+    if (categorical) console.log(`  Answers: ${outcomes.map((answer) => JSON.stringify(answer)).join(', ')}`);
+    if (parentMarket) console.log(`  Follows up: answer ${parentOutcome} of ${parentMarket}`);
     console.log(`  Company Token: ${companyTokenAddr}`);
     console.log(`  Currency Token: ${currencyTokenAddr}`);
     console.log(`  Market Name: ${marketName}`);
@@ -1964,13 +1998,39 @@ async function createNewProposal(autoMode = false, config = null) {
     
   } else {
     // Interactive mode
-    factoryAddress = await ask(`Enter Futarchy Factory contract address [${DEFAULT_FACTORY_ADDRESS}]:`, DEFAULT_FACTORY_ADDRESS);
+    const questionType = await ask('Question type: [1] Yes/No   [2] Choose between options (categorical):', '1');
+    categorical = questionType.trim() === '2';
+    if (categorical) {
+      factoryAddress = await ask('Enter FutarchyCategoricalFactory contract address:', DEFAULT_CATEGORICAL_FACTORY_ADDRESS);
+      if (!ethers.isAddress(factoryAddress)) {
+        console.error("A valid FutarchyCategoricalFactory address is required");
+        return null;
+      }
+    } else {
+      factoryAddress = await ask(`Enter Futarchy Factory contract address [${DEFAULT_FACTORY_ADDRESS}]:`, DEFAULT_FACTORY_ADDRESS);
+    }
     
     // Prompt for essential parameters
-    marketName = await ask(`Enter market name (e.g., "Should we implement feature X?"):`);
+    marketName = await ask(categorical
+      ? `Enter the question (e.g., "Who will win the election held on YYYY-MM-DD?"):`
+      : `Enter market name (e.g., "Should we implement feature X?"):`);
     if (!marketName) {
       console.error("Market name is required");
       return null;
+    }
+
+    if (categorical) {
+      // One answer per line, so answers can contain commas.
+      const { defaultTokenName } = await loadCategoricalProposal();
+      console.log('Enter the answers one per line, in order; an empty line ends the list. Invalid is added last.');
+      for (;;) {
+        const answer = await ask(`Answer ${outcomes.length + 1}:`);
+        if (!answer) break;
+        outcomes.push(answer);
+        tokenNames.push(await ask(`  Token name for "${answer}" (becomes NAME_<collateral symbol>):`, defaultTokenName(answer)));
+      }
+      parentMarket = await ask('Proposal whose answer this question follows up, such as its "Other" (empty for none):', '');
+      if (parentMarket) parentOutcome = await ask('  Index of that answer (0 is the first):');
     }
     
     // Token addresses with defaults
@@ -1992,7 +2052,28 @@ async function createNewProposal(autoMode = false, config = null) {
     minBond = await ask(`Enter minimum Reality bond in wei of the native token [${DEFAULT_MIN_BOND} = ${ethers.formatEther(DEFAULT_MIN_BOND)}]:`, DEFAULT_MIN_BOND);
   }
   
-  const factory = new ethers.Contract(factoryAddress, futarchyFactoryAbi, wallet);
+  let params;
+  if (categorical) {
+    const { buildCategoricalProposal } = await loadCategoricalProposal();
+    const [companyToken, currencyToken] = await Promise.all([loadToken(companyTokenAddr), loadToken(currencyTokenAddr)]);
+    const built = buildCategoricalProposal({
+      marketName, outcomes, tokenNames,
+      companyToken: companyTokenAddr, currencyToken: currencyTokenAddr,
+      companySymbol: companyToken.symbol, currencySymbol: currencyToken.symbol,
+      category, language, minBond, openingTime, parentMarket, parentOutcome,
+    });
+    if (built.errors.length > 0) {
+      built.errors.forEach((error) => console.error(`❌ ${error}`));
+      return null;
+    }
+    params = built.params;
+    tokenNames = built.tokenNames;
+  } else {
+    params = [marketName, companyTokenAddr, currencyTokenAddr, category, language, minBond, openingTime];
+  }
+
+  const { CATEGORICAL_FACTORY_ABI } = categorical ? await loadCategoricalProposal() : {};
+  const factory = new ethers.Contract(factoryAddress, categorical ? CATEGORICAL_FACTORY_ABI : futarchyFactoryAbi, wallet);
   
   // Get token details for display (only in interactive mode)
   if (!autoMode) {
@@ -2006,7 +2087,12 @@ async function createNewProposal(autoMode = false, config = null) {
     
     // Confirm before creating proposal
     console.log(`\nReady to create proposal with the following parameters:\n`);
+    console.log(`  Question type: ${categorical ? 'categorical' : 'Yes/No'}`);
     console.log(`  Market name: ${marketName}`);
+    if (categorical) {
+      outcomes.forEach((answer, i) => console.log(`  Answer ${i + 1}: ${answer} (tokens ${tokenNames[i]}_${companyToken.symbol}, ${tokenNames[i]}_${currencyToken.symbol})`));
+      console.log(`  Answer ${outcomes.length + 1}: Invalid (tokens INVALID_${companyToken.symbol}, INVALID_${currencyToken.symbol})`);
+    }
     console.log(`  Company token: ${companyToken.symbol} (${companyTokenAddr})`);
     console.log(`  Currency token: ${currencyToken.symbol} (${currencyTokenAddr})`);
     console.log(`  Category: ${category}`);
@@ -2024,19 +2110,16 @@ async function createNewProposal(autoMode = false, config = null) {
   try {
     console.log("Creating proposal...");
     
-    // Prepare the proposal parameters struct
-    const params = [
-      marketName,
-      companyTokenAddr,
-      currencyTokenAddr,
-      category,
-      language,
-      minBond,
-      openingTime
-    ];
+    // Gas grows with the answers of a categorical proposal (about 0.65M
+    // each), past the fixed limit from 6 answers on: estimate it instead.
+    const gasOptions = getGasOptions('CREATE_PROPOSAL');
+    if (categorical) {
+      gasOptions.gasLimit = (await factory.createProposal.estimateGas(params)) * 12n / 10n;
+      console.log(`⛽ Gas limit for ${outcomes.length} answers: ${gasOptions.gasLimit}`);
+    }
     
     // Call the createProposal function
-    const tx = await factory.createProposal(params, getGasOptions('CREATE_PROPOSAL'));
+    const tx = await factory.createProposal(params, gasOptions);
     await logTransaction("Create Futarchy Proposal", tx.hash);
     const receipt = await tx.wait();
     
@@ -2107,6 +2190,16 @@ async function setupPoolsFromFutarchyProposal(proposalAddress, autoConfig = null
 
   // Initialize proposal contract
   const proposalContract = new ethers.Contract(proposalAddress, futarchyProposalAbi, wallet);
+
+  // The six pools below are the YES/NO pools of a Yes/No proposal. A
+  // categorical proposal has one condition slot per answer plus Invalid.
+  const conditionalTokens = new ethers.Contract(CONDITIONAL_TOKENS_ADDRESS, ['function getOutcomeSlotCount(bytes32) view returns (uint256)'], provider);
+  const slotCount = await conditionalTokens.getOutcomeSlotCount(await proposalContract.conditionId());
+  if (slotCount !== 2n) {
+    console.error(`❌ ${proposalAddress} is a categorical proposal (${slotCount} outcomes including Invalid).`);
+    console.error('   Pool setup only supports Yes/No proposals; create the pools of each answer separately.');
+    return;
+  }
   
   try {
     // Fetch token addresses and market name
@@ -3453,6 +3546,12 @@ function parseConfigValues(config) {
     adapterAddress: config.ADAPTER_ADDRESS || config.adapterAddress || DEFAULT_ADAPTER_ADDRESS,
     openingTime: config.OPENING_TIME || config.openingTime ? parseInt(config.OPENING_TIME || config.openingTime) : null,
     minBondWei: config.MIN_BOND_WEI || config.minBondWei || null, // Reality min bond; falls back to DEFAULT_MIN_BOND
+    // "categorical" creates a question with several answers (outcomes, plus
+    // optional tokenNames) on FutarchyCategoricalFactory; default Yes/No.
+    proposalType: config.PROPOSAL_TYPE || config.proposalType || 'binary',
+    outcomes: config.OUTCOMES || config.outcomes || [],
+    tokenNames: config.TOKEN_NAMES || config.tokenNames || [],
+    categoricalFactoryAddress: config.CATEGORICAL_FACTORY_ADDRESS || config.categoricalFactoryAddress || null,
     skipExistingWhenAUTO: config.SKIP_EXISTING_WHEN_AUTO !== undefined ? (config.SKIP_EXISTING_WHEN_AUTO === 'true' || config.SKIP_EXISTING_WHEN_AUTO === true) : 
                           config.skipExistingWhenAUTO !== undefined ? config.skipExistingWhenAUTO : true, // Default to true
     forceAddLiquidityPools: forceAddLiquidityPools, // New: pools to force liquidity addition even if they exist

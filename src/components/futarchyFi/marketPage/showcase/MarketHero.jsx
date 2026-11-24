@@ -6,11 +6,13 @@ import TimeIcon from '../page/icons/TimeIcon';
 import VolumeIcon from '../page/icons/VolumeIcon';
 import MarketBadgeList from '../components/MarketBadgeList';
 import { computeImpactPercent, formatImpactPercent } from '../../../../utils/marketPageUtils.mjs';
-import { resolveMarketStatus } from '../../../../utils/proposalLifecycle';
+import { describeMarketStatus, resolveMarketStatus } from '../../../../utils/proposalLifecycle';
 import { TwapCountdown } from './TwapCountdown';
 import { SnapshotWidget } from './SnapshotWidget';
 
 const DEFAULT_TWAP_DESCRIPTION = "The Futarchy Test is considered passed if the time-weighted average price (TWAP) of the \u201cpass\u201d (yes) outcome over the final 24 hours of the Issuance KIP\u2019s voting period is greater than or equal to that of the \u201cfail\u201d (no) outcome. If not, the proposal fails the futarchy test, regardless of the Kleros DAO vote result.";
+
+const CATEGORICAL_TWAP_DESCRIPTION = "Each answer's conditional pool prices the company token if that answer wins. The answer whose pool has the highest time-weighted average price (TWAP) over the window leads the futarchy test.";
 
 const STATUS_BADGE_COLORS = { active: 'emerald', awaiting_resolution: 'orange', resolved: 'gray' };
 const OUTCOME_BADGE_COLORS = { yes: 'blue', no: 'gold' };
@@ -28,7 +30,8 @@ const MarketHero = ({
   liquiditySummary,
   timing,
   snapshot,
-  badgeModals
+  badgeModals,
+  categorical
 }) => {
   const { newYesPrice, newNoPrice, pricesUnavailable } = prices;
   const { poolData, poolDataLoading, poolDataError } = pool;
@@ -47,11 +50,26 @@ const MarketHero = ({
     setIsEditProposalModalOpen
   } = badgeModals;
 
-  const marketStatus = resolveMarketStatus({
+  const proposalStatus = resolveMarketStatus({
     ...config?.marketInfo,
     endTime: config?.marketInfo?.endTime || marketEndTime
   });
+  // With follow-up questions, the market's winner is the answer that won the
+  // last question; while that question is open the market has no winner yet.
+  const familyResolution = categorical?.resolution;
+  const familyWinner = familyResolution?.winner?.node?.parent ? familyResolution.winner.label : null;
+  const marketStatus = familyResolution?.pending
+    ? { ...proposalStatus, state: 'awaiting_resolution', outcome: null, answer: null, showCountdown: false, ...describeMarketStatus('awaiting_resolution') }
+    : familyWinner
+      ? { ...proposalStatus, outcome: null, answer: familyWinner, ...describeMarketStatus('resolved', null, familyWinner) }
+      : proposalStatus;
   const isResolved = marketStatus.state === 'resolved';
+  // A categorical market has no YES/NO pools: its figures come from the
+  // conditional pool of each answer (useCategoricalMarket).
+  const categoricalTotals = categorical?.isCategorical ? categorical.totals : undefined;
+  const isCategorical = categoricalTotals !== undefined;
+  const impact = isCategorical ? categoricalTotals?.impact ?? null : computeImpactPercent(newYesPrice, newNoPrice);
+  const answerBreakdown = (field) => categoricalTotals?.breakdown.map((row) => ({ label: row.label, value: row[field] }));
 
   return (
     <div ref={attachHeroRef} className={`relative bg-futarchyDarkGray2/90 dark:bg-futarchyDarkGray2/70  dark:border-futarchyGray112/40 backdrop-blur-sm font-oxanium flex flex-col border-b-2 border-futarchyDarkGray42 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:h-20' : ''
@@ -61,7 +79,13 @@ const MarketHero = ({
           }`}>
           <div className={`lg:col-span-2 min-w-0 space-y-2 py-2 lg:space-y-3 border-b-2 border-futarchyDarkGray42 lg:border-b-0 lg:border-r lg:pr-6 transition-all duration-300 ease-in-out ${isScrolled ? 'lg:py-0' : 'lg:py-3'
             }`}>
-            <h1 className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base' : 'text-sm lg:text-xl'
+            {/* The collapsed hero has a fixed height, so a long title (a
+                categorical question with its answers) is cut to two lines */}
+            <h1
+              title={isScrolled && !marketData.isLoading && !marketData.error
+                ? [marketData.display_title_0, marketData.display_title_1].filter(Boolean).join(' ')
+                : undefined}
+              className={`font-semibold text-white leading-tight min-h-[1.5rem] transition-all duration-300 ease-in-out ${isScrolled ? 'text-sm lg:text-base lg:line-clamp-2' : 'text-sm lg:text-xl'
               }`}>
               {marketData.isLoading && (
                 <span className="block h-5 lg:h-6 w-3/4 max-w-xl rounded bg-white/10 animate-pulse" aria-label="Loading market title" />
@@ -83,10 +107,12 @@ const MarketHero = ({
                 label="Impact (spot)"
                 // After resolution the losing side's tokens are worthless, so the
                 // gap between the two pools no longer measures anything.
-                value={isResolved ? '—' : formatImpactPercent(computeImpactPercent(newYesPrice, newNoPrice), pricesUnavailable ? '—' : 'N/A')}
-                valueClassName={isResolved ? 'text-white' : ((computeImpactPercent(newYesPrice, newNoPrice) ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
+                value={isResolved ? '—' : formatImpactPercent(impact, pricesUnavailable || isCategorical ? '—' : 'N/A')}
+                valueClassName={isResolved ? 'text-white' : ((impact ?? 0) >= 0 ? 'text-futarchyTeal7' : 'text-futarchyCrimson11')}
                 Icon={ImpactIcon}
-                isLoading={!isResolved && !pricesUnavailable && (newYesPrice === null || newNoPrice === null)}
+                isLoading={!isResolved && (isCategorical
+                  ? categoricalTotals === null
+                  : !pricesUnavailable && (newYesPrice === null || newNoPrice === null))}
               />
 
               <StatDisplay
@@ -97,7 +123,18 @@ const MarketHero = ({
                 isLoading={configLoading}
               />
 
-              <AggregatedStatDisplay
+              {isCategorical ? (
+                <AggregatedStatDisplay
+                  label={`Volume (Total; ${currencySymbol})`}
+                  yesValue={categoricalTotals?.volume ?? null}
+                  noValue={null}
+                  Icon={VolumeIcon}
+                  isLoading={categoricalTotals === null}
+                  formatFunction={formatVolume}
+                  tooltipBreakdown={answerBreakdown('volume')}
+                  normalize={false}
+                />
+              ) : <AggregatedStatDisplay
                 label={`Volume (Total; ${currencySymbol})`}
                 yesValue={poolData?.yesPool?.volume ?? null}
                 noValue={poolData?.noPool?.volume ?? null}
@@ -107,9 +144,21 @@ const MarketHero = ({
                 tooltipLabels={{ yes: 'YES Volume', no: 'NO Volume' }}
                 normalize={poolData?.source !== 'subgraph'}
                 unavailable={!!poolDataError}
-              />
+              />}
 
-              <AggregatedStatDisplay
+              {isCategorical ? (
+                <AggregatedStatDisplay
+                  label="TVL"
+                  yesValue={categoricalTotals?.tvl ?? null}
+                  noValue={null}
+                  Icon={LiquidityIcon}
+                  isLoading={categoricalTotals === null}
+                  formatFunction={formatLiquidity}
+                  tooltipBreakdown={answerBreakdown('tvl')}
+                  tooltipNote="Total value locked in the conditional pool of each answer, its company token valued at the pool price. Prediction pools are not counted."
+                  normalize={false}
+                />
+              ) : <AggregatedStatDisplay
                 label="TVL"
                 yesValue={liquiditySummary.yes?.total ?? null}
                 noValue={liquiditySummary.no?.total ?? null}
@@ -121,7 +170,7 @@ const MarketHero = ({
                 tooltipNote="Total value locked in the YES/NO pools across all price ranges. This is not tradable depth: liquidity parked far from the current price doesn't absorb trades, so check the price impact in the trade panel before sizing a trade."
                 normalize={poolData?.source !== 'subgraph'}
                 unavailable={!!poolDataError}
-              />
+              />}
 
               <StatDisplay
                 label={(() => {
@@ -220,11 +269,19 @@ const MarketHero = ({
 
                   // Reality.eth question badge. It is a link, not an action, so it
                   // stops saying "Resolve" once the market is resolved.
+                  // A market chained over several questions lists each one in a
+                  // menu, numbered in the order the positions name their INVALIDs.
+                  const followUps = categorical?.followUpQuestionLinks ?? [];
                   if (marketData.question_link) {
+                    const menu = followUps.length > 0
+                      ? [{ label: categorical.proposal.outcomes.map((outcome) => outcome.label).join(', '), link: marketData.question_link }, ...followUps]
+                        .map((item, i) => ({ ...item, label: `Question ${i + 1}: ${item.label}` }))
+                      : undefined;
                     badges.push({
                       text: isResolved ? 'Resolution Question' : 'Resolve Question',
                       colorScheme: 'violet',
-                      link: marketData.question_link
+                      link: marketData.question_link,
+                      menu
                     });
                   }
 
@@ -241,15 +298,27 @@ const MarketHero = ({
                     }
                   }
 
-                  // Add Liquidity badge
-                  badges.push({
-                    text: 'Add Liquidity',
-                    colorScheme: 'teal',
-                    onClick: () => setIsAddLiquidityModalOpen(true)
-                  });
+                  // Neither pool badge until a categorical market's answers are
+                  // read: its pools are per answer, not YES/NO.
+                  const poolsKnown = !categorical?.isCategoricalPending;
 
-                  // Create Pool badge - show when pools are missing (subgraph mode)
-                  if (!config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address) {
+                  // Add Liquidity badge
+                  if (poolsKnown) {
+                    badges.push({
+                      text: 'Add Liquidity',
+                      colorScheme: 'teal',
+                      onClick: () => setIsAddLiquidityModalOpen(true)
+                    });
+                  }
+
+                  // Create Pool badge - show when pools are missing (subgraph mode);
+                  // a categorical market needs two pools per answer it shows,
+                  // not for the answers its follow-up questions split nor for
+                  // a last "Other" whose chance is what the others leave
+                  const poolsMissing = poolsKnown && (categorical?.isCategorical
+                    ? (categorical.allPools ?? []).some((row) => !row.chained && !row.residual && (!row.conditional || !row.prediction))
+                    : !config?.POOL_CONFIG_YES?.address || !config?.POOL_CONFIG_NO?.address);
+                  if (poolsMissing) {
                     badges.push({
                       text: '+ Create Pool',
                       colorScheme: 'violet',
@@ -308,7 +377,7 @@ const MarketHero = ({
               <TwapCountdown
                 twapStartTimestamp={config.marketInfo.twapStartTimestamp}
                 twapDurationHours={config.marketInfo.twapDurationHours || 24}
-                twapDescription={config.marketInfo.twapDescription || DEFAULT_TWAP_DESCRIPTION}
+                twapDescription={config.marketInfo.twapDescription || (categorical?.isCategorical ? CATEGORICAL_TWAP_DESCRIPTION : DEFAULT_TWAP_DESCRIPTION)}
                 isScrolled={isScrolled}
                 yesPoolConfig={config.POOL_CONFIG_YES}
                 noPoolConfig={config.POOL_CONFIG_NO}
@@ -316,6 +385,9 @@ const MarketHero = ({
                 invertTwapPoolNo={config.marketInfo.invertTwapPoolNo || config.marketInfo.invertTwapPoolNO || false}
                 yesCompanyTokenAddress={config.metadata?.companyTokens?.yes?.wrappedCollateralTokenAddress || null}
                 noCompanyTokenAddress={config.metadata?.companyTokens?.no?.wrappedCollateralTokenAddress || null}
+                answers={categorical?.isCategorical
+                  ? (categorical.pools ?? []).map((row) => ({ label: row.label, poolConfig: row.conditional, companyTokenAddress: row.company.address }))
+                  : null}
               />
             )}
           </div>

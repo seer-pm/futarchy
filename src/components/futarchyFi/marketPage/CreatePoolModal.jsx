@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCreatePool } from '../../../hooks/useCreatePool';
 import { CHAIN_CONFIG, getExplorerTxUrl } from '../../debug/constants/chainConfig';
 import { useSubgraphRefresh } from '../../../contexts/SubgraphRefreshContext';
+import { categoricalPoolList } from '../../../utils/proposalOutcomes';
 
 // Pool type configurations - with clear labels
 const POOL_TYPES = {
@@ -107,7 +108,7 @@ const modalVariants = {
     visible: { opacity: 1, scale: 1 }
 };
 
-export default function CreatePoolModal({ isOpen, onClose, config, missingPools = [], onPoolCreated }) {
+export default function CreatePoolModal({ isOpen, onClose, config, categorical, missingPools = [], onPoolCreated }) {
     const [selectedPoolType, setSelectedPoolType] = useState(null);
     const [initialPrice, setInitialPrice] = useState('');
     const chainId = config?.chainId || 100;
@@ -137,16 +138,41 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                 if (onPoolCreated) {
                     onPoolCreated();
                 }
+                // A categorical market reads its pools from the AMM
+                categorical?.refetch?.();
             }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [status.type, poolAddress, refreshChart, onPoolCreated]);
+    }, [status.type, poolAddress, refreshChart, onPoolCreated, categorical]);
+
+    // A categorical market has two pools per answer instead of YES/NO, read
+    // from the AMM by useCategoricalMarket; null while they load.
+    const categoricalPools = useMemo(() => {
+        if (!categorical?.isCategorical || !categorical.allPools) return null;
+        return categoricalPoolList(categorical.allPools, {
+            address: categorical.proposal.currencyToken,
+            name: config?.BASE_TOKENS_CONFIG?.currency?.symbol || 'Currency',
+        });
+    }, [categorical, config]);
+    const isCategorical = !!categorical?.isCategorical;
+    // Nothing to create until a categorical market's pools are read, or once all exist
+    const offersCreation = !isCategorical || !!categoricalPools?.some((pool) => !pool.address);
 
     // Get tokens for selected pool type
     const selectedTokens = useMemo(() => {
         if (!selectedPoolType || !config) return null;
+        if (isCategorical) {
+            const pool = categoricalPools?.find((p) => p.key === selectedPoolType && !p.address);
+            return pool ? {
+                token0: pool.token0.address,
+                token1: pool.token1.address,
+                token0Symbol: pool.token0.name,
+                token1Symbol: pool.token1.name,
+                kind: pool.kind
+            } : null;
+        }
         return POOL_TYPES[selectedPoolType]?.getTokens(config);
-    }, [selectedPoolType, config]);
+    }, [selectedPoolType, config, isCategorical, categoricalPools]);
 
     // Track previous isOpen to only reset on actual open
     const prevIsOpenRef = useRef(false);
@@ -270,7 +296,40 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                             </div>
                         </div>
 
+                        {/* Categorical: every answer's pools, created or not */}
+                        {isCategorical && (
+                            <div className="mb-4">
+                                <div className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">
+                                    Pools of each answer
+                                </div>
+                                {!categoricalPools ? (
+                                    <div className="text-center py-2 text-xs text-futarchyGray11 animate-pulse">Loading the pools of each answer...</div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        {categoricalPools.map((pool) => (
+                                            <div key={pool.key} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-futarchyGray3 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyGray112/20 text-sm">
+                                                <span className="font-mono text-futarchyGray12 dark:text-futarchyGray3 break-all">
+                                                    {pool.token0.name} / {pool.token1.name}
+                                                </span>
+                                                {pool.address ? (
+                                                    <span className="text-xs text-green-700 dark:text-green-400 whitespace-nowrap" title={pool.address}>✓ Created</span>
+                                                ) : (
+                                                    <span className="text-xs text-futarchyGold11 dark:text-futarchyGold6 whitespace-nowrap">Missing</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {categoricalPools && categoricalPools.every((pool) => pool.address) && (
+                                    <div className="mt-3 text-sm text-futarchyGray11 dark:text-futarchyGray112">
+                                        Every pool of this market exists. Invalid has no pools.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Pool Type Selector */}
+                        {offersCreation && (
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">
                                 Select Pool to Create
@@ -281,13 +340,20 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                                 className="w-full bg-futarchyGray3 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyGray112/20 rounded-lg px-4 py-3 text-futarchyGray12 dark:text-futarchyGray3 focus:border-futarchyBlue focus:ring-1 focus:ring-futarchyBlue outline-none"
                             >
                                 <option value="">Select a pool...</option>
-                                {availablePoolTypes.map((poolType) => (
-                                    <option key={poolType} value={poolType}>
-                                        {POOL_TYPES[poolType]?.label || poolType}
-                                    </option>
-                                ))}
+                                {isCategorical
+                                    ? categoricalPools.filter((pool) => !pool.address).map((pool) => (
+                                        <option key={pool.key} value={pool.key}>
+                                            {pool.answer}: {pool.kind === 'conditional' ? 'Conditional' : 'Prediction'} Pool
+                                        </option>
+                                    ))
+                                    : availablePoolTypes.map((poolType) => (
+                                        <option key={poolType} value={poolType}>
+                                            {POOL_TYPES[poolType]?.label || poolType}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
+                        )}
 
                         {/* Token Pair Display */}
                         {selectedTokens && (
@@ -309,6 +375,7 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                         )}
 
                         {/* Initial Price Input */}
+                        {offersCreation && (
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-futarchyGray11 dark:text-futarchyGray112 mb-2">
                                 Initial Price {selectedTokens ? `(${selectedTokens.token1Symbol} per ${selectedTokens.token0Symbol})` : ''}
@@ -318,14 +385,17 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                                 inputMode="decimal"
                                 value={initialPrice}
                                 onChange={(e) => setInitialPrice(e.target.value)}
-                                placeholder="e.g., 120"
-                                className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                placeholder={selectedTokens?.kind === 'prediction' ? 'e.g., 0.25' : 'e.g., 120'}
+                                className="w-full bg-futarchyGray3 dark:bg-futarchyDarkGray4 border border-futarchyGray6 dark:border-futarchyGray112/20 rounded-lg px-4 py-3 text-futarchyGray12 dark:text-futarchyGray3 placeholder-futarchyGray11 dark:placeholder-futarchyGray112 focus:border-futarchyBlue9 focus:ring-1 focus:ring-futarchyBlue9 outline-none"
                                 disabled={isCreating}
                             />
                             <div className="text-xs text-futarchyGray11 dark:text-futarchyGray112 mt-1">
-                                For conditional pools, this is typically the spot price of the company token
+                                {selectedTokens?.kind === 'prediction'
+                                    ? "For prediction pools, this is the answer's chance, between 0 and 1"
+                                    : 'For conditional pools, this is typically the spot price of the company token'}
                             </div>
                         </div>
+                        )}
 
                         {/* Status Display */}
                         {status.type !== 'idle' && (
@@ -394,11 +464,12 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                             >
                                 Cancel
                             </button>
+                            {offersCreation && (
                             <button
                                 onClick={handleCreatePool}
                                 disabled={!isConnected || !selectedPoolType || !initialPrice || isCreating || status.type === 'success'}
                                 className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-colors ${!isConnected || !selectedPoolType || !initialPrice || isCreating || status.type === 'success'
-                                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                    ? 'bg-futarchyGray4 dark:bg-futarchyDarkGray42 text-futarchyGray11 dark:text-futarchyGray112 border-2 border-futarchyGray62 dark:border-futarchyGray112/20 cursor-not-allowed'
                                     : selectedPoolType?.includes('YES')
                                         ? 'bg-futarchyBlue3 dark:bg-futarchyBlue6/40 text-futarchyBlue11 dark:text-futarchyBlue6 border-2 border-futarchyBlue7 hover:bg-futarchyBlue4'
                                         : 'bg-futarchyGold3 dark:bg-futarchyGold6/30 text-futarchyGold11 dark:text-futarchyGold6 border-2 border-futarchyGold9 hover:bg-futarchyGold4'
@@ -406,6 +477,7 @@ export default function CreatePoolModal({ isOpen, onClose, config, missingPools 
                             >
                                 {isCreating ? 'Creating...' : status.type === 'success' ? 'Pool Created!' : 'Create Pool'}
                             </button>
+                            )}
                         </div>
 
                         {/* Wallet Connection Warning */}
