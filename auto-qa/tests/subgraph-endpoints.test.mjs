@@ -143,15 +143,15 @@ test('isChainSupported — true for chains 1 and 100, false otherwise', () => {
 });
 
 // ---------------------------------------------------------------------------
-// DEFAULT_AGGREGATOR — env-overridable, futarchy.fi's aggregator as fallback
+// DEFAULT_AGGREGATOR — env-overridable, Seer's aggregator as fallback
 // ---------------------------------------------------------------------------
 
-test('subgraphEndpoints — DEFAULT_AGGREGATOR reads NEXT_PUBLIC_FUTARCHY_AGGREGATOR and falls back to futarchy.fi', () => {
+test('subgraphEndpoints — DEFAULT_AGGREGATOR reads NEXT_PUBLIC_FUTARCHY_AGGREGATOR and falls back to Seer\'s', () => {
     assert.match(SRC,
-        /export\s+const\s+DEFAULT_AGGREGATOR\s*=\s*process\.env\.NEXT_PUBLIC_FUTARCHY_AGGREGATOR\s*\|\|\s*FUTARCHY_FI_AGGREGATOR/);
-    const m = SRC.match(/const\s+FUTARCHY_FI_AGGREGATOR\s*=\s*['"]([^'"]+)['"]/);
-    assert.ok(m, 'FUTARCHY_FI_AGGREGATOR fallback not found in subgraphEndpoints.js');
-    assert.equal(m[1].toLowerCase(), '0xc5eb43d53e2fe5fdde5faf400cc4167e5b5d4fc1');
+        /export\s+const\s+DEFAULT_AGGREGATOR\s*=\s*process\.env\.NEXT_PUBLIC_FUTARCHY_AGGREGATOR\s*\|\|\s*SEER_AGGREGATOR/);
+    const m = SRC.match(/const\s+SEER_AGGREGATOR\s*=\s*['"]([^'"]+)['"]/);
+    assert.ok(m, 'SEER_AGGREGATOR fallback not found in subgraphEndpoints.js');
+    assert.equal(m[1].toLowerCase(), '0xab9c4ffda083f10959a21bd4d4b1ae62713c582d');
 });
 
 test('contracts.js — no second copy of the aggregator address', () => {
