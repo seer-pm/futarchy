@@ -24,6 +24,8 @@
 //     --prediction <n>      answer currency tokens per prediction pool (default 1)
 //     --probability <p>     starting chance of every answer (default 1/answers, times
 //                           the parent answer's chance for a follow-up proposal)
+//     --skip <answer>       no pools for this answer, such as the last "Other", whose
+//                           chance is what its siblings leave; repeat for several
 //     --send                send the transactions; without it the script only prints the plan
 // Each conditional pool gets all the answer's company tokens the wallet holds,
 // with spot times that many of the answer's currency tokens. Existing pools
@@ -50,7 +52,7 @@ const option = (name, fallback) => {
 const proposalAddress = args[0];
 const spot = Number(option('spot'));
 if (!ethers.isAddress(proposalAddress) || !(spot > 0)) {
-  console.error('Usage: node categorical-pools.js <proposal> --spot <currency per company> [--split-company n] [--split-currency n] [--prediction n] [--probability p] [--send]');
+  console.error('Usage: node categorical-pools.js <proposal> --spot <currency per company> [--split-company n] [--split-currency n] [--prediction n] [--probability p] [--skip answer] [--send]');
   process.exit(1);
 }
 if (!process.env.PRIVATE_KEY) throw new Error('Add PRIVATE_KEY to .env');
@@ -208,12 +210,18 @@ async function main() {
   const splitCompany = parse(option('split-company', '0'));
   const splitCurrency = parse(option('split-currency', '0'));
 
+  const skipped = args.flatMap((arg, i) => (arg === '--skip' ? [args[i + 1]] : []));
+  const labels = await Promise.all(Array.from({ length: n }, (_, i) => proposal.outcomes(i)));
+  const unknown = skipped.filter((label) => !labels.includes(label));
+  if (unknown.length > 0) throw new Error(`--skip: no answer ${unknown.map((label) => JSON.stringify(label)).join(', ')}; answers are ${labels.join(', ')}`);
+
   const answers = [];
   for (let i = 0; i < n; i++) {
     const [companyToken] = await proposal.wrappedOutcome(i);
     const [currencyToken] = await proposal.wrappedOutcome(n + i);
-    if (followedUp.has(i)) console.log(`  ${await proposal.outcomes(i)}: followed up by another proposal, no pools`);
-    else answers.push({ label: await proposal.outcomes(i), company: companyToken, currency: currencyToken });
+    if (followedUp.has(i)) console.log(`  ${labels[i]}: followed up by another proposal, no pools`);
+    else if (skipped.includes(labels[i])) console.log(`  ${labels[i]}: --skip, no pools`);
+    else answers.push({ label: labels[i], company: companyToken, currency: currencyToken });
   }
 
   console.log(`${n} answers, ${companySymbol}/${currencySymbol}, spot ${spot} ${currencySymbol} per ${companySymbol}, prediction ${fmt(prediction)} at ${probability}`);
