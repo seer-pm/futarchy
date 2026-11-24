@@ -165,7 +165,7 @@ const CategoricalPositionsPanel = ({ categorical, config, address, onConnectWall
       <div className="flex h-16 py-3 px-4 bg-futarchyGray2 dark:bg-futarchyDarkGray2 border-b-2 border-futarchyGray62 dark:border-futarchyGray11/70 items-center justify-between">
         <h3 className="text-futarchyGray12 dark:text-white text-sm font-semibold">Positions</h3>
         <span className="text-xs text-futarchyGray11 dark:text-white/70">
-          {questions ? `${familyLeaves(family).length} outcomes over ${rows.filter((row) => row.isInvalid).length} questions` : `${proposal.outcomes.length} outcomes + Invalid`}
+          {questions ? `${familyLeaves(family).length} outcomes` : `${proposal.outcomes.length} outcomes + Invalid`}
         </span>
       </div>
 

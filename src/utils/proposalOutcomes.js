@@ -332,8 +332,9 @@ export async function fetchOutcomePools(proposal, provider, { chainId = 100 } = 
  *   - conditional: answer's company token / answer's currency token;
  *   - prediction: answer's currency token / the currency collateral.
  * token0/token1 are in that order, so a pool's initial price is token1 per
- * token0: the company token's price, or the answer's chance. A chained answer
- * (attachFamilyPools) needs no pools: only the ones that exist are listed.
+ * token0: the company token's price, or the answer's chance. A chained or
+ * residual answer (attachFamilyPools) needs no pools: only the ones that
+ * exist are listed.
  * @param {Awaited<ReturnType<typeof fetchOutcomePools>>} pools
  * @param {{address: string, name: string}} currency the currency collateral
  * @returns {Array<{key: string, kind: 'conditional'|'prediction', answer: string,
@@ -358,7 +359,7 @@ export function categoricalPoolList(pools, currency) {
             token1: currency,
             address: row.prediction?.address ?? null,
         },
-    ].filter((pool) => !row.chained || pool.address));
+    ].filter((pool) => !(row.chained || row.residual) || pool.address));
 }
 
 /**

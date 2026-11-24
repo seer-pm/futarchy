@@ -196,6 +196,8 @@ test('categorical pool list has a conditional and a prediction pool per answer, 
         { key: '2', label: 'D', company: token('0xD1', 'D_WETH'), currency: token('0xD2', 'D_sDAI'), conditional: null, prediction: null },
         // An answer a follow-up question splits needs no pools: only its existing ones are listed.
         { key: '3', label: 'O', company: token('0xE1', 'O_WETH'), currency: token('0xE2', 'O_sDAI'), chained: true, conditional: { address: '0xPO' }, prediction: null },
+        // Nor does the last Other, whose chance is what the others leave.
+        { key: '4', label: 'Other', company: token('0xF1', 'OTHER_WETH'), currency: token('0xF2', 'OTHER_sDAI'), residual: true, conditional: null, prediction: null },
     ];
     const list = categoricalPoolList(pools, token('0xC', 'sDAI'));
     assert.deepEqual(list.map((p) => [p.key, `${p.token0.name}/${p.token1.name}`, p.address]), [

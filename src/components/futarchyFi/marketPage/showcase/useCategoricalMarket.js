@@ -5,6 +5,7 @@ import { categoricalTotals } from '../../../../utils/proposalOutcomes';
 import { familyNodes, familyResolution, fetchFamilyBalances, fetchFamilyPools, fetchProposalFamily } from '../../../../utils/proposalFamily';
 import { fetchProposalMarketData } from '../../../../services/proposalMarketData';
 import { fetchChainedProposalsFromRegistry } from '../../../../adapters/registryAdapter';
+import { getRealityQuestionUrl } from '../../../debug/constants/chainConfig';
 
 const POOL_REFRESH_MS = 30_000;
 const FAMILY_RETRY_MS = 10_000;
@@ -145,8 +146,21 @@ export function useCategoricalMarket(config, address) {
 
   const refetch = useCallback(() => setRefreshKey((key) => key + 1), []);
 
+  // The Reality question of every follow-up proposal, after the root's (the
+  // page's own question link): each is answered on its own.
+  const [followUpQuestionLinks, setFollowUpQuestionLinks] = useState([]);
+  useEffect(() => {
+    setFollowUpQuestionLinks([]);
+    if (nodes.length < 2) return undefined;
+    let cancelled = false;
+    Promise.all(nodes.slice(1).map((node) => getRealityQuestionUrl(chainId, node.proposal.address)))
+      .then((links) => { if (!cancelled) setFollowUpQuestionLinks(links.filter(Boolean)); });
+    return () => { cancelled = true; };
+  }, [nodes, chainId]);
+
   return {
     isCategorical,
+    followUpQuestionLinks,
     isCategoricalPending: knownCategorical && !family,
     familyError: knownCategorical && !family ? familyError : null,
     retryFamily,
