@@ -4,6 +4,9 @@ import Image from 'next/image';
 import { createSubgraphPoolFetcher } from "../../../../utils/SubgraphPoolFetcher";
 import { generateFallbackImage } from "../../../../utils/imageUtils";
 import { getMarketUrl } from "../../../../utils/urlUtils";
+import { getRpcProvider } from "../../../../utils/getBestRpc";
+import { fetchFamilyPools, fetchProposalFamily } from "../../../../utils/proposalFamily";
+import { answerColor } from "../../marketPage/CategoricalHistoryChart";
 
 // Subgraph-backed pool fetcher (replaces SupabasePoolFetcher)
 const poolFetcher = createSubgraphPoolFetcher();
@@ -294,6 +297,72 @@ const ProposalStatus = ({ approvalStatus, marketStatus }) => {
   );
 };
 
+// The answers a categorical proposal's market shows, its chained questions
+// included (utils/proposalFamily.js), with each one's chance and the company
+// token's price if it wins; null while they load or for a YES/NO proposal.
+const useCategoricalAnswers = (proposalID, chainId = 100) => {
+  const [answers, setAnswers] = useState(null);
+  useEffect(() => {
+    setAnswers(null);
+    if (!proposalID) return undefined;
+    let cancelled = false;
+    const provider = getRpcProvider(chainId);
+    fetchProposalFamily(proposalID, provider, { chainId })
+      .then((family) => fetchFamilyPools(family, provider, { chainId }))
+      .then(({ leaves }) => {
+        if (cancelled) return;
+        setAnswers(leaves.map((leaf, index) => ({
+          key: leaf.key,
+          label: leaf.label,
+          color: answerColor(index),
+          chance: leaf.chance,
+          price: leaf.conditional?.price ?? null,
+        })));
+      })
+      .catch((error) => {
+        console.warn(`[ProposalsCard] Could not read the answers of ${proposalID}:`, error?.message);
+        if (!cancelled) setAnswers([]);
+      });
+    return () => { cancelled = true; };
+  }, [proposalID, chainId]);
+  return answers;
+};
+
+// A categorical proposal's answers in place of the YES/NO prices: the most
+// likely ones first, answers without a price after them in market order.
+const CategoricalAnswers = ({ answers, metadata, chainId, compact = false, shown = 3 }) => {
+  if (!answers) return <div className="flex justify-center py-3"><LoadingSpinner /></div>;
+  const baseTokenSymbol = metadata?.currencyTokens?.base?.tokenSymbol ||
+    (Number(metadata?.chain || chainId) === 1 ? 'USDS' : 'sDAI');
+  const sorted = [...answers].sort((a, b) => (b.chance ?? -1) - (a.chance ?? -1));
+  const formatPrice = (price) => price.toFixed(price < 1 ? 4 : 2);
+  return (
+    <div className={`flex flex-col ${compact ? 'gap-1.5 text-xs' : 'gap-2 text-sm'}`}>
+      {sorted.slice(0, shown).map((answer) => (
+        <div key={answer.key} className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: answer.color }} />
+            <span className="truncate font-medium text-futarchyGray12 dark:text-futarchyGray3">{answer.label}</span>
+          </span>
+          <span className="flex items-center gap-3 shrink-0 font-oxanium">
+            <span className="text-futarchyGray11 dark:text-futarchyGray">
+              {answer.price !== null ? `${formatPrice(answer.price)} ${baseTokenSymbol}` : 'No pool'}
+            </span>
+            <span className="w-12 text-right font-semibold text-futarchyGray12 dark:text-white">
+              {answer.chance !== null ? `${(answer.chance * 100).toFixed(answer.chance < 0.1 ? 1 : 0)}%` : '—'}
+            </span>
+          </span>
+        </div>
+      ))}
+      {sorted.length > shown && (
+        <span className="text-futarchyGray11 dark:text-futarchyGray">
+          +{sorted.length - shown} more {sorted.length - shown === 1 ? 'answer' : 'answers'}
+        </span>
+      )}
+    </div>
+  );
+};
+
 // Update the ProposalsPrices component to handle numerical prices and loading state
 const ProposalsPrices = ({ approvalPrice, refusalPrice, approvalStatus, isLoading, metadata, chainId }) => {
   const currentColors = statusColors[approvalStatus] || statusColors.ongoing;
@@ -387,6 +456,7 @@ export const ProposalsCard = ({
   marketStatus,
   visibility = 'public',
   isOwner = false,
+  isCategorical = false,
 }) => {
   // ✅ REFACTORED: Determine the appropriate image based on metadata
   const getProposalImage = () => {
@@ -430,6 +500,7 @@ export const ProposalsCard = ({
 
   // Use initial prices if provided, otherwise use fetched prices
   const prices = hasInitialPrices ? initialPrices : fetchedPrices;
+  const categoricalAnswers = useCategoricalAnswers(isCategorical ? proposalID : null, chainId);
 
   // Calculate impact when prices change
   const displayImpact = useMemo(() => {
@@ -538,6 +609,9 @@ export const ProposalsCard = ({
                   )}
                 </h3>
 
+                {isCategorical ? (
+                  <CategoricalAnswers answers={categoricalAnswers} metadata={metadata} chainId={chainId} />
+                ) : (<>
                 {/* Prices */}
                 <ProposalsPrices
                   approvalPrice={displayYesPrice}
@@ -570,6 +644,7 @@ export const ProposalsCard = ({
                     </div>
                   )}
                 </div>
+                </>)}
               </div>
             </div>
 
@@ -612,6 +687,7 @@ export const MobileProposalsCard = ({
   marketStatus,
   visibility = 'public',
   isOwner = false,
+  isCategorical = false,
 }) => {
   // ✅ REFACTORED: Determine the appropriate image based on metadata
   const getProposalImage = () => {
@@ -655,6 +731,7 @@ export const MobileProposalsCard = ({
 
   // Use initial prices if provided, otherwise use fetched prices
   const prices = hasInitialPrices ? initialPrices : fetchedPrices;
+  const categoricalAnswers = useCategoricalAnswers(isCategorical ? proposalID : null, chainId);
 
   // Calculate impact when prices change (same as desktop version)
   const displayImpact = useMemo(() => {
@@ -757,6 +834,9 @@ export const MobileProposalsCard = ({
             </h3>
 
             {/* Prices */}
+            {isCategorical ? (
+              <CategoricalAnswers answers={categoricalAnswers} metadata={metadata} chainId={chainId} compact />
+            ) : (
             <div className="flex flex-col gap-2">
               <ProposalsPrices
                 approvalPrice={displayYesPrice}
@@ -790,6 +870,7 @@ export const MobileProposalsCard = ({
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
